@@ -1,0 +1,21 @@
+#include "CprrEigen.hpp"
+#include "CprrSparse.hpp"
+#include "LHRREigen.hpp"
+#include "LHRRSparse.hpp"
+#include "CprrBLAS.hpp"
+#include "LHRRBLAS.hpp"
+#include "CprrMKL.hpp"
+#include "LHRRMKL.hpp"
+#include "Cprr.hpp"
+#include "LHRR.hpp"
+
+MethodRegister<Cprr> Cprr::signInMethod("CPRR");
+MethodRegister<CprrSparse> CprrSparse::signInMethod("CPRR_SPARSE");
+MethodRegister<CprrBLAS> CprrBLAS::signInMethod("CPRR_BLAS");
+MethodRegister<CprrMKL> CprrMKL::signInMethod("CPRR_MKL");
+MethodRegister<CprrEigen> CprrEigen::signInMethod("CPRR_EIGEN");
+MethodRegister<LHRR> LHRR::signInMethod("LHRR");
+MethodRegister<LHRRBLAS> LHRRBLAS::signInMethod("LHRR_BLAS");
+MethodRegister<LHRRMKL> LHRRMKL::signInMethod("LHRR_MKL");
+MethodRegister<LHRRSparse> LHRRSparse::signInMethod("LHRR_SPARSE");
+MethodRegister<LHRREigen> LHRREigen::signInMethod("LHRR_EIGEN");

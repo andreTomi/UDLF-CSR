@@ -1,0 +1,15 @@
+**/data/
+**/obj/
+**/bin/
+**/temp/
+.vscode/
+**/output/
+
+generated_configs
+generated_configs_mpeg7
+batch_outputs
+py
+.log
+.out
+
+.agent
