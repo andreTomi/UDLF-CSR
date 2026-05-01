@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 def export_to_csv_with_profilers(results: List[RunResult], path: Path):
     """
-    Exporta uma lista de RunResult para um único arquivo CSV, expandindo
-    as métricas do profiler em colunas dedicadas.
+    Exports a list of RunResults to a single CSV file, expanding
+    profiler metrics into dedicated columns.
     """
     if not results:
-        logger.warning("⚠️ Nenhum resultado para exportar para CSV.")
+        logger.warning("⚠️ No results to export to CSV.")
         return
 
-    # Obtém os nomes dos campos base do RunResult, excluindo as métricas do profiler
+    # Gets the base field names of RunResult, excluding profiler metrics
     base_field_names = [field.name for field in fields(RunResult) if field.name != 'profiler_metrics']
     
-    # Descobre todas as chaves de métricas de profiler únicas em todos os resultados
+    # Discovers all unique profiler metric keys across all results
     profiler_keys = set()
     for r in results:
         if r.profiler_metrics and r.profiler_metrics != "{}":
@@ -32,12 +32,12 @@ def export_to_csv_with_profilers(results: List[RunResult], path: Path):
                 metrics_dict = json.loads(r.profiler_metrics)
                 profiler_keys.update(metrics_dict.keys())
             except json.JSONDecodeError:
-                logger.warning(f"Falha ao decodificar JSON de profiler_metrics: {r.profiler_metrics}")
+                logger.warning(f"Failed to decode JSON from profiler_metrics: {r.profiler_metrics}")
     
-    # Ordena as chaves para uma ordem de coluna consistente
+    # Sorts the keys for consistent column ordering
     sorted_profiler_keys = sorted(list(profiler_keys))
     
-    # Combina os cabeçalhos
+    # Combines headers
     all_field_names = base_field_names + sorted_profiler_keys
 
     try:
@@ -47,63 +47,63 @@ def export_to_csv_with_profilers(results: List[RunResult], path: Path):
             writer.writeheader()
             
             for r in results:
-                # Converte o resultado base para um dicionário
+                # Converts base result to a dictionary
                 row_dict = asdict(r)
                 
-                # Remove o campo original de métricas do profiler
+                # Removes the original profiler metrics field
                 row_dict.pop('profiler_metrics', None)
                 
-                # Carrega as métricas do profiler da string JSON
+                # Loads profiler metrics from the JSON string
                 if r.profiler_metrics and r.profiler_metrics != "{}":
                     try:
                         profiler_data = json.loads(r.profiler_metrics)
-                        # Adiciona as métricas do profiler ao dicionário da linha
+                        # Adds profiler metrics to the row dictionary
                         row_dict.update(profiler_data)
                     except json.JSONDecodeError:
-                        # Ignora se o JSON for inválido
+                        # Ignores if JSON is invalid
                         pass
                 
                 writer.writerow(row_dict)
                 
-        logger.info(f"📄 Resultados detalhados salvos em CSV: {path}")
+        logger.info(f"📄 Detailed results saved to CSV: {path}")
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar CSV detalhado: {e}", exc_info=True)
+        logger.error(f"❌ Error saving detailed CSV: {e}", exc_info=True)
 
 
 def export_to_json(results: List[RunResult], path: Path):
-    """Exporta lista de RunResult para JSON"""
+    """Exports list of RunResult to JSON"""
     if not results:
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Salva o profiler_metrics como string JSON aninhada, o que é natural para este formato
+        # Saves profiler_metrics as a nested JSON string, which is natural for this format
         data = [asdict(r) for r in results]
         with path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        logger.info(f"📄 Resultados salvos em JSON: {path}")
+        logger.info(f"📄 Results saved to JSON: {path}")
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar JSON: {e}")
+        logger.error(f"❌ Error saving JSON: {e}")
 
 def export_failed_runs(results: List[RunResult], path: Path):
-    """Salva erros e mensagens de falha separadamente para análise"""
+    """Saves errors and failure messages separately for analysis"""
     failures = [asdict(r) for r in results if r.status != "success"]
     if not failures:
-        logger.info("✅ Nenhuma falha detectada.")
+        logger.info("✅ No failures detected.")
         return
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
             json.dump(failures, f, indent=2)
-        logger.info(f"📄 Falhas exportadas para: {path}")
+        logger.info(f"📄 Failures exported to: {path}")
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar falhas: {e}")
+        logger.error(f"❌ Error saving failures: {e}")
 
 def export_summary_table(results: List[RunResult], path: Path):
-    """Gera tabela com tempo médio e pico de memória por abordagem/configuração"""
+    """Generates table with average time and peak memory per approach/configuration"""
     summary = defaultdict(list)
     for r in results:
-        # Agrupa por configuração, abordagem e wrapper para um resumo mais granular
+        # Groups by configuration, approach, and wrapper for a more granular summary
         key = (r.config, r.approach, r.wrapper)
         summary[key].append(r)
 
@@ -126,18 +126,18 @@ def export_summary_table(results: List[RunResult], path: Path):
                                      f"{mean_time:.3f}", f"{mean_rss:.2f}", f"{mean_cpu:.2f}", f"{failure_rate:.1f}"])
                 else:
                     writer.writerow([config, approach, wrapper, 0, total_runs, "N/A", "N/A", "N/A", f"{failure_rate:.1f}"])
-        logger.info(f"📊 Resumo tabular salvo: {path}")
+        logger.info(f"📊 Tabular summary saved: {path}")
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar resumo tabular: {e}")
+        logger.error(f"❌ Error saving tabular summary: {e}")
 
 def export_profiler_summary(results: List[RunResult], path: Path):
     """
-    Exporta um resumo JSON com a média das métricas de profiler,
-    agrupadas apenas por (approach, wrapper), ignorando config.
+    Exports a JSON summary with average profiler metrics,
+    grouped only by (approach, wrapper), ignoring config.
     """
     from collections import defaultdict
 
-    # Estrutura: summary[approach][wrapper][metric_name] = [val1, val2, ...]
+    # Structure: summary[approach][wrapper][metric_name] = [val1, val2, ...]
     summary = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
     for r in results:
@@ -151,13 +151,13 @@ def export_profiler_summary(results: List[RunResult], path: Path):
                 for key, value in metrics.items():
                     summary[r.approach][r.wrapper][key].append(value)
             except (json.JSONDecodeError, AttributeError, TypeError) as e:
-                logger.warning(f"⚠️ Erro ao decodificar métricas: {e}")
+                logger.warning(f"⚠️ Error decoding metrics: {e}")
 
     if not summary:
-        logger.info("ℹ️ Nenhuma métrica de profiler para resumir.")
+        logger.info("ℹ️ No profiler metrics to summarize.")
         return
 
-    # Calcula média das métricas para cada (approach, wrapper)
+    # Calculates average metrics for each (approach, wrapper)
     final_summary = defaultdict(dict)
     for approach, wrappers in summary.items():
         for wrapper, metrics in wrappers.items():
@@ -170,6 +170,6 @@ def export_profiler_summary(results: List[RunResult], path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
             json.dump(final_summary, f, indent=2)
-        logger.info(f"📈 Resumo do profiler salvo: {path}")
+        logger.info(f"📈 Profiler summary saved: {path}")
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar resumo do profiler: {e}")
+        logger.error(f"❌ Error saving profiler summary: {e}")

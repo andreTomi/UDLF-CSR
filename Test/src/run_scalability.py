@@ -70,7 +70,7 @@ def main():
         print(f"Output and errors will be logged to: {log_path}")
         
         try:
-            # Inicia o processo redirecionando stdout e stderr para o log_path
+            # Starts the process redirecting stdout and stderr to log_path
             with open(log_path, 'w') as log_file:
                 if HAS_PSUTIL:
                     # Use psutil.Popen for better process management if available
@@ -112,7 +112,7 @@ def main():
         except Exception as e:
             print(f"❌ An unexpected error occurred: {e}")
         except KeyboardInterrupt:
-            print("\n⚠️ Interrompido pelo usuário. Finalizando escalabilidade.")
+            print("\n⚠️ Interrupted by user. Finalizing scalability.")
             break
 
 if __name__ == "__main__":

@@ -43,13 +43,13 @@ class DetailedMetrics:
 
 @dataclass
 class RunResult:
-    config: str = ""
-    approach: str = ""
-    wrapper: str = ""
-    run: int = 0
-    elapsed_time: float = 0.0
-    exit_code: int = 0
-    status: str = ""
+    config: str
+    approach: str
+    wrapper: str
+    run: int
+    elapsed_time: float
+    exit_code: int
+    status: str
     error_message: str = ""
     max_rss_mb: float = 0.0
     avg_rss_mb: float = 0.0
@@ -59,14 +59,14 @@ class RunResult:
     write_ops: int = 0
     page_faults_minor: int = 0
     page_faults_major: int = 0
-    profiler_metrics: str = ""
+    profiler_metrics: str = "{}"
     system_load_initial: float = 0.0
     memory_pressure_initial: float = 0.0
 
 class SystemMonitor:
     @staticmethod
     def get_system_info() -> SystemInfo:
-        """Coleta informações detalhadas do sistema"""
+        """Collects detailed system information"""
         if not HAS_PSUTIL:
             return SystemInfo(
                 platform=f"{platform.system()} {platform.release()}",
@@ -89,5 +89,5 @@ class SystemMonitor:
                 kernel_version=platform.version()
             )
         except Exception as e:
-            logger.error(f"Erro ao obter informações do sistema: {e}")
+            logger.error(f"Error gathering system info: {e}")
             return SystemInfo()

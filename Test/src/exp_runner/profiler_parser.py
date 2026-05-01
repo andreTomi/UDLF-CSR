@@ -57,17 +57,17 @@ class StraceMetrics:
     avg_call_time_us: Optional[float] = None
 
 def parse_perf_output(file_path: Path) -> PerfMetrics:
-    """Parse do arquivo de saída do perf stat"""
+    """Parses the output file of perf stat"""
     metrics = PerfMetrics()
     
     if not file_path.exists():
-        logger.warning(f"Arquivo perf não encontrado: {file_path}")
+        logger.warning(f"Perf file not found: {file_path}")
         return metrics
     
     try:
         content = file_path.read_text(encoding='utf-8', errors='ignore')
         
-        # Padrões para extrair métricas do perf
+        # Patterns to extract perf metrics
         patterns = {
             'cache_misses': r'([\d,]+)\s+cache-misses',
             'cache_references': r'([\d,]+)\s+cache-references',
@@ -98,7 +98,7 @@ def parse_perf_output(file_path: Path) -> PerfMetrics:
                 except ValueError:
                     continue
         
-        # Calcula métricas derivadas
+        # Calculate derived metrics
         if metrics.cache_references and metrics.cache_misses and metrics.cache_references > 0:
             metrics.cache_miss_rate = (metrics.cache_misses / metrics.cache_references) * 100
         
@@ -109,22 +109,22 @@ def parse_perf_output(file_path: Path) -> PerfMetrics:
             metrics.ipc = metrics.instructions / metrics.cycles
             
     except Exception as e:
-        logger.error(f"Erro ao parsear perf output {file_path}: {e}")
+        logger.error(f"Error parsing perf output {file_path}: {e}")
     
     return metrics
 
 def parse_time_output(file_path: Path) -> TimeMetrics:
-    """Parse do arquivo de saída do time -v"""
+    """Parses the output file of time -v"""
     metrics = TimeMetrics()
     
     if not file_path.exists():
-        logger.warning(f"Arquivo time não encontrado: {file_path}")
+        logger.warning(f"Time file not found: {file_path}")
         return metrics
     
     try:
         content = file_path.read_text(encoding='utf-8', errors='ignore')
         
-        # Padrões para extrair métricas do time
+        # Patterns to extract time metrics
         patterns = {
             'user_time_sec': r'User time \(seconds\):\s+([\d\.]+)',
             'system_time_sec': r'System time \(seconds\):\s+([\d\.]+)',
@@ -149,7 +149,7 @@ def parse_time_output(file_path: Path) -> TimeMetrics:
                 value_str = match.group(1).replace(',', '')
                 try:
                     if metric == 'elapsed_time_sec' and ':' in value_str:
-                        # Converte formato mm:ss.ss para segundos
+                        # Convert mm:ss.ss format to seconds
                         parts = value_str.split(':')
                         if len(parts) == 2:
                             minutes, seconds = float(parts[0]), float(parts[1])
@@ -162,7 +162,7 @@ def parse_time_output(file_path: Path) -> TimeMetrics:
                     continue
                     
     except Exception as e:
-        logger.error(f"Erro ao parsear time output {file_path}: {e}")
+        logger.error(f"Error parsing time output {file_path}: {e}")
     
     return metrics
 
@@ -170,13 +170,13 @@ def parse_strace_output(file_path: Path) -> StraceMetrics:
     metrics = StraceMetrics()
 
     if not file_path.exists():
-        logger.warning(f"Arquivo strace não encontrado: {file_path}")
+        logger.warning(f"Strace file not found: {file_path}")
         return metrics
 
     try:
         content = file_path.read_text(encoding='utf-8', errors='ignore')
 
-        # Regex compatível com linha total
+        # Regex compatible with total line
         total_pattern = r'^\s*[\d\.]+\s+([\d\.]+)\s+[\d\.]+\s+(\d+)\s+(\d+)\s+total$'
         match = re.search(total_pattern, content, re.MULTILINE)
         if match:
@@ -184,7 +184,7 @@ def parse_strace_output(file_path: Path) -> StraceMetrics:
             metrics.total_calls = int(match.group(2))
             metrics.total_errors = int(match.group(3))
 
-        # Contagem de chamadas por categoria usando nomes extraídos da tabela
+        # Call count by category using names extracted from the table
         syscall_names = re.findall(
             r'^\s*[\d\.]+\s+[\d\.]+\s+[\d\.]+\s+\d+\s*(?:\d+)?\s+(\w+)', content, re.MULTILINE
         )
@@ -201,18 +201,18 @@ def parse_strace_output(file_path: Path) -> StraceMetrics:
             metrics.avg_call_time_us = (metrics.total_time_sec * 1e6) / metrics.total_calls
 
     except Exception as e:
-        logger.error(f"Erro ao parsear strace output {file_path}: {e}")
+        logger.error(f"Error parsing strace output {file_path}: {e}")
 
     return metrics
 
 def parse_profiler_results(output_dir: Path, wrapper: str, run_id: int, approach: str) -> Dict[str, Any]:
-    """Parse dos resultados de todos os profilers para uma execução específica"""
+    """Parse results from all profilers for a specific run"""
     results = {}
     
     if wrapper == "perf":
         perf_file = output_dir / f"perf_stat_{approach}_{run_id}.txt"
         perf_metrics = parse_perf_output(perf_file)
-        # Converte para dict com prefixo
+        # Convert to dict with prefix
         for field_name, value in perf_metrics.__dict__.items():
             if value is not None:
                 results[f"perf_{field_name}"] = value
@@ -220,7 +220,7 @@ def parse_profiler_results(output_dir: Path, wrapper: str, run_id: int, approach
     elif wrapper == "time":
         time_file = output_dir / f"time_{approach}_{run_id}.out"
         time_metrics = parse_time_output(time_file)
-        # Converte para dict com prefixo
+        # Convert to dict with prefix
         for field_name, value in time_metrics.__dict__.items():
             if value is not None:
                 results[f"time_{field_name}"] = value
@@ -228,7 +228,7 @@ def parse_profiler_results(output_dir: Path, wrapper: str, run_id: int, approach
     elif wrapper == "strace":
         strace_file = output_dir / f"strace_{approach}_{run_id}.out"
         strace_metrics = parse_strace_output(strace_file)
-        # Converte para dict com prefixo
+        # Convert to dict with prefix
         for field_name, value in strace_metrics.__dict__.items():
             if value is not None:
                 results[f"strace_{field_name}"] = value

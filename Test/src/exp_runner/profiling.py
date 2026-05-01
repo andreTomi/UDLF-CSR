@@ -26,7 +26,7 @@ def find_tool_path(tool_name: str) -> Optional[str]:
                     try:
                         perf_check = subprocess.run([path, 'stat', '--', 'true'], capture_output=True, timeout=5)
                         if perf_check.returncode != 0:
-                            logger.warning(f"perf encontrado em {path} mas falhou no teste de permissão (paranoid?).")
+                            logger.warning(f"perf found at {path} but failed permission test (paranoid?).")
                             return None
                     except: return None
                 return path
@@ -70,14 +70,14 @@ def build_wrapper_command(wrapper: str, exe_path: str, config_path: str, output_
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        logger.error(f"Erro ao criar diretório do wrapper: {e}")
+        logger.error(f"Error creating wrapper directory: {e}")
         return [exe_path, config_path]
 
     perf = find_tool_path_cached('perf')
     strace = find_tool_path_cached('strace')
     time_ = find_tool_path_cached('time') or '/usr/bin/time'
 
-    # Agora inclui approach para evitar sobrescrita entre abordagens
+    # Now includes approach to avoid overwriting between approaches
     def make_filename(tool: str, extension: str) -> str:
         parts = [tool]
         if approach:
@@ -92,7 +92,7 @@ def build_wrapper_command(wrapper: str, exe_path: str, config_path: str, output_
 
     if perf:
         output_file = output_dir / make_filename("perf_stat", "txt")
-        # Remove o arquivo se existir para evitar append de execuções anteriores
+        # Remove file if it exists to avoid appending to previous runs
         if output_file.exists():
             output_file.unlink()
         
@@ -105,13 +105,13 @@ def build_wrapper_command(wrapper: str, exe_path: str, config_path: str, output_
             "-e", "LLC-loads,LLC-load-misses",
             "-e", "task-clock,cpu-clock",
             "-o", str(output_file),
-            # REMOVIDO: "--append" - esta era a causa do problema!
+            # REMOVED: "--append" - this was the cause of the problem!
             exe_path, config_path
         ]
     
     if strace:
         output_file = output_dir / make_filename("strace", "out")
-        # Remove o arquivo se existir para evitar append de execuções anteriores
+        # Remove file if it exists to avoid appending to previous runs
         if output_file.exists():
             output_file.unlink()
             
@@ -123,7 +123,7 @@ def build_wrapper_command(wrapper: str, exe_path: str, config_path: str, output_
     
     if time_:
         output_file = output_dir / make_filename("time", "out")
-        # Remove o arquivo se existir para evitar append de execuções anteriores
+        # Remove file if it exists to avoid appending to previous runs
         if output_file.exists():
             output_file.unlink()
             
@@ -134,7 +134,7 @@ def build_wrapper_command(wrapper: str, exe_path: str, config_path: str, output_
         ]
     
     if wrapper not in wrappers:
-        logger.warning(f"Wrapper '{wrapper}' não encontrado. Usando execução direta.")
+        logger.warning(f"Wrapper '{wrapper}' not found. Using direct execution.")
         return wrappers["none"]
 
     return wrappers[wrapper]

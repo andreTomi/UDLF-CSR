@@ -17,23 +17,23 @@ from exp_runner import (
 import signal
 
 def cleanup_handler(signum, frame):
-    logger.info("\n🛑 Interrupção detectada! Limpando processos ativos...")
+    logger.info("\n🛑 Interrupt detected! Cleaning active processes...")
     execution.kill_active_process()
-    logger.info("✅ Limpeza concluída. Encerrando.")
+    logger.info("✅ Cleanup complete. Exiting.")
     sys.exit(1)
 
 # Register signals
 signal.signal(signal.SIGINT, cleanup_handler)
 signal.signal(signal.SIGTERM, cleanup_handler)
 
-# Setup de logging
+# Logging setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# Lista completa de métodos de re-ranqueamento
+# Full list of re-ranking methods
 ALL_METHODS = [
     # "CPRR_MKL",
     # "CPRR_BLAS",
@@ -47,21 +47,22 @@ ALL_METHODS = [
     "LHRR",
 ]
 
-# Diretórios de configuração base
+# Base configuration directories
 BASE_CONFIGS = [
-    Path("config"),  # Diretório contendo os configs base
+    Path("config"),  # Directory containing base configs
 ]
 
-# Executáveis a serem comparados
+# Executables to be compared
+_binary_path = str(Path(__file__).resolve().parent.parent.parent / "Source" / "udlf")
 EXECUTABLES = {
-    # "mkl": "./bin/udlf_mkl",
-    "csr": "./bin/udlf_csr",
-    # "eigen": "./bin/udlf_eigen",
-    "mmap": "./bin/udlf_mmap", 
-    "swap": "./bin/udlf_swap",
+    # "mkl": _binary_path,
+    "csr": _binary_path,
+    # "eigen": _binary_path,
+    "mmap": _binary_path, 
+    "swap": _binary_path,
 }
 
-# Mapeamento de métodos permitidos para cada executável
+# Mapping of allowed methods per executable
 APPROACH_METHODS_MAP = {
     "csr": ["CPRR_SPARSE", "LHRR_SPARSE"],
     "mmap": ["CPRR", "LHRR"],
@@ -70,12 +71,12 @@ APPROACH_METHODS_MAP = {
     # "eigen": ["CPRR_EIGEN", "LHRR_EIGEN"],
 }
 
-# Wrappers com quantidade de execuções (N repetições)
+# Wrappers with execution count (N repetitions)
 WRAPPERS = {
     "perf": 10, 
 }
 
-TIMEOUT_WRAPPER = 1800  # 2 horas
+TIMEOUT_WRAPPER = 1800  # 2 hours
 
 
 class ProgressTracker:
@@ -134,7 +135,7 @@ class ProgressTracker:
 
 
 def calculate_total_runs(config_files, methods, executables, wrappers):
-    """Calcula o total de execuções estimadas."""
+    """Calculates the total estimated executions."""
     total = 0
     available_wrappers = {w for w in wrappers if w in profiling.get_available_wrappers()}
     
@@ -142,7 +143,7 @@ def calculate_total_runs(config_files, methods, executables, wrappers):
         if wrapper_name in available_wrappers:
             for approach in executables.keys():
                 valid_methods = APPROACH_METHODS_MAP.get(approach, methods)
-                # Conta apenas os métodos que estão em 'methods' (os ativos)
+                # Count only the methods that are in 'methods' (the active ones)
                 active_valid_methods = [m for m in methods if m in valid_methods]
                 total += len(config_files) * len(active_valid_methods) * run_count
             
@@ -222,12 +223,12 @@ def profile_approach(run_count: int,
                      progress_tracker=None,
                      timeout_file_path: str = None,
                      global_timeouts: set = None) -> list:
-    """Executa N runs de uma abordagem com profiling."""
+    """Executes N runs of an approach with profiling."""
     results = []
     
     timeout_key = f"{config_name}__{approach}__{wrapper_name}"
     if global_timeouts is not None and timeout_key in global_timeouts:
-        logger.warning(f"⏩ Pulando {timeout_key} por timeout prévio.")
+        logger.warning(f"⏩ Skipping {timeout_key} due to previous timeout.")
         for _ in range(run_count):
             if progress_tracker:
                 progress_tracker.completed_runs += 1
@@ -237,22 +238,22 @@ def profile_approach(run_count: int,
         run_start_time = time.time()
         
         logger.info(
-            f"Abordagem: {approach} | Wrapper: {wrapper_name} | {config_name} | (run {run}/{run_count})"
+            f"Approach: {approach} | Wrapper: {wrapper_name} | {config_name} | (run {run}/{run_count})"
         )
         
-        # Comando é construído para usar o diretório temporário
+        # Command is built to use the temporary directory
         cmd = profiling.build_wrapper_command(
             wrapper_name, exe_path, str(config_file), temp_dir, run, approach
         )
         
-        # O log do processo também vai para o diretório temporário e será descartado
+        # The process log also goes to the temporary directory and will be discarded
         log_path = temp_dir / f"{config_name}_{approach}_{wrapper_name}_run_{run}.log"
         
         result = execution.run_with_advanced_monitoring(cmd, TIMEOUT_WRAPPER, log_path)
 
         if result.status == "timeout":
-            logger.warning(f"⚠️ Timeout ({TIMEOUT_WRAPPER}s) em {config_name} com {approach} usando {wrapper_name}")
-            logger.warning(f"   Tempo decorrido: {result.elapsed_time:.1f}s | Resultados parciais salvos")
+            logger.warning(f"⚠️ Timeout ({TIMEOUT_WRAPPER}s) in {config_name} with {approach} using {wrapper_name}")
+            logger.warning(f"   Elapsed time: {result.elapsed_time:.1f}s | Partial results saved")
             
             if global_timeouts is not None and timeout_file_path is not None:
                 if timeout_key not in global_timeouts:
@@ -261,7 +262,7 @@ def profile_approach(run_count: int,
                         with open(timeout_file_path, 'w') as tf:
                             json.dump(list(global_timeouts), tf)
                     except Exception as e:
-                        logger.error(f"Erro ao salvar timeout_file: {e}")
+                        logger.error(f"Error saving timeout_file: {e}")
             
             result.config = config_name
             result.approach = approach
@@ -272,13 +273,13 @@ def profile_approach(run_count: int,
             
             if progress_tracker:
                 progress_tracker.update(time.time() - run_start_time)
-                # Avança progresso para os runs que serão abortados
+                # Advance progress for runs that will be aborted
                 remaining = run_count - run
                 progress_tracker.completed_runs += remaining
                 
             break
         
-        # Preenche informações do resultado
+        # Fill result information
         result.config = config_name
         result.approach = approach
         result.wrapper = wrapper_name
@@ -290,7 +291,7 @@ def profile_approach(run_count: int,
         if progress_tracker:
             progress_tracker.update(run_elapsed)
         
-        # Parse das métricas dos profilers a partir do diretório temporário
+        # Parse profiler metrics from temporary directory
         if result.status == "success":
             try:
                 profiler_metrics = profiler_parser.parse_profiler_results(
@@ -299,49 +300,49 @@ def profile_approach(run_count: int,
                 result.profiler_metrics = json.dumps(profiler_metrics) if profiler_metrics else "{}"
                 
                 if profiler_metrics:
-                    logger.debug(f"  -> Métricas de {wrapper_name} parseadas com sucesso.")
+                    logger.debug(f"  -> {wrapper_name} metrics parsed successfully.")
 
             except Exception as e:
-                logger.warning(f"⚠️ Erro ao parsear métricas de {wrapper_name} (run {run}): {e}")
+                logger.warning(f"⚠️ Error parsing {wrapper_name} metrics (run {run}): {e}")
                 result.profiler_metrics = "{}"
         else:
-            logger.warning(f"⚠️ Erro ao executar {config_name} com {approach} usando {wrapper_name} (run {run})")
+            logger.warning(f"⚠️ Error executing {config_name} with {approach} using {wrapper_name} (run {run})")
             result.profiler_metrics = "{}"
         
         results.append(result)
     
-    # Salva os resultados parciais diretamente no diretório de saída
-    logger.info("💾 Salvando resultados parciais...")
+    # Save partial results directly in the output directory
+    logger.info("💾 Saving partial results...")
     result_exporter.export_to_csv_with_profilers(results, output_path / "detailed_results.csv")
     result_exporter.export_to_json(results, output_path / "detailed_results.json")
     result_exporter.export_failed_runs(results, output_path / "failures.json")
     result_exporter.export_summary_table(results, output_path / "summary_table.csv")
     result_exporter.export_profiler_summary(results, output_path / "profiler_summary.json")
 
-    logger.info(f"✅ Resultado da execução salvo")
+    logger.info(f"✅ Execution result saved")
     return results
 
 
 def run(config_path: Path, output_path: Path, timeout_file_path: str = None, global_timeouts: set = None):
     """
-    Função principal que orquestra a matriz de testes completa.
+    Main function that orchestrates the complete test matrix.
     
-    Para cada arquivo .ini base encontrado em config_path:
-        - Gera 11 configs temporários (um por método)
-        - Executa cada config com mmap e batch
-        - Executa N repetições com cada wrapper
+    For each base .ini file found in config_path:
+        - Generates 11 temporary configs (one per method)
+        - Executes each config with mmap and batch
+        - Executes N repetitions with each wrapper
     """
-    logger.info(f"🚀 Iniciando testes em {config_path}")
+    logger.info(f"🚀 Starting tests in {config_path}")
     
     utils.ensure_directory_exists(output_path)
 
-    # Carrega arquivos de configuração base
+    # Load base configuration files
     base_config_files = config_loader.load_configs_from_directory(config_path, extension=".ini")
     if not base_config_files:
-        logger.error("❌ Nenhuma configuração encontrada no diretório: %s", config_path)
+        logger.error("❌ No configuration found in directory: %s", config_path)
         return
 
-    # Verifica wrappers disponíveis
+    # Check available wrappers
     available = profiling.get_available_wrappers()
     available_wrappers = {}
     
@@ -349,71 +350,71 @@ def run(config_path: Path, output_path: Path, timeout_file_path: str = None, glo
         if name in available:
             available_wrappers[name] = count
         elif name == "perf" and "time" in available:
-            logger.warning("⚠️ 'perf' não disponível ou sem permissão. Usando 'time' como fallback automático.")
+            logger.warning("⚠️ 'perf' not available or permission denied. Using 'time' as automatic fallback.")
             available_wrappers["time"] = count
             
     if not available_wrappers:
-        logger.warning("⚠️ Nenhum wrapper solicitado está disponível. Rodando sem wrappers (apenas métricas base).")
+        logger.warning("⚠️ No requested wrapper is available. Running without wrappers (base metrics only).")
         available_wrappers["none"] = 1
         
-    logger.info(f"🔧 Wrappers ativos: {list(available_wrappers.keys())}")
+    logger.info(f"🔧 Active wrappers: {list(available_wrappers.keys())}")
     
-    # Calcula total de execuções
+    # Calculate total executions
     total = calculate_total_runs(base_config_files, ALL_METHODS, EXECUTABLES, available_wrappers)
-    logger.info(f"🔢 Total de execuções estimadas: {total}")
-    logger.info(f"📊 Datasets base: {len(base_config_files)}")
-    logger.info(f"🧮 Métodos: {len(ALL_METHODS)}")
-    logger.info(f"⚙️  Abordagens: {len(EXECUTABLES)}")
-    logger.info(f"🔁 Repetições por wrapper: {list(available_wrappers.values())}")
+    logger.info(f"🔢 Total estimated executions: {total}")
+    logger.info(f"📊 Base datasets: {len(base_config_files)}")
+    logger.info(f"🧮 Methods: {len(ALL_METHODS)}")
+    logger.info(f"⚙️  Approaches: {len(EXECUTABLES)}")
+    logger.info(f"🔁 Repetitions per wrapper: {list(available_wrappers.values())}")
     
     # Initialize progress tracker
     progress_tracker = ProgressTracker(total)
-    logger.info("⏱️  Progress tracking iniciado")
+    logger.info("⏱️  Progress tracking started")
 
-    # Lista para armazenar todos os resultados individuais
+    # List to store all individual results
     all_results = []
     
     with tempfile.TemporaryDirectory(prefix="exp_runner_") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        logger.info(f"📦 Usando diretório temporário para artefatos: {temp_dir}")
+        logger.info(f"📦 Using temporary directory for artifacts: {temp_dir}")
 
-        # Loop sobre cada config base (cada dataset)
+        # Loop over each base config (each dataset)
         for base_config_file in base_config_files:
             base_config_name = base_config_file.stem
             logger.info(f"\n{'='*80}")
-            logger.info(f"📁 Processando dataset base: {base_config_name}")
+            logger.info(f"📁 Processing base dataset: {base_config_name}")
             logger.info(f"{'='*80}")
             
-            # Loop sobre cada método de re-ranqueamento
+            # Loop over each re-ranking method
             for method in ALL_METHODS:
-                logger.info(f"\n🔬 Método: {method}")
+                logger.info(f"\n🔬 Method: {method}")
                 
-                # Cria config temporário com o método atual
+                # Create temporary config with current method
                 temp_config_file = create_temp_config_with_method(
                     base_config_file, method, temp_dir
                 )
                 
-                # Nome único para identificar esta combinação dataset+método
+                # Unique name to identify this dataset+method combination
                 config_name = f"{base_config_name}__{method}"
                 
-                # Loop sobre cada abordagem (mmap, batch)
+                # Loop over each approach (mmap, batch)
                 for approach, exe_path in EXECUTABLES.items():
                     if not Path(exe_path).exists():
-                        logger.warning(f"⚠️ Executável ausente, pulando abordagem '{approach}': {exe_path}")
+                        logger.warning(f"⚠️ Executable missing, skipping approach '{approach}': {exe_path}")
                         continue
                         
-                    # Verifica se o método é compatível com a abordagem
+                    # Check if the method is compatible with the approach
                     valid_methods = APPROACH_METHODS_MAP.get(approach, ALL_METHODS)
                     if method not in valid_methods:
-                        logger.debug(f"⏩ Pulando combinação incompatível: {approach} não roda com {method}")
+                        logger.debug(f"⏩ Skipping incompatible combination: {approach} does not run with {method}")
                         continue
 
-                    # Loop sobre cada wrapper (perf, time)
+                    # Loop over each wrapper (perf, time)
                     for wrapper_name, run_count in available_wrappers.items():
                         out = Path(f"{output_path}/{approach}/{wrapper_name}/{config_name}")
                         utils.ensure_directory_exists(out)
                         
-                        # Executa N repetições e coleta os resultados
+                        # Execute N repetitions and collect results
                         partial_results = profile_approach(
                             run_count, config_name, approach, wrapper_name, 
                             exe_path, temp_config_file, temp_dir, out, progress_tracker,
@@ -421,8 +422,8 @@ def run(config_path: Path, output_path: Path, timeout_file_path: str = None, glo
                         )
                         all_results.extend(partial_results)
                         
-                        # Salvamento incremental na pasta raiz para não perder dados!
-                        logger.info("💾 [Incremental] Atualizando resultados principais com o lote atual.")
+                        # Incremental saving in root folder to avoid data loss
+                        logger.info("💾 [Incremental] Updating main results with current batch.")
                         result_exporter.export_to_csv_with_profilers(all_results, output_path / "all_detailed_results.csv")
                         result_exporter.export_summary_table(all_results, output_path / "all_summary_table.csv")
                         export_aggregated_summary(all_results, output_path / "all_summary_table_with_profilers.csv")
@@ -432,9 +433,9 @@ def run(config_path: Path, output_path: Path, timeout_file_path: str = None, glo
                         progress_tracker.log_progress(logger)
                         logger.info("")
 
-    # Exporta resultados finais consolidados
+    # Export final consolidated results
     logger.info(f"\n{'='*80}")
-    logger.info("📊 Exportando resultados finais consolidados...")
+    logger.info("📊 Exporting final consolidated results...")
     logger.info(f"{'='*80}")
     
     result_exporter.export_to_csv_with_profilers(all_results, output_path / "all_detailed_results.csv")
@@ -443,26 +444,26 @@ def run(config_path: Path, output_path: Path, timeout_file_path: str = None, glo
     result_exporter.export_summary_table(all_results, output_path / "all_summary_table.csv")
     result_exporter.export_profiler_summary(all_results, output_path / "all_profiler_summary.json")
     
-    # Cria uma versão agregada com médias das métricas de profiler por (config, approach, wrapper)
+    # Create aggregated version with averages of profiler metrics by (config, approach, wrapper)
     export_aggregated_summary(all_results, output_path / "all_summary_table_with_profilers.csv")
     
-    logger.info(f"✅ Todos os resultados consolidados salvos com {len(all_results)} execuções")
+    logger.info(f"✅ All consolidated results saved with {len(all_results)} executions")
 
 
 def export_aggregated_summary(results: list, path: Path):
     """
-    Exporta um CSV com médias de TODAS as métricas agregadas por (config, approach, wrapper).
+    Exports a CSV with averages of ALL metrics aggregated by (config, approach, wrapper).
     
-    Este CSV é o arquivo principal para análise, contendo:
-    - Métricas base (tempo, memória)
-    - Médias de todas as métricas de perf (IPC, cache miss rate, page faults, etc.)
-    - Médias de todas as métricas de time (major/minor page faults, etc.)
-    - Desvios padrão para barras de erro
+    This CSV is the main file for analysis, containing:
+    - Base metrics (time, memory)
+    - Averages of all perf metrics (IPC, cache miss rate, page faults, etc.)
+    - Averages of all time metrics (major/minor page faults, etc.)
+    - Standard deviations for error bars
     """
     from collections import defaultdict
     import statistics
     
-    # Agrupa por (config, approach, wrapper, threads)
+    # Group by (config, approach, wrapper, threads)
     grouped = defaultdict(list)
     for r in results:
         if r.status == "success":
@@ -470,10 +471,10 @@ def export_aggregated_summary(results: list, path: Path):
             grouped[key].append(r)
     
     if not grouped:
-        logger.warning("⚠️ Nenhum resultado bem-sucedido para agregar.")
+        logger.warning("⚠️ No successful results to aggregate.")
         return
     
-    # Coleta todas as métricas possíveis
+    # Collect all possible metrics
     all_metric_keys = set()
     for runs in grouped.values():
         for r in runs:
@@ -484,10 +485,10 @@ def export_aggregated_summary(results: list, path: Path):
                 except json.JSONDecodeError:
                     pass
     
-    # Ordena as métricas para ter uma ordem consistente
+    # Sort metrics for consistent order
     sorted_metric_keys = sorted(list(all_metric_keys))
     
-    # Cabeçalhos do CSV
+    # CSV headers
     headers = [
         "config", "approach", "wrapper", "threads", "n_success", "n_total",
         "mean_time_elapsed_time_sec", "std_time_elapsed_time_sec",
@@ -495,7 +496,7 @@ def export_aggregated_summary(results: list, path: Path):
         "mean_cpu_percent_avg", "std_cpu_percent_avg"
     ]
     
-    # Adiciona colunas para cada métrica de profiler (média e desvio padrão)
+    # Add columns for each profiler metric (mean and standard deviation)
     for metric in sorted_metric_keys:
         headers.append(f"mean_{metric}")
         headers.append(f"std_{metric}")
@@ -518,7 +519,7 @@ def export_aggregated_summary(results: list, path: Path):
                     "n_total": len(runs)
                 }
                 
-                # Calcula médias e desvios das métricas base
+                # Calculate means and deviations of base metrics
                 times = [r.elapsed_time for r in runs]
                 rss_values = [r.max_rss_mb for r in runs]
                 cpu_values = [r.cpu_percent_avg for r in runs]
@@ -530,7 +531,7 @@ def export_aggregated_summary(results: list, path: Path):
                 row["mean_cpu_percent_avg"] = statistics.mean(cpu_values)
                 row["std_cpu_percent_avg"] = statistics.stdev(cpu_values) if len(cpu_values) > 1 else 0
                 
-                # Coleta valores de cada métrica de profiler
+                # Collect values for each profiler metric
                 metric_values = defaultdict(list)
                 for r in runs:
                     if r.profiler_metrics and r.profiler_metrics != "{}":
@@ -542,7 +543,7 @@ def export_aggregated_summary(results: list, path: Path):
                         except json.JSONDecodeError:
                             pass
                 
-                # Calcula média e desvio de cada métrica de profiler
+                # Calculate mean and deviation of each profiler metric
                 for metric in sorted_metric_keys:
                     if metric in metric_values and metric_values[metric]:
                         values = metric_values[metric]
@@ -554,11 +555,11 @@ def export_aggregated_summary(results: list, path: Path):
                 
                 writer.writerow(row)
         
-        logger.info(f"📊 Resumo agregado com profilers salvo: {path}")
-        logger.info(f"   Métricas incluídas: {len(sorted_metric_keys)} métricas de profiler")
+        logger.info(f"📊 Aggregated summary with profilers saved: {path}")
+        logger.info(f"   Included metrics: {len(sorted_metric_keys)} profiler metrics")
         
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar resumo agregado: {e}", exc_info=True)
+        logger.error(f"❌ Error saving aggregated summary: {e}", exc_info=True)
 
 
 def main():
@@ -567,8 +568,8 @@ def main():
     parser.add_argument("--timeout-file", type=str, default=None, help="JSON file tracking timeouts")
     args = parser.parse_args()
 
-    logger.info("🚀 Iniciando experimento completo de benchmarking...")
-    logger.info(f"🧮 Métodos a serem testados: {', '.join(ALL_METHODS)}")
+    logger.info("🚀 Starting complete benchmarking experiment...")
+    logger.info(f"🧮 Methods to test: {', '.join(ALL_METHODS)}")
     
     main_output_path = Path(args.output_dir)
     utils.ensure_directory_exists(main_output_path)
@@ -579,29 +580,29 @@ def main():
         try:
             with open(args.timeout_file, 'r') as tf:
                 global_timeouts = set(json.load(tf))
-                logger.info(f"⚠️ Timeout file carregado com {len(global_timeouts)} configurações.")
+                logger.info(f"⚠️ Timeout file loaded with {len(global_timeouts)} configurations.")
         except Exception as e:
-            logger.error(f"Erro ao carregar timeout_file: {e}")
+            logger.error(f"Error loading timeout_file: {e}")
 
-    # Salva informações do sistema
+    # Save system info
     system_info = core.SystemMonitor.get_system_info()
     (main_output_path / "system_info.json").write_text(
         json_dump_pretty(asdict(system_info))
     )
 
-    # Executa a matriz de testes para cada diretório de config
+    # Run test matrix for each config directory
     for config_path in BASE_CONFIGS:
         if not config_path.exists():
-            logger.warning(f"⚠️ Diretório de config não encontrado: {config_path}")
+            logger.warning(f"⚠️ Config directory not found: {config_path}")
             continue
         
         run(config_path, Path(f"{main_output_path}/{config_path.name}_output"), args.timeout_file, global_timeouts)
     
     logger.info("\n" + "="*80)
-    logger.info("✅ BENCHMARKING COMPLETO!")
+    logger.info("✅ BENCHMARKING COMPLETE!")
     logger.info("="*80)
-    logger.info(f"📁 Resultados salvos em: {main_output_path}")
-    logger.info(f"📊 Arquivo principal para análise: all_summary_table_with_profilers.csv")
+    logger.info(f"📁 Results saved in: {main_output_path}")
+    logger.info(f"📊 Main file for analysis: all_summary_table_with_profilers.csv")
 
 
 if __name__ == "__main__":

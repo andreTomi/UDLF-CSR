@@ -1,3 +1,4 @@
+# exp_runner/execution.py
 import os
 import subprocess
 import time
@@ -33,7 +34,7 @@ def kill_active_process():
 
 class AdvancedProfiler:
     """
-    (O código da classe AdvancedProfiler permanece o mesmo, sem alterações)
+    Advanced profiler for monitoring process metrics during execution.
     """
     def __init__(self, sampling_interval: float = 0.01):
         self.sampling_interval = sampling_interval
@@ -47,7 +48,7 @@ class AdvancedProfiler:
 
     def monitor_process(self, proc):
         if not HAS_PSUTIL:
-            logger.debug("Monitoramento psutil desativado (módulo não encontrado)")
+            logger.debug("psutil monitoring disabled (module not found)")
             return
             
         temp_samples = []
@@ -70,42 +71,42 @@ class AdvancedProfiler:
                         self.metrics.read_ops = io.read_count
                         self.metrics.write_ops = io.write_count
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        logger.debug(f"Acesso negado a io_counters para pid={proc.pid}")
+                        logger.debug(f"Access denied to io_counters for pid={proc.pid}")
                     try:
                         ctx = proc.num_ctx_switches()
                         self.metrics.context_switches_vol = ctx.voluntary
                         self.metrics.context_switches_invol = ctx.involuntary
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        logger.debug(f"Acesso negado a context_switches para pid={proc.pid}")
+                        logger.debug(f"Access denied to context_switches for pid={proc.pid}")
 
                 except (psutil.NoSuchProcess, psutil.ZombieProcess):
                     break
                 time.sleep(self.sampling_interval)
         except Exception as e:
-            logger.warning(f"Erro no monitoramento: {e}")
+            logger.warning(f"Error in monitoring: {e}")
         if temp_samples:
             self.metrics.cpu_temp_avg = sum(temp_samples) / len(temp_samples)
 
 
 def run_with_advanced_monitoring(cmd: List[str], timeout: int, log_path: Path) -> RunResult:
     """
-    Executa um comando com monitoramento avançado, ignorando stdout e stderr.
+    Executes a command with advanced monitoring, redirecting stdout and stderr.
     """
     global _active_pgid
     profiler = AdvancedProfiler()
     system_info = SystemMonitor.get_system_info()
     
-    # Nota: A pasta de log ainda pode ser necessária para os wrappers (perf, time, etc.)
-    # então mantemos a criação do diretório.
+    # Note: The log directory might still be needed for wrappers (perf, time, etc.)
+    # so we keep the directory creation.
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        logger.error(f"❌ Erro ao criar diretório de log {log_path.parent}: {e}")
+        logger.error(f"❌ Error creating log directory {log_path.parent}: {e}")
         return RunResult(config="", approach="", wrapper="", run=0, elapsed_time=0.0,
                          exit_code=-1, status="error", error_message=f"Log dir creation failed: {e}")
 
     try:
-        # Inicia o processo redirecionando stdout e stderr para o log_path
+        # Starts the process redirecting stdout and stderr to log_path
         with open(log_path, 'w') as log_file:
             if HAS_PSUTIL:
                 proc = psutil.Popen(
@@ -138,7 +139,7 @@ def run_with_advanced_monitoring(cmd: List[str], timeout: int, log_path: Path) -
                 monitor_thread.start()
                 monitor_started = True
             except Exception as e:
-                logger.debug(f"Falha ao iniciar monitor_thread: {e}")
+                logger.debug(f"Failed to start monitor_thread: {e}")
 
         try:
             exit_code = proc.wait(timeout=timeout)
@@ -156,8 +157,8 @@ def run_with_advanced_monitoring(cmd: List[str], timeout: int, log_path: Path) -
             
             status = "timeout"
             exit_code = -1
-            error_message = f"Timeout de {timeout}s atingido."
-            logger.warning(f"⏳ Processo {proc.pid} (cmd: {' '.join(cmd)}) estourou o tempo e foi encerrado.")
+            error_message = f"Timeout of {timeout}s reached."
+            logger.warning(f"⏳ Process {proc.pid} (cmd: {' '.join(cmd)}) timed out and was terminated.")
         finally:
             profiler.stop_event.set()
             elapsed = time.time() - start_time
@@ -167,7 +168,7 @@ def run_with_advanced_monitoring(cmd: List[str], timeout: int, log_path: Path) -
             # Reset tracking
             _active_pgid = None
 
-        # Coleta de métricas via 'resource'
+        # Collect metrics via 'resource'
         try:
             rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
             profiler.metrics.user_time = rusage.ru_utime
@@ -175,9 +176,9 @@ def run_with_advanced_monitoring(cmd: List[str], timeout: int, log_path: Path) -
             profiler.metrics.page_faults_minor = rusage.ru_minflt
             profiler.metrics.page_faults_major = rusage.ru_majflt
         except Exception as e:
-            logger.debug(f"Não foi possível obter rusage: {e}")
+            logger.debug(f"Could not get rusage: {e}")
 
-        # Monta o objeto de resultado final
+        # Build final result object
         result = RunResult(
             config="", approach="", wrapper="", run=0,
             elapsed_time=elapsed,
@@ -198,6 +199,6 @@ def run_with_advanced_monitoring(cmd: List[str], timeout: int, log_path: Path) -
         return result
 
     except Exception as e:
-        logger.error(f"❌ Erro fatal durante a execução do comando '{' '.join(cmd)}': {e}", exc_info=True)
+        logger.error(f"❌ Fatal error during command execution '{' '.join(cmd)}': {e}", exc_info=True)
         return RunResult(config="", approach="", wrapper="", run=0,
                          elapsed_time=0.0, exit_code=-1, status="error", error_message=str(e))

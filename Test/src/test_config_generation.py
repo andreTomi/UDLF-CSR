@@ -1,8 +1,8 @@
 """
-Script de Teste para Geração de Configurações
+Config Generation Test Script
 
-Testa a funcionalidade de geração dinâmica de configs sem executar os benchmarks.
-Útil para validar que os configs estão sendo criados corretamente.
+Tests the dynamic configuration generation functionality without executing benchmarks.
+Useful for validating that configs are being created correctly.
 """
 
 import logging
@@ -23,7 +23,7 @@ ALL_METHODS = [
 
 
 def create_temp_config_with_method(base_config_path: Path, method_name: str, temp_dir: Path) -> Path:
-    """Cria um arquivo de configuração temporário modificando apenas o campo UDL_METHOD."""
+    """Creates a temporary config file modifying only the UDL_METHOD field."""
     config = configparser.ConfigParser()
     config.optionxform = str
     config.read(base_config_path)
@@ -40,7 +40,7 @@ def create_temp_config_with_method(base_config_path: Path, method_name: str, tem
 
 
 def validate_config(config_path: Path, expected_method: str) -> bool:
-    """Valida que o config foi criado corretamente."""
+    """Validates that the config was created correctly."""
     config = configparser.ConfigParser()
     config.optionxform = str
     config.read(config_path)
@@ -48,91 +48,91 @@ def validate_config(config_path: Path, expected_method: str) -> bool:
     actual_method = config['DEFAULT'].get('UDL_METHOD', '')
     
     if actual_method != expected_method:
-        logger.error(f"❌ Método incorreto: esperado '{expected_method}', obtido '{actual_method}'")
+        logger.error(f"❌ Incorrect method: expected '{expected_method}', got '{actual_method}'")
         return False
     
     return True
 
 
 def test_config_generation():
-    """Testa a geração de configs para todos os métodos."""
+    """Tests config generation for all methods."""
     logger.info("="*80)
-    logger.info("🔬 TESTE DE GERAÇÃO DE CONFIGURAÇÕES")
+    logger.info("🔬 CONFIG GENERATION TEST")
     logger.info("="*80)
     logger.info("")
     
-    # Procura configs base
+    # Search for base configs
     config_dir = Path("config")
     if not config_dir.exists():
-        logger.error(f"❌ Diretório de config não encontrado: {config_dir}")
+        logger.error(f"❌ Config directory not found: {config_dir}")
         return False
     
     config_files = list(config_dir.glob("*.ini"))
     if not config_files:
-        logger.error(f"❌ Nenhum arquivo .ini encontrado em {config_dir}")
+        logger.error(f"❌ No .ini file found in {config_dir}")
         return False
     
-    logger.info(f"📁 Configs base encontrados: {len(config_files)}")
+    logger.info(f"📁 Base configs found: {len(config_files)}")
     for cf in config_files:
         logger.info(f"   - {cf.name}")
     logger.info("")
     
-    # Testa com o primeiro config
+    # Test with the first config
     base_config = config_files[0]
-    logger.info(f"🧪 Testando com: {base_config.name}")
+    logger.info(f"🧪 Testing with: {base_config.name}")
     logger.info("")
     
     all_passed = True
     
     with tempfile.TemporaryDirectory(prefix="config_test_") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        logger.info(f"📦 Diretório temporário: {temp_dir}")
+        logger.info(f"📦 Temporary directory: {temp_dir}")
         logger.info("")
         
         for method in ALL_METHODS:
-            logger.info(f"🔧 Gerando config para: {method}")
+            logger.info(f"🔧 Generating config for: {method}")
             
             try:
-                # Gera config temporário
+                # Generate temporary config
                 temp_config = create_temp_config_with_method(base_config, method, temp_dir)
                 
-                # Valida
+                # Validate
                 if validate_config(temp_config, method):
                     logger.info(f"   ✅ {temp_config.name} - OK")
                     
-                    # Mostra primeiras linhas do config
+                    # Show first lines of the config
                     with open(temp_config, 'r') as f:
                         lines = f.readlines()[:5]
-                    logger.info(f"   Primeiras linhas:")
+                    logger.info(f"   First lines:")
                     for line in lines:
                         logger.info(f"      {line.rstrip()}")
                 else:
-                    logger.error(f"   ❌ {temp_config.name} - FALHOU")
+                    logger.error(f"   ❌ {temp_config.name} - FAILED")
                     all_passed = False
                 
                 logger.info("")
                 
             except Exception as e:
-                logger.error(f"   ❌ Erro ao gerar config: {e}")
+                logger.error(f"   ❌ Error generating config: {e}")
                 all_passed = False
                 logger.info("")
     
-    # Resumo
+    # Summary
     logger.info("="*80)
     if all_passed:
-        logger.info("✅ TODOS OS TESTES PASSARAM")
-        logger.info(f"   {len(ALL_METHODS)} configs gerados com sucesso")
+        logger.info("✅ ALL TESTS PASSED")
+        logger.info(f"   {len(ALL_METHODS)} configs generated successfully")
     else:
-        logger.error("❌ ALGUNS TESTES FALHARAM")
+        logger.error("❌ SOME TESTS FAILED")
     logger.info("="*80)
     
     return all_passed
 
 
 def test_config_parsing():
-    """Testa o parsing reverso do nome do config."""
+    """Tests reverse parsing of the config name."""
     logger.info("\n" + "="*80)
-    logger.info("🔬 TESTE DE PARSING DE NOMES")
+    logger.info("🔬 NAME PARSING TEST")
     logger.info("="*80)
     logger.info("")
     
@@ -147,7 +147,7 @@ def test_config_parsing():
     all_passed = True
     
     for config_name, expected_dataset, expected_method in test_cases:
-        logger.info(f"🧪 Testando: {config_name}")
+        logger.info(f"🧪 Testing: {config_name}")
         
         match = re.match(r'(.+?)__(.+)$', config_name)
         if match:
@@ -155,32 +155,32 @@ def test_config_parsing():
             method = match.group(2)
             
             if dataset == expected_dataset and method == expected_method:
-                logger.info(f"   ✅ Dataset: {dataset}, Método: {method}")
+                logger.info(f"   ✅ Dataset: {dataset}, Method: {method}")
             else:
-                logger.error(f"   ❌ Esperado: {expected_dataset}/{expected_method}")
-                logger.error(f"      Obtido: {dataset}/{method}")
+                logger.error(f"   ❌ Expected: {expected_dataset}/{expected_method}")
+                logger.error(f"      Got: {dataset}/{method}")
                 all_passed = False
         else:
-            logger.error(f"   ❌ Regex não bateu")
+            logger.error(f"   ❌ Regex did not match")
             all_passed = False
         
         logger.info("")
     
     logger.info("="*80)
     if all_passed:
-        logger.info("✅ TODOS OS TESTES DE PARSING PASSARAM")
+        logger.info("✅ ALL PARSING TESTS PASSED")
     else:
-        logger.error("❌ ALGUNS TESTES DE PARSING FALHARAM")
+        logger.error("❌ SOME PARSING TESTS FAILED")
     logger.info("="*80)
     
     return all_passed
 
 
 def main():
-    """Executa todos os testes."""
+    """Runs all tests."""
     logger.info("\n\n")
     logger.info("╔" + "="*78 + "╗")
-    logger.info("║" + " "*25 + "TESTES DE CONFIGURAÇÃO" + " "*30 + "║")
+    logger.info("║" + " "*25 + "CONFIGURATION TESTS" + " "*32 + "║")
     logger.info("╚" + "="*78 + "╝")
     logger.info("")
     
@@ -189,17 +189,17 @@ def main():
     
     logger.info("\n\n")
     logger.info("="*80)
-    logger.info("📊 RESUMO GERAL")
+    logger.info("📊 OVERALL SUMMARY")
     logger.info("="*80)
-    logger.info(f"Teste de Geração de Configs: {'✅ PASS' if test1_passed else '❌ FAIL'}")
-    logger.info(f"Teste de Parsing de Nomes:   {'✅ PASS' if test2_passed else '❌ FAIL'}")
+    logger.info(f"Config Generation Test: {'✅ PASS' if test1_passed else '❌ FAIL'}")
+    logger.info(f"Name Parsing Test:      {'✅ PASS' if test2_passed else '❌ FAIL'}")
     logger.info("")
     
     if test1_passed and test2_passed:
-        logger.info("✅ TODOS OS TESTES PASSARAM - Sistema pronto para uso!")
+        logger.info("✅ ALL TESTS PASSED - System is ready for use!")
         return 0
     else:
-        logger.error("❌ ALGUNS TESTES FALHARAM - Verifique os erros acima")
+        logger.error("❌ SOME TESTS FAILED - Check the errors above")
         return 1
 
 
