@@ -1,0 +1,22 @@
+# Benchmarking Framework - Python Dependencies
+
+# Data manipulation and analysis
+pandas>=1.5.0
+numpy>=1.23.0
+
+# Visualization
+matplotlib>=3.6.0
+seaborn>=0.12.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Configuration parsing (built-in, but listed for clarity)
+# configparser - standard library
+
+# Optional: For enhanced progress bars
+tqdm>=4.64.0
+
+# Optional: For Jupyter notebook support (if needed for analysis)
+# jupyter>=1.0.0
+# ipython>=8.0.0
