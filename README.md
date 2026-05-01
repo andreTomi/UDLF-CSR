@@ -1,33 +1,92 @@
 # UDLF (Unsupervised Distance Learning Framework)
 
-UDLF is a C++ framework for unsupervised distance learning, rank estimation, and image re-ranking tasks.
+![C++23](https://img.shields.io/badge/C++-23-blue.svg)
+![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## Key Features
+UDLF is a high-performance C++ framework designed for unsupervised distance learning, rank estimation, and image re-ranking tasks. This repository serves as the official software artifact for the Master's Thesis titled **"Scaling Manifold Learning through Sparse Matrix Reformulation"**.
 
-- **Core Tasks:** Supports Unsupervised Distance Learning (UDL) and multi-feature Fusion.
-- **Algorithms:** Extensive support for the following re-ranking methods:
-  - **CPRR** (Cartesian Product Reciprocal Rank)
-  - **LHRR** (Local High-Order Reciprocal Rank)
-- **Linear Algebra Backends:** Multiple implementations for core methods (e.g., CPRR and LHRR):
-  - `_SPARSE`: Custom sparse matrix operations
-  - `_EIGEN`: Eigen C++ template library
-  - `_BLAS`: Basic Linear Algebra Subprograms
-  - `_MKL`: Intel Math Kernel Library
-- **Input Flexibility:** Handles raw matrices (Distance or Similarity), Ranked Lists (Numeric or String formats), and can dynamically convert matrices to ranked lists using Heap or Insertion sorting.
-- **Rich Output & Visualization:** Outputs updated matrices or ranked lists.
-- **Built-in Evaluation:** Automated computation of standard retrieval metrics including Precision, MAP (Mean Average Precision), and Recall at various depths.
+In Content-Based Image Retrieval (CBIR), standard manifold re-ranking algorithms typically require an $O(N^2)$ dense similarity matrix, causing Out-Of-Memory (OOM) failures on large datasets (e.g., reaching 102GB of RAM). This framework introduces a custom **Fused Multiply-and-Prune kernel**, reducing memory footprint by **$400\times$** (down to 256MB) and accelerating execution by **$2.4\times$** on 18 physical cores.
 
-## Usage
+---
 
-The framework is driven entirely by a configuration file (default: `config.ini`). 
+## The Custom Engine vs. Baselines
 
-### The `config.ini` File
+Standard manifold re-ranking methods (like CPRR and LHRR) struggle to scale:
+- **Dense Baselines:** Require full dense matrices, scaling poorly in both memory ($O(N^2)$) and compute, rendering them unusable for very large image datasets.
+- **Sparse Baselines (`_MKL`, `_BLAS`, `_EIGEN`):** While they use sparse matrices, general-purpose sparse libraries suffer from **intermediate density explosion** during Sparse General Matrix-Matrix Multiplication (SpGEMM), ultimately exhausting memory before pruning can occur.
+- **The Custom `_SPARSE` Engine:** This repository introduces a purpose-built high-performance engine utilizing the Compressed Sparse Row (CSR) format. By incorporating a **fused multiply-and-prune SpGEMM kernel**, a custom BlockAllocator with Transparent Huge Pages (THP), and 128-byte cache-line padding, the engine actively controls intermediate density explosion. This guarantees strictly bounded memory consumption while outperforming established math libraries.
 
-The configuration file is divided into several sections:
-1. **General Settings:** Define the task, method, and dataset size.
-2. **Input Settings:** Specify data paths, formats, and sorting methods.
-3. **Output Settings:** Configure the format, and paths for the results.
-4. **Evaluation Settings:** Toggle efficiency tracking and specific effectiveness metrics (MAP, Precision, Recall).
-5. **Method-Specific Parameters:** Fine-tune algorithm behaviors (e.g., `L` for list size, `K` for nearest neighbors, `T` for iterations).
+---
 
-Please refer to the `config.ini` file in the root directory for a fully documented example detailing all available parameters and their valid options.
+## Prerequisites & System Requirements
+
+To ensure full performance and reproducibility, the framework must be executed in a Linux environment. The following dependencies are strictly required:
+
+- **OS:** Linux
+- **Compiler:** `g++` with **C++23** support
+- **Math Libraries:** 
+  - Intel oneAPI Math Kernel Library (MKL)
+  - SuiteSparse (specifically GraphBLAS)
+- **Concurrency & Memory Management:** 
+  - `tbb` (Intel Threading Building Blocks)
+  - `jemalloc`
+
+---
+
+## Build Instructions
+
+The project is built using the provided `Makefile`. 
+
+1. Ensure the `MKL_ROOT` environment variable is correctly set to your Intel oneAPI installation path. By default, it looks for:
+   ```bash
+   export MKL_ROOT=/opt/intel/oneapi/mkl/latest
+   ```
+
+2. Compile the framework:
+   ```bash
+   make
+   ```
+
+---
+
+## Configuration & Usage
+
+The framework's execution is driven entirely by the `config.ini` file located in the root directory. 
+
+### Method Selection Example
+You can switch between the baselines and the custom sparse engine by modifying the `UDL_METHOD` variable. For example, to compare the standard MKL baseline with the custom Sparse engine for Local High-Order Reciprocal Rank (LHRR):
+
+**Using Intel MKL:**
+```ini
+UDL_METHOD = LHRR_MKL
+PARAM_LHRR_MKL_L = 1000
+PARAM_LHRR_MKL_K = 20
+```
+
+**Using the Custom Sparse Engine:**
+```ini
+UDL_METHOD = LHRR_SPARSE
+PARAM_LHRR_SPARSE_L = 1000
+PARAM_LHRR_SPARSE_K = 20
+```
+*(Where `L` represents the neighborhood list length and `K` is the number of nearest neighbors).*
+
+### Hardware Isolation
+To achieve the exact scaling results presented in the thesis, the execution environment must be strictly controlled to prevent CPU migration and NUMA remote-node access. **Hardware isolation is handled externally** via OS-level tools. 
+
+Example running on specific physical cores:
+```bash
+numactl --membind=0 taskset -c 0-17 ./udlf
+```
+
+---
+
+## Reproducibility & Artifacts
+
+This repository is designed for full transparency and reproducibility of the thesis results. 
+
+- **Raw Data:** All raw benchmark data, hardware counters, and execution times (in `.csv` format) are included in the `data/` directory.
+- **Plotting Scripts:** The exact Python plotting scripts used to generate the scaling and memory metric charts in the thesis are available in the `scripts/` directory.
+
+By using the raw data and scripts, examiners and researchers can seamlessly regenerate the figures demonstrating the $400\times$ memory reduction and $2.4\times$ speedup.

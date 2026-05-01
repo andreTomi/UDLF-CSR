@@ -20,11 +20,9 @@ MKL_ROOT = /opt/intel/oneapi/mkl/latest
 
 # Link flags
 LDFLAGS   = -L/usr/lib/x86_64-linux-gnu \
-                                          -lzstd -lhwloc -lnuma -lm -luring -lpthread -llz4 -ltbb -ltbbmalloc -ljemalloc \
-					  -lgraphblas -lsuitesparseconfig \
-						-L$(MKL_ROOT)/lib/intel64 \
-						-lmkl_intel_lp64 -lmkl_sequential -lmkl_core \
-                                                -ldl
+            -lm -lpthread -ltbb -ljemalloc -lgraphblas \
+            -L$(MKL_ROOT)/lib/intel64 \
+            -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lmkl_rt
 
 # Include directories
 INCFLAGS  = -I./src \
