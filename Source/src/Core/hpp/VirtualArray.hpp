@@ -1,10 +1,11 @@
 #ifndef VIRTUAL_ARRAY_HPP
 #define VIRTUAL_ARRAY_HPP
 
-// Configuration: Choose one of these implementations
-// Uncomment exactly one line below:
-#define VIRTUAL_ARRAY_PURE_MMAP  // Version 1: Pure memory-mapped file (no cache)
-// #define VIRTUAL_ARRAY_FULL_MEMORY  // Version 3: Fully in-memory (with swap)
+// Configuration: Choose one of these implementations via -D compiler flag.
+// Default is VIRTUAL_ARRAY_PURE_MMAP if none is specified.
+#if !defined(VIRTUAL_ARRAY_PURE_MMAP) && !defined(VIRTUAL_ARRAY_FULL_MEMORY)
+    #define VIRTUAL_ARRAY_PURE_MMAP
+#endif
 
 #include <omp.h>
 #include <sys/sysinfo.h>

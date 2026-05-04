@@ -38,6 +38,7 @@ INCFLAGS  = -I./src \
 
 # Build directories
 OBJ_DIR   = obj
+OBJ_DIR_SWAP = obj_swap
 SRC_DIR   = src
 BUILD_DIR = bin
 
@@ -51,19 +52,39 @@ SRC_FILES  := $(wildcard \
 
 # Convert source file paths to object file paths
 OBJ_FILES  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_FILES))
+OBJ_FILES_SWAP := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_SWAP)/%.o, $(SRC_FILES))
 
 # Build targets
-.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization
+.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap
 
-# Default target - optimized build
-all: udlf
+# Default target - optimized builds for both versions
+all: udlf swap
 
-# Main optimized build target
+# Main optimized build target (Pure MMAP)
 udlf: $(OBJ_FILES)
-	@echo "Building optimized executable with vectorization..."
+	@echo "Building optimized MMAP executable..."
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(OBJ_FILES) -o $(BUILD_DIR)/udlf $(CFLAGS) $(LDFLAGS)
 	@echo "Build complete. Executable: $(BUILD_DIR)/udlf"
+
+# Swap build target (Anonymous Memory / Swap-backed)
+swap: $(OBJ_FILES_SWAP)
+	@echo "Building optimized SWAP executable..."
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(OBJ_FILES_SWAP) -o $(BUILD_DIR)/udlf_swap $(CFLAGS) -DVIRTUAL_ARRAY_FULL_MEMORY $(LDFLAGS)
+	@echo "Build complete. Executable: $(BUILD_DIR)/udlf_swap"
+
+# Rule to compile .cpp files into .o files (MMAP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	$(CC) $(CFLAGS) $(INCFLAGS) -c $< -o $@
+
+# Rule to compile .cpp files into .o files (SWAP)
+$(OBJ_DIR_SWAP)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "Compiling $< (swap)..."
+	$(CC) $(CFLAGS) -DVIRTUAL_ARRAY_FULL_MEMORY $(INCFLAGS) -c $< -o $@
 
 # Debug build (less optimization, better debugging)
 debug: CFLAGS = $(BASE_FLAGS) -O1 -DDEBUG -fsanitize=address -fsanitize=undefined
@@ -103,7 +124,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 # Clean target
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -rf $(OBJ_DIR) $(BUILD_DIR)/udlf $(BUILD_DIR)/udlf-debug $(BUILD_DIR)/udlf-profile $(BUILD_DIR)/udlf-vec
+	rm -rf $(OBJ_DIR) $(OBJ_DIR_SWAP) $(BUILD_DIR)/udlf $(BUILD_DIR)/udlf_swap $(BUILD_DIR)/udlf-debug $(BUILD_DIR)/udlf-profile $(BUILD_DIR)/udlf-vec
 	rm -f vectorization_report.txt gmon.out
 
 # Run targets

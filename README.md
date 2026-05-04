@@ -45,8 +45,12 @@ The project is built using the provided `Makefile`.
 
 2. Compile the framework:
    ```bash
-   make
+   cd Source/
+   make all
    ```
+   This will build two versions of the engine in `Source/bin/`:
+   - **`udlf`**: Standard version using memory-mapped files (MMAP). Recommended for large datasets.
+   - **`udlf_swap`**: Version using anonymous memory (Swap-backed). Used for dense implementation baseline comparisons.
 
 ---
 
@@ -75,10 +79,47 @@ PARAM_LHRR_SPARSE_K = 20
 ### Hardware Isolation
 To achieve the exact scaling results presented in the thesis, the execution environment must be strictly controlled to prevent CPU migration and NUMA remote-node access. **Hardware isolation is handled externally** via OS-level tools. 
 
-Example running on specific physical cores:
+To execute the framework manually:
 ```bash
-numactl --membind=0 taskset -c 0-17 ./udlf
+# From the project root
+numactl --membind=0 taskset -c 0-17 ./Source/bin/udlf
 ```
+
+---
+
+## Benchmarking & Profiling
+
+The `Test/` directory contains a comprehensive suite for automated performance evaluation and hardware metric collection. These scripts were used to gather the raw data presented in the thesis.
+
+### Key Scripts
+- **`validate_setup.py`**: Verifies the environment by checking for required Python packages, system tools (`perf`, `numactl`), and compiled binaries. It also estimates the total execution time for a full benchmark run.
+- **`run_experiments.py`**: The primary orchestrator for benchmarking. It executes a full matrix of configurations (different methods, backends, and repetitions) and utilizes `perf` to collect hardware counters (cache misses, IPC, branches) and `time` for peak memory and CPU usage.
+- **`run_scalability.py`**: Automates multi-threading scalability tests. It runs the benchmark suite across varying thread counts (e.g., 1 to 18) while enforcing CPU affinity and NUMA isolation to evaluate the speedup of the `_SPARSE` engine.
+
+### How to Run
+To ensure the system is correctly configured for benchmarking, first run the validation script:
+```bash
+python Test/src/validate_setup.py
+```
+
+To execute the full benchmarking suite:
+```bash
+# Example: Running benchmarks with results saved to 'my_benchmark_run'
+python Test/src/run_experiments.py --output-dir my_benchmark_run
+```
+
+All results are exported to CSV and JSON formats, which are then processed by the `Visualization/` suite to produce the final thesis artifacts.
+
+---
+
+## Project Structure
+
+The repository is organized as follows:
+
+- **Source/**: Custom C++ engine source code and the `Makefile`.
+- **Data/**: Raw benchmark CSV results, generated PDF plots (`visualizations/`), and LaTeX tables (`latex_tables/`).
+- **Test/**: Python scripts for automated benchmarking and hardware metric collection.
+- **Visualization/**: Python suite for processing benchmark data and generating publication-ready plots and tables.
 
 ---
 
@@ -86,7 +127,13 @@ numactl --membind=0 taskset -c 0-17 ./udlf
 
 This repository is designed for full transparency and reproducibility of the thesis results. 
 
-- **Raw Data:** All raw benchmark data, hardware counters, and execution times (in `.csv` format) are included in the `data/` directory.
-- **Plotting Scripts:** The exact Python plotting scripts used to generate the scaling and memory metric charts in the thesis are available in the `scripts/` directory.
+- **Raw Data:** All raw benchmark data, hardware counters, and execution times are included in the `Data/` directory.
+- **Artifact Generation:** The Python scripts in the `Visualization/` directory can be used to regenerate all PDF plots and LaTeX tables directly from the raw data.
+
+To regenerate all visualizations, run:
+```bash
+cd Visualization/
+python visualizer.py
+```
 
 By using the raw data and scripts, examiners and researchers can seamlessly regenerate the figures demonstrating the $400\times$ memory reduction and $2.4\times$ speedup.

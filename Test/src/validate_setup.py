@@ -23,10 +23,12 @@ ALL_METHODS = [
     "RLRECOM", "RLSIM", "LHRR", "BFSTREE", "RDPAC", "RFE"
 ]
 
-_binary_path = str(Path(__file__).resolve().parent.parent.parent / "Source" / "udlf")
+_binary_path = str(Path(__file__).resolve().parent.parent.parent / "Source" / "bin" / "udlf")
+_binary_path_swap = str(Path(__file__).resolve().parent.parent.parent / "Source" / "bin" / "udlf_swap")
 EXECUTABLES = {
     "mmap": _binary_path,
-    "batch": _binary_path,
+    "csr": _binary_path,
+    "swap": _binary_path_swap,
 }
 
 BASE_CONFIGS = [Path("config")]

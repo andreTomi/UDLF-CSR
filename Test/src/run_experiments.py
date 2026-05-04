@@ -53,13 +53,14 @@ BASE_CONFIGS = [
 ]
 
 # Executables to be compared
-_binary_path = str(Path(__file__).resolve().parent.parent.parent / "Source" / "udlf")
+_binary_path = str(Path(__file__).resolve().parent.parent.parent / "Source" / "bin" / "udlf")
+_binary_path_swap = str(Path(__file__).resolve().parent.parent.parent / "Source" / "bin" / "udlf_swap")
 EXECUTABLES = {
     # "mkl": _binary_path,
     "csr": _binary_path,
     # "eigen": _binary_path,
     "mmap": _binary_path, 
-    "swap": _binary_path,
+    "swap": _binary_path_swap,
 }
 
 # Mapping of allowed methods per executable
