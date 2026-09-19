@@ -1,0 +1,18 @@
+RUN,mult,w2,12,7,0
+  [Build] Total triplets: 1000000
+  [Build] Total triplets: 2000000
+  [Build] Total triplets: 2500000
+REP,0,113.565,2500000,277.889357
+  [Build] Total triplets: 2500000
+REP,1,121.851,2500000,277.889357
+  [Build] Total triplets: 2500000
+REP,2,116.645,2500000,277.889357
+  [Build] Total triplets: 2500000
+REP,3,126.886,2500000,277.889357
+  [Build] Total triplets: 2500000
+REP,4,128.269,2500000,277.889357
+  [Build] Total triplets: 2500000
+REP,5,100.179,2500000,277.889357
+  [Build] Total triplets: 2500000
+REP,6,110.046,2500000,277.889357
+DONE,w2,-1,256168
