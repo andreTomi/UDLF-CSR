@@ -10,10 +10,13 @@ INLINE_FLAGS    = -finline-functions -finline-limit=300
 CACHE_FLAGS     = -falign-functions=32 -falign-loops=32
 
 # Base optimization flags
+# NDEBUG compiles out the two runtime asserts in SparseMatrix.hpp; the debug
+# target redefines CFLAGS without it, so sanitizer/debug builds keep asserts.
 BASE_FLAGS = -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE 
+RELEASE_FLAGS = -DNDEBUG
 
 # Combined flags for maximum performance
-CFLAGS = $(BASE_FLAGS) $(VECTOR_FLAGS) $(OPENMP_FLAGS) $(FAST_MATH_FLAGS) $(LOOP_FLAGS) $(INLINE_FLAGS) $(CACHE_FLAGS)
+CFLAGS = $(BASE_FLAGS) $(RELEASE_FLAGS) $(VECTOR_FLAGS) $(OPENMP_FLAGS) $(FAST_MATH_FLAGS) $(LOOP_FLAGS) $(INLINE_FLAGS) $(CACHE_FLAGS)
 
 # Define MKL Root for clarity
 MKL_ROOT = /opt/intel/oneapi/mkl/latest
@@ -97,7 +100,7 @@ debug: $(OBJ_FILES)
 	@echo "Debug build complete. Executable: $(BUILD_DIR)/udlf-debug"
 
 # Profile build (with profiling support)
-profile: CFLAGS = $(BASE_FLAGS) $(VECTOR_FLAGS) $(OPENMP_FLAGS) -O3 -pg -fno-inline
+profile: CFLAGS = $(BASE_FLAGS) $(RELEASE_FLAGS) $(VECTOR_FLAGS) $(OPENMP_FLAGS) -O3 -pg -fno-inline
 profile: LDFLAGS += -pg
 profile: clean
 profile: $(OBJ_FILES)

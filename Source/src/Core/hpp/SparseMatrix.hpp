@@ -247,6 +247,148 @@ private:
             }
         }
     }
+private:
+    // =========================================================================
+    // Row accumulators for multiply_and_prune
+    //
+    // The previous implementation used one O(B.cols_) dense array per thread
+    // (`dense_acc`/`marker`). Real touched work per row is bounded by
+    // bound_i = sum_{k in row_i(A)} nnz_B(k)  -- i.e. O(k^2), not O(n) --
+    // but that O(n) buffer means the k^2 touches are scattered across a
+    // huge, mostly-empty address range, which is the actual source of the
+    // cache/TLB pressure (not extra arithmetic work: the inner double loop
+    // was already bounded by k^2).
+    //
+    // HashRowAccumulator below caps the accumulator's footprint at
+    // O(max_bound) for the thread's row range, so it can stay cache
+    // resident regardless of B.cols_. Empirically (see
+    // Source/bench/bench_accumulator.cpp) it wins once B.cols_ is roughly
+    // ADAPTIVE_RATIO times the bound; below that the extra hashing/probing
+    // cost isn't worth it and the plain dense array remains faster, so
+    // multiply_and_prune picks per-thread-chunk between the two.
+    // =========================================================================
+
+    struct DenseRowAccumulator {
+        std::vector<T> val;
+        std::vector<index_type> marker;
+        std::vector<size_t> active_;
+        index_type current_row_ = (index_type)-1;
+
+        explicit DenseRowAccumulator(size_type n) : val(n, T{}), marker(n, (index_type)-1) {}
+
+        void begin_row(index_type row_id) {
+            active_.clear();
+            current_row_ = row_id;
+        }
+        inline void accumulate(index_type col, T v) {
+            if (marker[col] != current_row_) {
+                marker[col] = current_row_;
+                val[col] = T{};
+                active_.push_back(col);
+            }
+            val[col] += v;
+        }
+        std::vector<size_t>& used() { return active_; }
+        index_type col_of(size_t slot) const { return (index_type)slot; }
+        T val_of(size_t slot) const { return val[slot]; }
+    };
+
+    struct HashRowAccumulator {
+        static constexpr index_type EMPTY = (index_type)-1;
+        std::vector<index_type> slot_col;
+        std::vector<T> slot_val;
+        std::vector<size_t> used_;
+        size_t mask_ = 0;
+
+        static size_t next_pow2(size_t x) {
+            size_t p = 1;
+            while (p < x) p <<= 1;
+            return p;
+        }
+        // Called once per thread with the max per-row bound in its chunk.
+        // Distinct columns touched in a row are <= bound, and capacity is
+        // 2*bound (rounded up to a power of two), so load factor stays
+        // <= 50% and linear probing cannot degenerate into an infinite loop.
+        void reserve_capacity(size_t bound) {
+            size_t capacity = next_pow2(std::max<size_t>(4, bound * 2));
+            slot_col.assign(capacity, EMPTY);
+            slot_val.assign(capacity, T{});
+            mask_ = capacity - 1;
+        }
+        void begin_row(index_type /*row_id*/) {
+            for (size_t s : used_) slot_col[s] = EMPTY;  // O(k), not O(capacity)
+            used_.clear();
+        }
+        static inline size_t mix(index_type x) {
+            uint64_t h = x;
+            h ^= h >> 16; h *= 0x85ebca6bULL;
+            h ^= h >> 13; h *= 0xc2b2ae35ULL;
+            h ^= h >> 16;
+            return (size_t)h;
+        }
+        inline void accumulate(index_type col, T v) {
+            size_t h = mix(col) & mask_;
+            while (slot_col[h] != EMPTY && slot_col[h] != col) h = (h + 1) & mask_;
+            if (slot_col[h] == EMPTY) {
+                // The table only grows on this branch (existing-slot updates
+                // never touch used_), so guarding the load-factor invariant here
+                // costs O(k) per row instead of one branch per accumulate call.
+                assert(used_.size() < (mask_ + 1) / 2);  // insert cannot saturate
+                slot_col[h] = col;
+                slot_val[h] = v;
+                used_.push_back(h);
+            } else {
+                slot_val[h] += v;
+            }
+        }
+        std::vector<size_t>& used() { return used_; }
+        index_type col_of(size_t slot) const { return slot_col[slot]; }
+        T val_of(size_t slot) const { return slot_val[slot]; }
+    };
+
+    // Shared body: fan out A-row i through B, prune to `limit`, emit Triplets.
+    // Identical for both accumulator kinds via the used()/col_of()/val_of() interface.
+    //
+    // IMPORTANT: `used` is a reference to the accumulator's own bookkeeping
+    // list. For HashRowAccumulator, begin_row() clears exactly the slots
+    // recorded in that list on the NEXT row, so it must still list every
+    // slot actually written this row when we're done here -- truncating it
+    // to `limit` would silently leak the pruned-away slots (never marked
+    // EMPTY again, never re-tracked), which fills the table with stale
+    // entries after a few rows and makes accumulate()'s probe loop spin
+    // forever once it's full. nth_element only reorders in place, so we
+    // prune by adjusting how many *leading* entries we emit, not by
+    // resizing the list itself.
+    template <typename Acc>
+    static void multiply_prune_row(size_type i, const CSRMatrix& A, const CSRMatrix& B,
+                                    size_t limit, Acc& acc, BlockAllocator<Triplet>& allocator) {
+        for (size_type idx_a = A.row_ptr_[i]; idx_a < A.row_ptr_[i + 1]; ++idx_a) {
+            size_type k = A.col_idx_[idx_a];
+            T val_a = A.values_[idx_a];
+            for (size_type idx_b = B.row_ptr_[k]; idx_b < B.row_ptr_[k + 1]; ++idx_b) {
+                acc.accumulate(B.col_idx_[idx_b], val_a * B.values_[idx_b]);
+            }
+        }
+
+        auto& used = acc.used();
+        size_t emit_count = used.size();
+        if (emit_count > limit) {
+            std::nth_element(used.begin(), used.begin() + limit, used.end(),
+                [&](size_t a, size_t b) {
+                    return std::abs(acc.val_of(a)) > std::abs(acc.val_of(b));
+                });
+            emit_count = limit;  // do NOT used.resize(...) -- see note above
+        }
+
+        for (size_t idx = 0; idx < emit_count; ++idx) {
+            size_t slot = used[idx];
+            T v = acc.val_of(slot);
+            if (std::abs(v) > 1e-9) {
+                Triplet* t = allocator.allocate();
+                t->row = i; t->col = acc.col_of(slot); t->value = v; t->is_set = false;
+            }
+        }
+    }
 
 public:
     // =========================================================================
@@ -268,6 +410,19 @@ public:
         
         std::vector<std::pair<size_type, size_type>> ranges(num_threads);
 
+        // Below this B.cols_/bound ratio the plain dense array is faster in
+        // practice (hash probing overhead isn't paid back yet). Calibration
+        // (single core, ra=rb=20, bound=400; Source/bench/bench_accumulator.cpp):
+        //   ratio    25 (N=10k):  dense 0.95x   -> guard must stay dense here
+        //   ratio   250 (N=100k): hash  1.16x
+        //   ratio  2500 (N=1M):   hash  1.70x
+        //   ratio  5000 (N=2M):   hash  2.19x
+        //   ratio 125000 (N=50M): hash  3.64x
+        // Hash already wins at ratio ~250 on the calibration host, so 200 is
+        // a validated conservative default. Re-benchmark on the target
+        // hardware / sparsity profile before trusting it blindly.
+        constexpr size_t ADAPTIVE_RATIO = 200;
+
         #pragma omp parallel
         {
             int tid = omp_get_thread_num();
@@ -278,42 +433,32 @@ public:
             size_t r_end   = std::min((size_t)A.rows_, (size_t)(tid + 1) * chunk);
             ranges[tid] = {r_start, r_end};
 
-            // Thread-local accumulators
-            std::vector<T> dense_acc(B.cols_, T{});
-            std::vector<index_type> marker(B.cols_, -1);
-            
+            // Real per-row fan-out bound for this thread's rows:
+            // bound_i = sum_{k in row_i(A)} nnz_B(k)  ->  O(k^2), not O(n).
+            size_t max_bound = 0;
             for (size_t i = r_start; i < r_end; ++i) {
-                std::vector<size_t> active_cols;
-
+                size_t bound = 0;
                 for (size_type idx_a = A.row_ptr_[i]; idx_a < A.row_ptr_[i+1]; ++idx_a) {
                     size_type k = A.col_idx_[idx_a];
-                    T val_a = A.values_[idx_a];
-
-                    for (size_type idx_b = B.row_ptr_[k]; idx_b < B.row_ptr_[k+1]; ++idx_b) {
-                        size_type j = B.col_idx_[idx_b];
-                        T val_b = B.values_[idx_b];
-
-                        if (marker[j] != (index_type)i) {
-                            marker[j] = (index_type)i;
-                            dense_acc[j] = T{};
-                            active_cols.push_back(j);
-                        }
-                        dense_acc[j] += val_a * val_b;
-                    }
+                    bound += (B.row_ptr_[k+1] - B.row_ptr_[k]);
                 }
+                max_bound = std::max(max_bound, bound);
+            }
 
-                if (active_cols.size() > limit) {
-                    std::nth_element(active_cols.begin(), active_cols.begin() + limit, 
-                                    active_cols.end(),
-                        [&](size_t a, size_t b) { return std::abs(dense_acc[a]) > std::abs(dense_acc[b]); });
-                    active_cols.resize(limit);
+            bool use_hash = (size_t)B.cols_ > ADAPTIVE_RATIO * std::max<size_t>(max_bound, 1);
+
+            if (use_hash) {
+                HashRowAccumulator acc;
+                acc.reserve_capacity(max_bound);
+                for (size_t i = r_start; i < r_end; ++i) {
+                    acc.begin_row((index_type)i);
+                    multiply_prune_row(i, A, B, limit, acc, allocator);
                 }
-
-                for (size_t col : active_cols) {
-                    if (std::abs(dense_acc[col]) > 1e-9) {
-                        Triplet* t = allocator.allocate();
-                        t->row = i; t->col = col; t->value = dense_acc[col]; t->is_set = false;
-                    }
+            } else {
+                DenseRowAccumulator acc(B.cols_);
+                for (size_t i = r_start; i < r_end; ++i) {
+                    acc.begin_row((index_type)i);
+                    multiply_prune_row(i, A, B, limit, acc, allocator);
                 }
             }
         }
@@ -458,6 +603,8 @@ public:
     // =========================================================================
     
     size_t nnz() const { return values_.size(); }
+    size_type rows() const { return rows_; }
+    size_type cols() const { return cols_; }
     size_type row_nnz(size_type row) const { 
         return row_ptr_[row+1] - row_ptr_[row]; 
     }
