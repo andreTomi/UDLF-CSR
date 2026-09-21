@@ -1062,45 +1062,73 @@ private:
         if (rt) { rt->f1 += phprof::tick() - t0_row; t0_row = phprof::tick(); ++rt->rows; }
 #endif
 
-        // FASE 3: materialize contiguous (col, val) pairs from the accumulator,
-        // then run nth_element + col-sort on contiguous memory. This eliminates
-        // the indirect comparator lookups (acc.val_of(slot)) that dominated
-        // F2_PRUNE on the HashRowAccumulator (random access into slot_val).
-        // The pairs buffer is reused across rows via clear()+reserve().
+        // FASE 3b: materialize contiguous (col, val) pairs ONLY where doing so
+        // can pay off -- the Hash accumulator with more touched slots than the
+        // prune limit. Everywhere else keep the FASE 1 path, because the Fase 3
+        // profile showed materializing there is pure overhead:
+        //   * DenseRowAccumulator: col_of(slot) == slot, so val_of()/col_of()
+        //     are already sequential L1-resident loads; the pairs copy only adds
+        //     a pass (and, when touched <= limit, a sort that Fase 1 skipped).
+        //   * Hash with touched <= limit: nothing gets pruned, so there is no
+        //     nth_element to speed up -- materializing just to sort is a loss.
         auto& used = acc.used();
         size_t touched = used.size();
 
-        pairs.clear();
-        pairs.reserve(touched);
-        for (size_t idx = 0; idx < touched; ++idx) {
-            pairs.emplace_back(acc.col_of(used[idx]), acc.val_of(used[idx]));
-        }
+        auto emit = [&](index_type col, T v) {
+            if (std::abs(v) > 1e-9) {
+                Triplet* t = allocator.allocate();
+                t->row = i; t->col = col; t->value = v; t->is_set = false;
+#ifdef PHASE_PROFILE
+                if (rt) ++rt->emitted;
+#endif
+            }
+        };
 
-        size_t emit_count = pairs.size();
-        if (emit_count > limit) {
+        if constexpr (std::is_same_v<Acc, DenseRowAccumulator>) {
+            // FASE 1 dense path: slots ascend with columns, so only the pruned
+            // prefix needs reordering by |v| -- and no column sort at all.
+            size_t emit_count = touched;
+            if (emit_count > limit) {
+                std::nth_element(used.begin(), used.begin() + limit, used.end(),
+                    [&](size_t a, size_t b) {
+                        return std::abs(acc.val_of(a)) > std::abs(acc.val_of(b));
+                    });
+                emit_count = limit;  // do NOT used.resize(...) -- see note above
+            }
+            for (size_t idx = 0; idx < emit_count; ++idx) {
+                size_t slot = used[idx];
+                emit(acc.col_of(slot), acc.val_of(slot));
+            }
+        } else if (touched > limit) {
+            pairs.clear();
+            pairs.reserve(touched);
+            for (size_t idx = 0; idx < touched; ++idx) {
+                pairs.emplace_back(acc.col_of(used[idx]), acc.val_of(used[idx]));
+            }
             std::nth_element(pairs.begin(), pairs.begin() + limit, pairs.end(),
                 [](const std::pair<index_type, T>& a,
                    const std::pair<index_type, T>& b) {
                     return std::abs(a.second) > std::abs(b.second);
                 });
             pairs.resize(limit);
-        }
-
-        // FASE 1: sort by col so build_from_ordered_fragments receives
-        // (row, col) ordered streams. Contiguous sort on pairs.
-        std::sort(pairs.begin(), pairs.end(),
-            [](const std::pair<index_type, T>& a,
-               const std::pair<index_type, T>& b) {
-                return a.first < b.first;
-            });
-
-        for (auto& p : pairs) {
-            if (std::abs(p.second) > 1e-9) {
-                Triplet* t = allocator.allocate();
-                t->row = i; t->col = p.first; t->value = p.second; t->is_set = false;
-#ifdef PHASE_PROFILE
-                if (rt) ++rt->emitted;
-#endif
+            // Fragment-CSR needs (row, col) ordered streams; sort the surviving
+            // prefix by column (nth_element ordered it by |v| instead).
+            std::sort(pairs.begin(), pairs.end(),
+                [](const std::pair<index_type, T>& a,
+                   const std::pair<index_type, T>& b) {
+                    return a.first < b.first;
+                });
+            for (const auto& p : pairs) emit(p.first, p.second);
+        } else {
+            // FASE 1 hash path without pruning: order the whole touched list by
+            // column, then emit. Sorting at most `limit` entries either way.
+            std::sort(used.begin(), used.begin() + touched,
+                [&](size_t a, size_t b) {
+                    return acc.col_of(a) < acc.col_of(b);
+                });
+            for (size_t idx = 0; idx < touched; ++idx) {
+                size_t slot = used[idx];
+                emit(acc.col_of(slot), acc.val_of(slot));
             }
         }
 #ifdef PHASE_PROFILE

@@ -24,11 +24,13 @@
 //       prune limit 50.
 //   w3: LHRR-like heavy prune: bound ~= ra*rb = 62500/row, limit 1000
 //       (dense branch; nth_element dominates).
+//   w4: HASH branch with an L1-busting table (bound = 65536 slots, 512 KB):
+//       the only regime where contiguous-pair materialization could pay off.
 //
 // Usage (A0 extends the Phase 0 CLI; old invocations still work):
-//   bench_phase mult   <w1|w2|w3> [reps=7]
-//   bench_phase pipe   <w1|w2|w3> [reps=7]
-//   bench_phase params [w1|w2|w3]              workload sheet (bound/ratio)
+//   bench_phase mult   <w1|w2|w3|w4> [reps=7]
+//   bench_phase pipe   <w1|w2|w3|w4> [reps=7]
+//   bench_phase params [w1|w2|w3|w4]           workload sheet (bound/ratio)
 //   bench_phase extract <rkLists.txt> <N> <L> <out.bin>
 //   bench_phase real <bin> <N> <L> <k> <limit> <cprr|lhrr> [reps=7]
 //   mult: reps x multiply_and_prune(A, B, limit)
@@ -157,6 +159,13 @@ static const Workload WORKLOADS[] = {
     {"w1",   50000, 100000,   50000,    20,  20,   50},
     {"w2",   50000, 100000, 1000000,    20,  20,   50},
     {"w3",   20000, 100000,  100000,   250, 250, 1000},
+    // w4: HASH branch whose table no longer fits L1d -- the one regime where
+    //     materializing contiguous (col, val) pairs could plausibly beat the
+    //     indirect acc.val_of(slot) comparator. bound = 256*256 = 65536 slots
+    //     => slot_val (u32) + slot_col (u32) = 512 KB, ~10x L1d and ~2x the
+    //     per-core L2 on the reference i5. limit=50 forces nth_element over
+    //     the whole 65536-slot row, exactly the phase Fase 3 targeted.
+    {"w4",   20000,  20000, 32000000,   256, 256,   50},
 };
 
 // Build a CSR matrix through the production Row-Split API.
