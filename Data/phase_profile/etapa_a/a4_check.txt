@@ -1,0 +1,26 @@
+== shell_wrap
+   cmd                   : sh -c python3 /tmp/_a4_child.py
+   exit/status           : 0 / success
+   max_rss_mb (legacy)   :      0.0 MB   <- who this samples
+   peak_rss_mb (A4)      :    308.5 MB
+   peak_ru_maxrss_mb     :    308.5 MB   (ceiling, monotone)
+   child own VmHWM       :    308.4 MB
+   GNU time %M           :     -1.0 MB
+== taskset_wrap
+   cmd                   : taskset -c 0 python3 /tmp/_a4_child.py
+   exit/status           : 0 / success
+   max_rss_mb (legacy)   :      0.0 MB   <- who this samples
+   peak_rss_mb (A4)      :    308.6 MB
+   peak_ru_maxrss_mb     :    308.6 MB   (ceiling, monotone)
+   child own VmHWM       :    308.6 MB
+   GNU time %M           :     -1.0 MB
+== bare
+   cmd                   : python3 /tmp/_a4_child.py
+   exit/status           : 0 / success
+   max_rss_mb (legacy)   :      0.0 MB   <- who this samples
+   peak_rss_mb (A4)      :    308.5 MB
+   peak_ru_maxrss_mb     :    308.6 MB   (ceiling, monotone)
+   child own VmHWM       :    308.5 MB
+   GNU time %M           :     -1.0 MB
+
+PASS if peak_rss_mb ~= child own VmHWM in every case.

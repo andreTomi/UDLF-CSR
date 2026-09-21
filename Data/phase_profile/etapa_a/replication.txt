@@ -1,0 +1,13 @@
+=== rebuild drivers
+ok
+=== replication (5 reps; recorded medians in parentheses)
+curve_w1_c0-5_t6     (162.8 ms)
+curve_w1_c0-5_t6       mask=0-5          threads=6  median_ms=161.077    TSET,omp_threads=6,tbb_max=6,affinity=0,1,affinity_prebind=0,1,cpus=12,max_concurrency=2,pid=287149
+curve_w1_call_t12    (138.8 ms)
+curve_w1_call_t12      mask=all          threads=12  median_ms=0          
+curve_w1_c0-3_t4     (193.4 ms)
+curve_w1_c0-3_t4       mask=0-3          threads=4  median_ms=185.499    TSET,omp_threads=4,tbb_max=4,affinity=0,1,affinity_prebind=0,1,cpus=12,max_concurrency=2,pid=287171
+curve_sib_w1_c0+2+4_t3 (269.8 ms @ c0,2 w/ 6thr; sib c0,2,4,t3 has no twin)
+curve_sib_w1_c0+2+4_t3 mask=0,2,4        threads=3  median_ms=273.309    TSET,omp_threads=3,tbb_max=3,affinity=0,affinity_prebind=0,cpus=12,max_concurrency=1,pid=287183
+curve_w3_c0-5_t6     (4550.4 ms)
+curve_w3_c0-5_t6       mask=0-5          threads=6  median_ms=4724.8     TSET,omp_threads=6,tbb_max=6,affinity=0,1,affinity_prebind=0,1,cpus=12,max_concurrency=2,pid=287193

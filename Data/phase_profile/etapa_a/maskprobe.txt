@@ -1,0 +1,61 @@
+--- free caller ---
+caller affinity: 0-11
+caller nproc:    12   nproc --all: 12
+taskset -c 0     -> rc=0  nproc=1  Cpus_allowed_list:	0
+taskset -c 0-1   -> rc=0  nproc=2  Cpus_allowed_list:	0-1
+taskset -c 0-3   -> rc=0  nproc=4  Cpus_allowed_list:	0-3
+taskset -c 0-5   -> rc=0  nproc=6  Cpus_allowed_list:	0-5
+taskset -c 0-11  -> rc=0  nproc=12  Cpus_allowed_list:	0-11
+taskset -c 0,2,4 -> rc=0  nproc=3  Cpus_allowed_list:	0,2,4
+--- with the mask read from the child env (sched_getaffinity in C) ---
+/tmp/aff.c: In function ‘main’:
+/tmp/aff.c:3:29: error: implicit declaration of function ‘CPU_ZERO’ [-Wimplicit-function-declaration]
+    3 | int main(void){cpu_set_t s; CPU_ZERO(&s);
+      |                             ^~~~~~~~
+/tmp/aff.c:4:5: error: implicit declaration of function ‘sched_getaffinity’ [-Wimplicit-function-declaration]
+    4 |  if(sched_getaffinity(0,sizeof s,&s)) return 1;
+      |     ^~~~~~~~~~~~~~~~~
+/tmp/aff.c:5:16: error: ‘CPU_SETSIZE’ undeclared (first use in this function)
+    5 |  for(int c=0;c<CPU_SETSIZE;c++) if(CPU_ISSET(c,&s)) printf("%d,",c);
+      |                ^~~~~~~~~~~
+/tmp/aff.c:5:16: note: each undeclared identifier is reported only once for each function it appears in
+/tmp/aff.c:5:36: error: implicit declaration of function ‘CPU_ISSET’ [-Wimplicit-function-declaration]
+    5 |  for(int c=0;c<CPU_SETSIZE;c++) if(CPU_ISSET(c,&s)) printf("%d,",c);
+      |                                    ^~~~~~~~~
+taskset -c 0-3   -> taskset: failed to execute /tmp/aff: No such file or directory
+(failed rc=127)
+taskset -c 0-5   -> taskset: failed to execute /tmp/aff: No such file or directory
+(failed rc=127)
+taskset -c 0-11  -> taskset: failed to execute /tmp/aff: No such file or directory
+(failed rc=127)
+
+--- restricted caller (taskset -c 0,1) ---
+caller affinity: 0-1
+caller nproc:    2   nproc --all: 12
+taskset -c 0     -> rc=0  nproc=1  Cpus_allowed_list:	0
+taskset -c 0-1   -> rc=0  nproc=2  Cpus_allowed_list:	0-1
+taskset -c 0-3   -> rc=0  nproc=4  Cpus_allowed_list:	0-3
+taskset -c 0-5   -> rc=0  nproc=6  Cpus_allowed_list:	0-5
+taskset -c 0-11  -> rc=0  nproc=12  Cpus_allowed_list:	0-11
+taskset -c 0,2,4 -> rc=0  nproc=3  Cpus_allowed_list:	0,2,4
+--- with the mask read from the child env (sched_getaffinity in C) ---
+/tmp/aff.c: In function ‘main’:
+/tmp/aff.c:3:29: error: implicit declaration of function ‘CPU_ZERO’ [-Wimplicit-function-declaration]
+    3 | int main(void){cpu_set_t s; CPU_ZERO(&s);
+      |                             ^~~~~~~~
+/tmp/aff.c:4:5: error: implicit declaration of function ‘sched_getaffinity’ [-Wimplicit-function-declaration]
+    4 |  if(sched_getaffinity(0,sizeof s,&s)) return 1;
+      |     ^~~~~~~~~~~~~~~~~
+/tmp/aff.c:5:16: error: ‘CPU_SETSIZE’ undeclared (first use in this function)
+    5 |  for(int c=0;c<CPU_SETSIZE;c++) if(CPU_ISSET(c,&s)) printf("%d,",c);
+      |                ^~~~~~~~~~~
+/tmp/aff.c:5:16: note: each undeclared identifier is reported only once for each function it appears in
+/tmp/aff.c:5:36: error: implicit declaration of function ‘CPU_ISSET’ [-Wimplicit-function-declaration]
+    5 |  for(int c=0;c<CPU_SETSIZE;c++) if(CPU_ISSET(c,&s)) printf("%d,",c);
+      |                                    ^~~~~~~~~
+taskset -c 0-3   -> taskset: failed to execute /tmp/aff: No such file or directory
+(failed rc=127)
+taskset -c 0-5   -> taskset: failed to execute /tmp/aff: No such file or directory
+(failed rc=127)
+taskset -c 0-11  -> taskset: failed to execute /tmp/aff: No such file or directory
+(failed rc=127)

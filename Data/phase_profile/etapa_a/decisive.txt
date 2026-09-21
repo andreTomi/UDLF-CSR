@@ -1,0 +1,16 @@
+### w1, 12 threads, 5 reps  (recorded curve_w1_call_t12 = 138.8 ms)
+  mask=0,1    threads=12  ->  277.563 ms
+  mask=0-1    threads=12  ->  284.024 ms
+  mask=all    threads=12  ->        0 ms
+### w1, 6 threads, 5 reps   (recorded curve_w1_c0-5_t6 = 162.8 ms)
+  mask=0,1    threads=6   ->  279.312 ms
+  mask=0-5    threads=6   ->  166.087 ms
+### w1, 4 threads, 5 reps   (recorded curve_w1_c0-3_t4 = 193.4 ms)
+  mask=0,1    threads=4   ->  279.041 ms
+  mask=0-3    threads=4   ->  211.202 ms
+### w3, 6 threads, 3 reps   (recorded curve_w3_c0-5_t6 = 4550.4 ms)
+  mask=0,1    threads=6   ->  10148.1 ms
+  mask=0-5    threads=6   ->  4650.89 ms
+### w3, 12 threads, 3 reps  (recorded curve_w3_call_t12 = 4520.6 ms)
+  mask=0,1    threads=12  ->  10229.4 ms
+  mask=all    threads=12  ->        0 ms

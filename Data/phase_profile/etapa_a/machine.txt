@@ -1,0 +1,29 @@
+# lscpu -e (cpu,core,socket,node)
+CPU CORE SOCKET NODE
+  0    0      0    0
+  1    0      0    0
+  2    1      0    0
+  3    1      0    0
+  4    2      0    0
+  5    2      0    0
+  6    3      0    0
+  7    3      0    0
+  8    4      0    0
+  9    4      0    0
+ 10    5      0    0
+ 11    5      0    0
+# lscpu summary
+Model name:                           Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz
+Thread(s) per core:                   2
+Core(s) per socket:                   6
+Socket(s):                            1
+L3 cache:                             12 MiB (1 instance)
+NUMA node(s):                         1
+# mem
+MemTotal:        8084684 kB
+MemFree:         4902836 kB
+MemAvailable:    5520752 kB
+# kernel
+6.6.87.2-microsoft-standard-WSL2
+# git
+979640b ADD: PHASE_PROFILE phase instrumentation (Phase 0) + bench_phase driver, aggregator and results

@@ -1,0 +1,15 @@
+MASKOK,mask=0,count=1
+MASKOK,mask=0-5,count=6
+MASKOK,mask=all,count=12
+MASKOK,mask=0,count=1
+MASKOK,mask=0-5,count=6
+MASKOK,mask=all,count=12
+MASKOK,mask=0,count=1
+MASKOK,mask=all,count=12
+MASKOK,mask=0,count=1
+MASKOK,mask=all,count=12
+MASKOK,mask=0,count=1
+MASKOK,mask=0-1,count=2
+MASKOK,mask=0-3,count=4
+MASKOK,mask=0-5,count=6
+MASKOK,mask=all,count=12

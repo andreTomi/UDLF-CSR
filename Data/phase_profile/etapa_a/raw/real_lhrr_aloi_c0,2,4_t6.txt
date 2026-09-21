@@ -1,0 +1,205 @@
+RUN,real-lhrr,/tmp/udlf_rk_aloi_N72000_L400.bin,6,5,1
+TSET,omp_threads=6,tbb_max=6,affinity=0,2,4,cpus=12,max_concurrency=3,pid=278371
+REAL,dataset=/tmp/udlf_rk_aloi_N72000_L400.bin,bin=/tmp/udlf_rk_aloi_N72000_L400.bin,N=72000,L=400,k=10,limit=400,T=1,pipeline=lhrr
+  [Build] Total triplets: 57600000
+  [Build] Total triplets: 7272000
+  [Build] Total triplets: 7286865
+  [Build] Total triplets: 8685190
+  [Build] Total triplets: 5756659
+  [Build] Total triplets: 5248535
+REP,0,6005.694,5248535,119396289001.122040
+PHASEPROFILE,HWM,before_build_max_kb=3128440,after_build_max_kb=3128440,final_kb=3128440,rss_final_kb=540420,build_calls=6
+PHASEPROFILE,F1_ACCUM,total_ms=803.184,wall_ms=803.184,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,F2_PRUNE,total_ms=195.791,wall_ms=195.791,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,MERGE_LOOP,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=144000,ctx2=15972055
+PHASEPROFILE,COMBINE_LOOP,total_ms=1025.737,wall_ms=79.090,skew_ms=4.664,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,B1_COPY,total_ms=674.351,wall_ms=7.571,skew_ms=1.141,user_ms=381.143,sys_ms=10.024,minflt=1,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B3_HIST,total_ms=359.837,wall_ms=6.425,skew_ms=1.807,user_ms=243.161,sys_ms=8.785,minflt=492,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B5_FILL,total_ms=557.785,wall_ms=9.450,skew_ms=2.112,user_ms=321.496,sys_ms=3.116,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B0_TEMP_RESIZE,total_ms=895.042,wall_ms=895.042,skew_ms=0.000,user_ms=101.891,sys_ms=793.145,minflt=358791,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B2_SORT,total_ms=3212.941,wall_ms=3212.941,skew_ms=0.000,user_ms=7857.728,sys_ms=1408.222,minflt=379338,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B4_VALS_RESIZE,total_ms=237.845,wall_ms=237.845,skew_ms=0.000,user_ms=79.096,sys_ms=153.183,minflt=135112,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,TRANSPOSE,total_ms=14.344,wall_ms=14.344,skew_ms=0.000,user_ms=10.740,sys_ms=3.610,minflt=3942,majflt=0,calls=1,ctx1=0,ctx2=0
+PHASEPROFILE,MULT_TOTAL,total_ms=1008.068,wall_ms=116.241,skew_ms=24.003,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,ACC_PREP,total_ms=6.681,wall_ms=6.681,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=0,ctx2=0
+PHASEPROFILE,B3_SETUP,total_ms=0.015,wall_ms=0.015,skew_ms=0.000,user_ms=0.021,sys_ms=0.006,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B3_RED,total_ms=3.324,wall_ms=0.382,skew_ms=0.243,user_ms=6.025,sys_ms=2.426,minflt=283,majflt=0,calls=432000,ctx1=0,ctx2=0
+PHASEPROFILE,B3_PREFIX,total_ms=0.268,wall_ms=0.268,skew_ms=0.000,user_ms=0.401,sys_ms=0.162,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_FINISH,total_ms=69.436,wall_ms=69.436,skew_ms=0.000,user_ms=5.638,sys_ms=62.957,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_SETUP,total_ms=0.328,wall_ms=0.328,skew_ms=0.000,user_ms=0.166,sys_ms=0.137,minflt=48,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_TEARDOWN,total_ms=4.366,wall_ms=4.366,skew_ms=0.000,user_ms=1.258,sys_ms=2.740,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,MP_CALL,total_ms=933.447,wall_ms=933.447,skew_ms=0.000,user_ms=1931.021,sys_ms=346.699,minflt=169249,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,MERGE_CALL,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=0,ctx2=0
+PHASEPROFILE,COMBINE_CALL,total_ms=437.373,wall_ms=437.373,skew_ms=0.000,user_ms=818.320,sys_ms=113.247,minflt=66994,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_CALL,total_ms=4800.894,wall_ms=4800.894,skew_ms=0.000,user_ms=9000.487,sys_ms=2443.309,minflt=874020,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,THREAD,tid=0,rows=24000,emitted=2581898,bound_sum=20217302,max_bound=3446,hash=0,dense=1,mult_ms=190.262
+PHASEPROFILE,THREAD,tid=1,rows=24000,emitted=2638848,bound_sum=20340461,max_bound=3010,hash=0,dense=1,mult_ms=192.541
+PHASEPROFILE,THREAD,tid=2,rows=24000,emitted=2514903,bound_sum=19440676,max_bound=4062,hash=0,dense=1,mult_ms=154.527
+PHASEPROFILE,THREAD,tid=3,rows=24000,emitted=2864166,bound_sum=21166929,max_bound=3326,hash=0,dense=1,mult_ms=166.760
+PHASEPROFILE,THREAD,tid=4,rows=24000,emitted=2703578,bound_sum=20732464,max_bound=3617,hash=0,dense=1,mult_ms=152.602
+PHASEPROFILE,THREAD,tid=5,rows=24000,emitted=2668662,bound_sum=20035704,max_bound=3007,hash=0,dense=1,mult_ms=151.377
+PHASEPROFILE,CTX,rows=144000,emitted=15972055,bound_sum=121933536,max_bound=4062,hash_threads=0,dense_threads=6,cols_b=72000,ratio=17.725,branch=dense
+  [Build] Total triplets: 57600000
+  [Build] Total triplets: 7272000
+  [Build] Total triplets: 7286865
+  [Build] Total triplets: 8685190
+  [Build] Total triplets: 5756659
+  [Build] Total triplets: 5248535
+REP,1,6138.143,5248535,119396289001.122040
+PHASEPROFILE,HWM,before_build_max_kb=3428556,after_build_max_kb=3428556,final_kb=3428556,rss_final_kb=1078508,build_calls=12
+PHASEPROFILE,F1_ACCUM,total_ms=754.566,wall_ms=754.566,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,F2_PRUNE,total_ms=195.859,wall_ms=195.859,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,MERGE_LOOP,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=144000,ctx2=15972055
+PHASEPROFILE,COMBINE_LOOP,total_ms=839.949,wall_ms=82.050,skew_ms=11.227,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,B1_COPY,total_ms=912.791,wall_ms=7.933,skew_ms=1.978,user_ms=531.854,sys_ms=9.624,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B3_HIST,total_ms=560.366,wall_ms=4.074,skew_ms=0.814,user_ms=313.803,sys_ms=2.875,minflt=141,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B5_FILL,total_ms=680.348,wall_ms=7.947,skew_ms=0.581,user_ms=389.248,sys_ms=5.630,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B0_TEMP_RESIZE,total_ms=583.879,wall_ms=583.879,skew_ms=0.000,user_ms=130.981,sys_ms=452.895,minflt=358790,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B2_SORT,total_ms=3706.457,wall_ms=3706.457,skew_ms=0.000,user_ms=9083.992,sys_ms=1577.458,minflt=379215,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B4_VALS_RESIZE,total_ms=226.512,wall_ms=226.512,skew_ms=0.000,user_ms=51.907,sys_ms=174.624,minflt=133494,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,TRANSPOSE,total_ms=11.611,wall_ms=11.611,skew_ms=0.000,user_ms=10.747,sys_ms=0.868,minflt=1840,majflt=0,calls=1,ctx1=0,ctx2=0
+PHASEPROFILE,MULT_TOTAL,total_ms=961.965,wall_ms=103.550,skew_ms=17.845,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,ACC_PREP,total_ms=5.240,wall_ms=5.240,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=0,ctx2=0
+PHASEPROFILE,B3_SETUP,total_ms=0.019,wall_ms=0.019,skew_ms=0.000,user_ms=0.021,sys_ms=0.006,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B3_RED,total_ms=4.168,wall_ms=0.321,skew_ms=0.168,user_ms=6.111,sys_ms=4.480,minflt=70,majflt=0,calls=432000,ctx1=0,ctx2=0
+PHASEPROFILE,B3_PREFIX,total_ms=0.365,wall_ms=0.365,skew_ms=0.000,user_ms=0.520,sys_ms=0.156,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_FINISH,total_ms=77.622,wall_ms=77.622,skew_ms=0.000,user_ms=6.309,sys_ms=71.432,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_SETUP,total_ms=0.072,wall_ms=0.072,skew_ms=0.000,user_ms=0.058,sys_ms=0.014,minflt=2,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_TEARDOWN,total_ms=0.082,wall_ms=0.082,skew_ms=0.000,user_ms=0.064,sys_ms=0.016,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,MP_CALL,total_ms=901.261,wall_ms=901.261,skew_ms=0.000,user_ms=1917.571,sys_ms=336.216,minflt=174196,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,MERGE_CALL,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=0,ctx2=0
+PHASEPROFILE,COMBINE_CALL,total_ms=397.157,wall_ms=397.157,skew_ms=0.000,user_ms=789.108,sys_ms=93.762,minflt=65180,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_CALL,total_ms=5045.726,wall_ms=5045.726,skew_ms=0.000,user_ms=10515.841,sys_ms=2299.464,minflt=871710,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,THREAD,tid=0,rows=24000,emitted=2581898,bound_sum=20217302,max_bound=3446,hash=0,dense=1,mult_ms=147.818
+PHASEPROFILE,THREAD,tid=1,rows=24000,emitted=2638848,bound_sum=20340461,max_bound=3010,hash=0,dense=1,mult_ms=148.877
+PHASEPROFILE,THREAD,tid=2,rows=24000,emitted=2514903,bound_sum=19440676,max_bound=4062,hash=0,dense=1,mult_ms=157.191
+PHASEPROFILE,THREAD,tid=3,rows=24000,emitted=2864166,bound_sum=21166929,max_bound=3326,hash=0,dense=1,mult_ms=170.568
+PHASEPROFILE,THREAD,tid=4,rows=24000,emitted=2703578,bound_sum=20732464,max_bound=3617,hash=0,dense=1,mult_ms=150.179
+PHASEPROFILE,THREAD,tid=5,rows=24000,emitted=2668662,bound_sum=20035704,max_bound=3007,hash=0,dense=1,mult_ms=187.331
+PHASEPROFILE,CTX,rows=144000,emitted=15972055,bound_sum=121933536,max_bound=4062,hash_threads=0,dense_threads=6,cols_b=72000,ratio=17.725,branch=dense
+  [Build] Total triplets: 57600000
+  [Build] Total triplets: 7272000
+  [Build] Total triplets: 7286865
+  [Build] Total triplets: 8685190
+  [Build] Total triplets: 5756659
+  [Build] Total triplets: 5248535
+REP,2,5874.641,5248535,119396289001.122040
+PHASEPROFILE,HWM,before_build_max_kb=3775232,after_build_max_kb=3775232,final_kb=3775232,rss_final_kb=1374916,build_calls=18
+PHASEPROFILE,F1_ACCUM,total_ms=788.809,wall_ms=788.809,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,F2_PRUNE,total_ms=157.987,wall_ms=157.987,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,MERGE_LOOP,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=144000,ctx2=15972055
+PHASEPROFILE,COMBINE_LOOP,total_ms=880.144,wall_ms=84.179,skew_ms=8.749,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,B1_COPY,total_ms=744.158,wall_ms=8.305,skew_ms=2.854,user_ms=415.870,sys_ms=9.535,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B3_HIST,total_ms=522.287,wall_ms=8.029,skew_ms=3.456,user_ms=312.192,sys_ms=4.935,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B5_FILL,total_ms=725.361,wall_ms=7.095,skew_ms=2.223,user_ms=416.636,sys_ms=3.329,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B0_TEMP_RESIZE,total_ms=614.698,wall_ms=614.698,skew_ms=0.000,user_ms=120.219,sys_ms=494.494,minflt=358790,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B2_SORT,total_ms=3362.405,wall_ms=3362.405,skew_ms=0.000,user_ms=8544.772,sys_ms=1223.874,minflt=379190,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B4_VALS_RESIZE,total_ms=196.771,wall_ms=196.771,skew_ms=0.000,user_ms=41.175,sys_ms=155.609,minflt=106257,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,TRANSPOSE,total_ms=10.287,wall_ms=10.287,skew_ms=0.000,user_ms=10.293,sys_ms=0.000,minflt=0,majflt=0,calls=1,ctx1=0,ctx2=0
+PHASEPROFILE,MULT_TOTAL,total_ms=955.738,wall_ms=87.359,skew_ms=2.662,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,ACC_PREP,total_ms=6.917,wall_ms=6.917,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=0,ctx2=0
+PHASEPROFILE,B3_SETUP,total_ms=0.015,wall_ms=0.015,skew_ms=0.000,user_ms=0.021,sys_ms=0.003,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B3_RED,total_ms=3.909,wall_ms=0.502,skew_ms=0.342,user_ms=5.853,sys_ms=2.010,minflt=0,majflt=0,calls=432000,ctx1=0,ctx2=0
+PHASEPROFILE,B3_PREFIX,total_ms=0.447,wall_ms=0.447,skew_ms=0.000,user_ms=0.365,sys_ms=0.358,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_FINISH,total_ms=96.548,wall_ms=96.548,skew_ms=0.000,user_ms=3.468,sys_ms=78.636,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_SETUP,total_ms=0.049,wall_ms=0.049,skew_ms=0.000,user_ms=0.022,sys_ms=0.026,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_TEARDOWN,total_ms=0.107,wall_ms=0.107,skew_ms=0.000,user_ms=0.016,sys_ms=0.092,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,MP_CALL,total_ms=861.476,wall_ms=861.476,skew_ms=0.000,user_ms=1936.389,sys_ms=279.534,minflt=154150,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,MERGE_CALL,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=0,ctx2=0
+PHASEPROFILE,COMBINE_CALL,total_ms=445.081,wall_ms=445.081,skew_ms=0.000,user_ms=818.058,sys_ms=85.350,minflt=55857,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_CALL,total_ms=4747.914,wall_ms=4747.914,skew_ms=0.000,user_ms=9861.775,sys_ms=1973.158,minflt=844237,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,THREAD,tid=0,rows=24000,emitted=2581898,bound_sum=20217302,max_bound=3446,hash=0,dense=1,mult_ms=160.723
+PHASEPROFILE,THREAD,tid=1,rows=24000,emitted=2638848,bound_sum=20340461,max_bound=3010,hash=0,dense=1,mult_ms=148.238
+PHASEPROFILE,THREAD,tid=2,rows=24000,emitted=2514903,bound_sum=19440676,max_bound=4062,hash=0,dense=1,mult_ms=163.491
+PHASEPROFILE,THREAD,tid=3,rows=24000,emitted=2864166,bound_sum=21166929,max_bound=3326,hash=0,dense=1,mult_ms=168.493
+PHASEPROFILE,THREAD,tid=4,rows=24000,emitted=2703578,bound_sum=20732464,max_bound=3617,hash=0,dense=1,mult_ms=151.457
+PHASEPROFILE,THREAD,tid=5,rows=24000,emitted=2668662,bound_sum=20035704,max_bound=3007,hash=0,dense=1,mult_ms=163.336
+PHASEPROFILE,CTX,rows=144000,emitted=15972055,bound_sum=121933536,max_bound=4062,hash_threads=0,dense_threads=6,cols_b=72000,ratio=17.725,branch=dense
+  [Build] Total triplets: 57600000
+  [Build] Total triplets: 7272000
+  [Build] Total triplets: 7286865
+  [Build] Total triplets: 8685190
+  [Build] Total triplets: 5756659
+  [Build] Total triplets: 5248535
+REP,3,5991.687,5248535,119396289001.122040
+PHASEPROFILE,HWM,before_build_max_kb=4055416,after_build_max_kb=4055416,final_kb=4055416,rss_final_kb=1675560,build_calls=24
+PHASEPROFILE,F1_ACCUM,total_ms=816.141,wall_ms=816.141,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,F2_PRUNE,total_ms=170.890,wall_ms=170.890,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,MERGE_LOOP,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=144000,ctx2=15972055
+PHASEPROFILE,COMBINE_LOOP,total_ms=794.811,wall_ms=72.486,skew_ms=7.994,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,B1_COPY,total_ms=737.825,wall_ms=7.176,skew_ms=1.982,user_ms=469.902,sys_ms=6.065,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B3_HIST,total_ms=622.130,wall_ms=5.928,skew_ms=2.117,user_ms=343.396,sys_ms=7.812,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B5_FILL,total_ms=895.889,wall_ms=9.222,skew_ms=1.792,user_ms=477.292,sys_ms=21.390,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B0_TEMP_RESIZE,total_ms=632.731,wall_ms=632.731,skew_ms=0.000,user_ms=146.676,sys_ms=477.181,minflt=358790,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B2_SORT,total_ms=3366.020,wall_ms=3366.020,skew_ms=0.000,user_ms=8575.942,sys_ms=1079.477,minflt=379173,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B4_VALS_RESIZE,total_ms=207.473,wall_ms=207.473,skew_ms=0.000,user_ms=51.238,sys_ms=156.254,minflt=97776,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,TRANSPOSE,total_ms=10.900,wall_ms=10.900,skew_ms=0.000,user_ms=10.907,sys_ms=0.000,minflt=0,majflt=0,calls=1,ctx1=0,ctx2=0
+PHASEPROFILE,MULT_TOTAL,total_ms=995.307,wall_ms=113.469,skew_ms=19.910,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,ACC_PREP,total_ms=5.657,wall_ms=5.657,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=0,ctx2=0
+PHASEPROFILE,B3_SETUP,total_ms=0.049,wall_ms=0.049,skew_ms=0.000,user_ms=0.014,sys_ms=0.117,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B3_RED,total_ms=3.323,wall_ms=0.371,skew_ms=0.231,user_ms=5.814,sys_ms=1.989,minflt=0,majflt=0,calls=432000,ctx1=0,ctx2=0
+PHASEPROFILE,B3_PREFIX,total_ms=0.386,wall_ms=0.386,skew_ms=0.000,user_ms=0.424,sys_ms=0.120,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_FINISH,total_ms=88.523,wall_ms=88.523,skew_ms=0.000,user_ms=5.300,sys_ms=83.266,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_SETUP,total_ms=0.162,wall_ms=0.162,skew_ms=0.000,user_ms=0.135,sys_ms=0.025,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_TEARDOWN,total_ms=0.098,wall_ms=0.098,skew_ms=0.000,user_ms=0.080,sys_ms=0.017,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,MP_CALL,total_ms=905.036,wall_ms=905.036,skew_ms=0.000,user_ms=1889.067,sys_ms=293.802,minflt=145666,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,MERGE_CALL,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=0,ctx2=0
+PHASEPROFILE,COMBINE_CALL,total_ms=387.450,wall_ms=387.450,skew_ms=0.000,user_ms=754.129,sys_ms=91.372,minflt=55848,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_CALL,total_ms=4798.699,wall_ms=4798.699,skew_ms=0.000,user_ms=10077.207,sys_ms=1834.015,minflt=835739,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,THREAD,tid=0,rows=24000,emitted=2581898,bound_sum=20217302,max_bound=3446,hash=0,dense=1,mult_ms=154.374
+PHASEPROFILE,THREAD,tid=1,rows=24000,emitted=2638848,bound_sum=20340461,max_bound=3010,hash=0,dense=1,mult_ms=185.579
+PHASEPROFILE,THREAD,tid=2,rows=24000,emitted=2514903,bound_sum=19440676,max_bound=4062,hash=0,dense=1,mult_ms=149.696
+PHASEPROFILE,THREAD,tid=3,rows=24000,emitted=2864166,bound_sum=21166929,max_bound=3326,hash=0,dense=1,mult_ms=171.231
+PHASEPROFILE,THREAD,tid=4,rows=24000,emitted=2703578,bound_sum=20732464,max_bound=3617,hash=0,dense=1,mult_ms=180.428
+PHASEPROFILE,THREAD,tid=5,rows=24000,emitted=2668662,bound_sum=20035704,max_bound=3007,hash=0,dense=1,mult_ms=153.999
+PHASEPROFILE,CTX,rows=144000,emitted=15972055,bound_sum=121933536,max_bound=4062,hash_threads=0,dense_threads=6,cols_b=72000,ratio=17.725,branch=dense
+  [Build] Total triplets: 57600000
+  [Build] Total triplets: 7272000
+  [Build] Total triplets: 7286865
+  [Build] Total triplets: 8685190
+  [Build] Total triplets: 5756659
+  [Build] Total triplets: 5248535
+REP,4,5555.078,5248535,119396289001.122040
+PHASEPROFILE,HWM,before_build_max_kb=4331688,after_build_max_kb=4331688,final_kb=4331688,rss_final_kb=1970468,build_calls=30
+PHASEPROFILE,F1_ACCUM,total_ms=803.225,wall_ms=803.225,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,F2_PRUNE,total_ms=177.090,wall_ms=177.090,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=144000,ctx1=144000,ctx2=144000
+PHASEPROFILE,MERGE_LOOP,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=144000,ctx2=15972055
+PHASEPROFILE,COMBINE_LOOP,total_ms=866.743,wall_ms=86.896,skew_ms=14.360,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,B1_COPY,total_ms=687.074,wall_ms=8.236,skew_ms=1.538,user_ms=414.436,sys_ms=2.923,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B3_HIST,total_ms=459.676,wall_ms=5.367,skew_ms=1.489,user_ms=296.926,sys_ms=1.426,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B5_FILL,total_ms=586.277,wall_ms=8.512,skew_ms=2.087,user_ms=360.982,sys_ms=3.782,minflt=0,majflt=0,calls=36,ctx1=0,ctx2=0
+PHASEPROFILE,B0_TEMP_RESIZE,total_ms=485.098,wall_ms=485.098,skew_ms=0.000,user_ms=119.053,sys_ms=366.011,minflt=301918,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B2_SORT,total_ms=3310.430,wall_ms=3310.430,skew_ms=0.000,user_ms=7924.581,sys_ms=1578.319,minflt=379266,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B4_VALS_RESIZE,total_ms=155.316,wall_ms=155.316,skew_ms=0.000,user_ms=34.826,sys_ms=120.547,minflt=88797,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,TRANSPOSE,total_ms=13.107,wall_ms=13.107,skew_ms=0.000,user_ms=7.042,sys_ms=3.782,minflt=0,majflt=0,calls=1,ctx1=0,ctx2=0
+PHASEPROFILE,MULT_TOTAL,total_ms=996.392,wall_ms=130.708,skew_ms=31.288,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=144000,ctx2=15972055
+PHASEPROFILE,ACC_PREP,total_ms=13.417,wall_ms=13.417,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=12,ctx1=0,ctx2=0
+PHASEPROFILE,B3_SETUP,total_ms=0.016,wall_ms=0.016,skew_ms=0.000,user_ms=0.025,sys_ms=0.004,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,B3_RED,total_ms=3.497,wall_ms=0.544,skew_ms=0.351,user_ms=9.382,sys_ms=3.152,minflt=0,majflt=0,calls=432000,ctx1=0,ctx2=0
+PHASEPROFILE,B3_PREFIX,total_ms=0.286,wall_ms=0.286,skew_ms=0.000,user_ms=0.253,sys_ms=0.055,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_FINISH,total_ms=74.835,wall_ms=74.835,skew_ms=0.000,user_ms=2.511,sys_ms=72.336,minflt=0,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_SETUP,total_ms=0.065,wall_ms=0.065,skew_ms=0.000,user_ms=0.047,sys_ms=0.018,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,ALLOC_TEARDOWN,total_ms=0.101,wall_ms=0.101,skew_ms=0.000,user_ms=0.052,sys_ms=0.051,minflt=0,majflt=0,calls=4,ctx1=0,ctx2=0
+PHASEPROFILE,MP_CALL,total_ms=848.301,wall_ms=848.301,skew_ms=0.000,user_ms=1873.348,sys_ms=235.753,minflt=108718,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,MERGE_CALL,total_ms=0.000,wall_ms=0.000,skew_ms=0.000,user_ms=0.000,sys_ms=0.000,minflt=0,majflt=0,calls=0,ctx1=0,ctx2=0
+PHASEPROFILE,COMBINE_CALL,total_ms=397.054,wall_ms=397.054,skew_ms=0.000,user_ms=848.020,sys_ms=91.226,minflt=55345,majflt=0,calls=2,ctx1=0,ctx2=0
+PHASEPROFILE,BUILD_CALL,total_ms=4422.749,wall_ms=4422.749,skew_ms=0.000,user_ms=9164.445,sys_ms=2148.936,minflt=769981,majflt=0,calls=6,ctx1=0,ctx2=0
+PHASEPROFILE,THREAD,tid=0,rows=24000,emitted=2581898,bound_sum=20217302,max_bound=3446,hash=0,dense=1,mult_ms=119.404
+PHASEPROFILE,THREAD,tid=1,rows=24000,emitted=2638848,bound_sum=20340461,max_bound=3010,hash=0,dense=1,mult_ms=130.954
+PHASEPROFILE,THREAD,tid=2,rows=24000,emitted=2514903,bound_sum=19440676,max_bound=4062,hash=0,dense=1,mult_ms=161.618
+PHASEPROFILE,THREAD,tid=3,rows=24000,emitted=2864166,bound_sum=21166929,max_bound=3326,hash=0,dense=1,mult_ms=211.980
+PHASEPROFILE,THREAD,tid=4,rows=24000,emitted=2703578,bound_sum=20732464,max_bound=3617,hash=0,dense=1,mult_ms=185.236
+PHASEPROFILE,THREAD,tid=5,rows=24000,emitted=2668662,bound_sum=20035704,max_bound=3007,hash=0,dense=1,mult_ms=187.201
+PHASEPROFILE,CTX,rows=144000,emitted=15972055,bound_sum=121933536,max_bound=4062,hash_threads=0,dense_threads=6,cols_b=72000,ratio=17.725,branch=dense
+DRVAGG,restore_rk_state,median_ms=15.882,n=5
+DRVAGG,position_build,median_ms=3844.777,n=5
+DRVAGG,update_ranked_lists_pos,median_ms=464.978,n=5
+DRVAGG,H_build,median_ms=244.658,n=5
+DRVAGG,H_transpose,median_ms=11.627,n=5
+DRVAGG,mult_S,median_ms=364.717,n=5
+DRVAGG,mult_Srev,median_ms=508.677,n=5
+DRVAGG,combine_S_total,median_ms=215.371,n=5
+DRVAGG,combine_main,median_ms=195.058,n=5
+DRVAGG,update_ranked_lists,median_ms=47.582,n=5
+DRVAGG,iter_free,median_ms=20.887,n=5
+DONE,/tmp/udlf_rk_aloi_N72000_L400.bin,4331688,4331688

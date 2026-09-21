@@ -1,0 +1,19 @@
+  [Build] Total triplets: 1000000
+  [Build] Total triplets: 2000000
+RUN,mult,w1,4,6,0
+TSET,omp_threads=4,tbb_max=4,affinity_omp=0,1,2,3,affinity_at_entry=0,1,2,3,req_mask=0-3,cpus=12,max_concurrency=4,pid=298588
+  [Build] Total triplets: 2500000
+REP,0,201.934,2500000,-503.017268
+  [Build] Total triplets: 2500000
+REP,1,202.997,2500000,-503.017268
+  [Build] Total triplets: 2500000
+REP,2,196.010,2500000,-503.017268
+  [Build] Total triplets: 2500000
+REP,3,215.601,2500000,-503.017268
+  [Build] Total triplets: 2500000
+REP,4,265.978,2500000,-503.017268
+  [Build] Total triplets: 2500000
+REP,5,202.964,2500000,-503.017268
+DRVAGG,mult_call,median_ms=202.995,n=6
+DRVAGG,prev_result_dtor,median_ms=0.001,n=5
+DONE,w1,-1,226308

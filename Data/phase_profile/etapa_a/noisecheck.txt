@@ -1,0 +1,5 @@
+idle-machine re-check (v2 recorded: w1 c0 561.7 | c0-5 131.8 | call 110.6)
+w1_c0_t1               mask=0      threads=1   median=514.934   (TSET,omp_threads=1,tbb_max=1,affinity_omp=0,affinity_at_entry=0,req_mask=unset,cpus=12,max_concurrency=1,pid=301632)
+w2_c0_t1               mask=0      threads=1   median=585.131   (TSET,omp_threads=1,tbb_max=1,affinity_omp=0,affinity_at_entry=0,req_mask=unset,cpus=12,max_concurrency=1,pid=301640)
+w1_c0-5_t6             mask=0-5    threads=6   median=124.517   (TSET,omp_threads=6,tbb_max=6,affinity_omp=0,1,2,3,4,5,affinity_at_entry=0,1,2,3,4,5,req_mask=unset,cpus=12,max_concurrency=6,pid=301668)
+w1_call_t12            mask=0-11   threads=12  median=103.355   (TSET,omp_threads=12,tbb_max=12,affinity_omp=0,1,2,3,4,5,6,7,8,9,10,11,affinity_at_entry=0,1,2,3,4,5,6,7,8,9,10,11,req_mask=unset,cpus=12,max_concurrency=12,pid=301686)

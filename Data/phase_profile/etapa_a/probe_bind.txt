@@ -1,0 +1,11 @@
+== mask 0-5, 6 threads ==
+no PROC_BIND                               TSET,omp_threads=6,tbb_max=6,affinity=0,1,2,3,4,5,cpus=12,max_concurrency=6,pid=286910
+PROC_BIND=true PLACES=cores                TSET,omp_threads=6,tbb_max=6,affinity=0,1,cpus=12,max_concurrency=2,pid=286923
+PROC_BIND=false                            TSET,omp_threads=6,tbb_max=6,affinity=0,1,2,3,4,5,cpus=12,max_concurrency=6,pid=286932
+
+== mask 0,2,4 (3 cores, 3 threads) ==
+no PROC_BIND                               TSET,omp_threads=3,tbb_max=3,affinity=0,2,4,cpus=12,max_concurrency=3,pid=286945
+PROC_BIND=true PLACES=cores                TSET,omp_threads=3,tbb_max=3,affinity=0,cpus=12,max_concurrency=1,pid=286952
+
+== caller restricted to 0,1 and mask 0-3 ==
+TSET,omp_threads=4,tbb_max=4,affinity=0,1,2,3,cpus=12,max_concurrency=4,pid=286957
