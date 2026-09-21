@@ -88,6 +88,14 @@ public:
         return (blocks_.size() - 1) * ITEMS_PER_BLOCK + current_index_;
     }
 
+#ifdef PHASE_PROFILE
+    // Phase-profile only (A0/A3 memory ledger): bytes reserved by this
+    // allocator's blocks and how many blocks were taken. Inert -- no layout,
+    // no branch, no allocation change -- when the flag is absent.
+    size_t capacity_bytes() const { return blocks_.size() * BLOCK_SIZE_BYTES; }
+    size_t blocks_count() const { return blocks_.size(); }
+#endif
+
     /**
      * @brief Copies all allocated items into a destination iterator.
      * Used to merge thread-local buffers into the main CSR array.

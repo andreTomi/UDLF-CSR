@@ -43,6 +43,7 @@
 #ifdef PHASE_PROFILE
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <sys/resource.h>
 
 #ifndef PHASE_PROFILE_ROW_SAMPLE
@@ -62,19 +63,36 @@ inline uint64_t tick() {
 #endif
 
 // Phase ids. Per-thread/parallel phases first, then serial wall phases.
+//
+// Etapa A (A0) adds the call-level phases and the remaining build sub-phases
+// so that REP = sum(call-level walls) + residue, with no uninstrumented
+// phase left in the CPRR/LHRR pipelines (mult/pipe ledger).
 enum : int {
     P_F1_ACCUM = 0,    // multiply: per-row accumulate (timed rows only)
     P_F2_PRUNE,        // multiply: per-row nth_element prune + emit
     P_MERGE_LOOP,      // merge(): per-thread row loop
     P_COMBINE_LOOP,    // combine(): per-thread row loop
     P_B1_COPY,         // build: parallel triplet copy
-    P_B3_HIST,         // build: histogram + reduction + serial prefix sum
+    P_B3_HIST,         // build: histogram (parallel region only)
     P_B5_FILL,         // build: parallel fill of values_/col_idx_
     P_B0_TEMP_RESIZE,  // build: serial resize of temp_triplets_
     P_B2_SORT,         // build: global sort (wall; TBB threads inside)
     P_B4_VALS_RESIZE,  // build: serial resize of values_/col_idx_
     P_TRANSPOSE,       // transpose() whole (serial)
     P_MULT_TOTAL,      // multiply_and_prune: per-thread whole-region wall
+    // ---- A0: sub-phases (per thread / region) ----
+    P_ACC_PREP,        // mult: bound scan + accumulator ctor/reserve
+    P_B3_SETUP,        // build: thread_row_counts + row_counts alloc (serial)
+    P_B3_RED,          // build: parallel reduction of thread histograms
+    P_B3_PREFIX,       // build: serial prefix sum into row_ptr_
+    P_BUILD_FINISH,    // build: release of the shared sorted triplet buffer
+    // ---- A0: call-level walls (serial, whole function) ----
+    P_ALLOC_SETUP,     // call-level: PaddedAllocator vector ctor + ranges
+    P_ALLOC_TEARDOWN,  // call-level: PaddedAllocator dtor (2 MB block frees)
+    P_MP_CALL,         // call-level: whole multiply_and_prune
+    P_MERGE_CALL,      // call-level: whole merge
+    P_COMBINE_CALL,    // call-level: whole combine
+    P_BUILD_CALL,      // call-level: whole build_from_partial_results
     P_MAX
 };
 constexpr int MAX_THREADS = 128;
@@ -88,6 +106,10 @@ struct alignas(128) ThreadCtr {
     uint64_t rows_f1;      // rows actually timed for f1/f2 (sampling)
     uint64_t emitted;      // triplets emitted by this thread
     uint64_t bound_sum;    // sum of per-row fan-out bounds
+    // A0: accumulator branch actually taken by this thread + worst bound.
+    uint64_t hash_threads;   // 1 if this thread used the hash accumulator
+    uint64_t dense_threads;  // 1 if this thread used the dense accumulator
+    uint64_t max_bound;      // max per-row bound seen in this thread's chunk
     void clear() { std::memset(this, 0, sizeof(*this)); }
 };
 
@@ -132,8 +154,99 @@ struct Globals {
     long hwm_after_build_max = -1;
     long hwm_final = -1;
     uint64_t build_calls = 0;
+    // A0: memory decomposition support (PHASE_MEM=1 enables sampling).
+    int mem_mode = -1;              // lazily read from getenv("PHASE_MEM")
+    long hwm_reset_last_rc = -1;    // result of the last /proc/self/clear_refs write
+    uint64_t mem_builds_sampled = 0;
+    // A0: last multiply's B.cols_, so the driver can print the dense/hash ratio
+    // next to the measured max bound (Phase 4 calibration input).
+    uint64_t last_mult_cols_b = 0;
 };
 inline Globals& g() { static Globals x; return x; }
+
+// ---------------------------------------------------------------------------
+// A0: memory sampling helpers (opt-in at runtime via PHASE_MEM=1, so the
+// timing runs are never perturbed by barriers/proc reads).
+// ---------------------------------------------------------------------------
+inline bool mem_enabled() {
+    Globals& G = g();
+    if (G.mem_mode < 0) {
+        const char* e = std::getenv("PHASE_MEM");
+        G.mem_mode = (e && e[0] != '0') ? 1 : 0;
+    }
+    return G.mem_mode == 1;
+}
+
+inline long vmrss_kb() {
+    FILE* f = std::fopen("/proc/self/status", "r");
+    if (!f) return -1;
+    char line[256];
+    long kb = -1;
+    while (std::fgets(line, sizeof(line), f))
+        if (std::sscanf(line, "VmRSS: %ld kB", &kb) == 1) break;
+    std::fclose(f);
+    return kb;
+}
+
+// Rewind the kernel's peak-RSS high-water mark to the *current* RSS by
+// writing 5 to /proc/self/clear_refs (Linux >= 4.0; own process only).
+inline long hwm_reset() {
+    FILE* f = std::fopen("/proc/self/clear_refs", "w");
+    if (!f) return -1;
+    int rc = std::fputs("5\n", f);
+    int cerr = std::fclose(f);
+    long ok = (rc >= 0 && cerr == 0) ? 1 : 0;
+    g().hwm_reset_last_rc = ok;
+    return ok;
+}
+
+inline void mem_point(const char* tag) {
+    if (!mem_enabled()) return;
+    std::printf("PHASEPROFILE,MEM,%s,rss_kb=%ld,hwm_kb=%ld\n",
+                tag, vmrss_kb(), vmhwm_kb());
+    std::fflush(stdout);
+}
+
+// Call from INSIDE a parallel region only (every thread must reach it);
+// thread 0 samples while the others wait, so the snapshot is well defined.
+inline void mem_point_sync(const char* tag) {
+    if (!mem_enabled()) return;
+    if (omp_get_thread_num() == 0) mem_point(tag);
+#pragma omp barrier
+}
+
+// Same, but safe in *divergent* code paths (no barrier): thread 0 samples at
+// its own progress point. Use only where a barrier would be illegal.
+inline void mem_point_t0(const char* tag) {
+    if (!mem_enabled()) return;
+    if (omp_get_thread_num() == 0) mem_point(tag);
+}
+
+// Add ticks to the calling thread's slot without a region-level stamp
+// (used for sub-phases inside a parallel region, e.g. ACC_PREP).
+inline void accum_ticks(int tid, int phase, uint64_t dt) {
+    counters()[tid].ticks[phase] += dt;
+    ++counters()[tid].calls[phase];
+}
+
+// Per-build ledger: emitted triplets, the buffers involved and the HWM delta
+// measured after a clear_refs reset taken before the build (A3 requirement).
+inline void mem_build(size_t emitted, size_t tmp_bytes, size_t out_bytes,
+                      size_t alloc_bytes, size_t count_bytes,
+                      long hwm_before, long hwm_after) {
+    if (!mem_enabled()) return;
+    ++g().mem_builds_sampled;
+    double per_triplet = emitted ? (double)(hwm_after - hwm_before) * 1024.0 /
+                                       (double)emitted : 0.0;
+    std::printf(
+        "PHASEPROFILE,MEMBUILD,n=%llu,emitted=%zu,tmp_bytes=%zu,out_bytes=%zu,"
+        "alloc_bytes=%zu,count_bytes=%zu,hwm_before_kb=%ld,hwm_after_kb=%ld,"
+        "delta_hwm_kb=%ld,bytes_per_triplet=%.3f,reset_rc=%ld\n",
+        (unsigned long long)g().mem_builds_sampled, emitted, tmp_bytes,
+        out_bytes, alloc_bytes, count_bytes, hwm_before, hwm_after,
+        hwm_after - hwm_before, per_triplet, g().hwm_reset_last_rc);
+    std::fflush(stdout);
+}
 
 // Serial phase (wall ticks + rusage deltas), mid-function friendly.
 inline void serial_begin(int /*phase*/, uint64_t& t0, RUsageSnap& r0) {
@@ -222,15 +335,18 @@ inline void report(FILE* out) {
     G.hwm_final = vmhwm_kb();
     std::fprintf(out,
         "PHASEPROFILE,HWM,before_build_max_kb=%ld,after_build_max_kb=%ld,"
-        "final_kb=%ld,build_calls=%llu\n",
-        G.hwm_before_build_max, G.hwm_after_build_max, G.hwm_final,
+        "final_kb=%ld,rss_final_kb=%ld,build_calls=%llu\n",
+        G.hwm_before_build_max, G.hwm_after_build_max, G.hwm_final, vmrss_kb(),
         (unsigned long long)G.build_calls);
 
     static const char* names[P_MAX] = {
         "F1_ACCUM", "F2_PRUNE", "MERGE_LOOP", "COMBINE_LOOP",
         "B1_COPY", "B3_HIST", "B5_FILL",
         "B0_TEMP_RESIZE", "B2_SORT", "B4_VALS_RESIZE", "TRANSPOSE",
-        "MULT_TOTAL"
+        "MULT_TOTAL",
+        "ACC_PREP", "B3_SETUP", "B3_RED", "B3_PREFIX", "BUILD_FINISH",
+        "ALLOC_SETUP", "ALLOC_TEARDOWN", "MP_CALL", "MERGE_CALL",
+        "COMBINE_CALL", "BUILD_CALL"
     };
     const ThreadCtr* C = counters();
     for (int p = 0; p < P_MAX; ++p) {
@@ -276,6 +392,38 @@ inline void report(FILE* out) {
             a.minflt, a.majflt, (unsigned long long)calls,
             (unsigned long long)ctx1, (unsigned long long)ctx2);
     }
+
+    // -----------------------------------------------------------------------
+    // A0: per-thread breakdown (skew source, allocator/emission decomposition)
+    // and the dense/hash decision actually taken, with the measured bound.
+    // -----------------------------------------------------------------------
+    uint64_t rows_all = 0, emitted_all = 0, bound_all = 0, maxb = 0;
+    uint64_t nh = 0, nd = 0;
+    for (int t = 0; t < MAX_THREADS; ++t) {
+        const ThreadCtr& c = C[t];
+        if (c.rows_total == 0 && c.emitted == 0 && c.bound_sum == 0) continue;
+        rows_all += c.rows_total; emitted_all += c.emitted;
+        bound_all += c.bound_sum;
+        if (c.max_bound > maxb) maxb = c.max_bound;
+        nh += c.hash_threads; nd += c.dense_threads;
+        std::fprintf(out,
+            "PHASEPROFILE,THREAD,tid=%d,rows=%llu,emitted=%llu,bound_sum=%llu,"
+            "max_bound=%llu,hash=%llu,dense=%llu,mult_ms=%.3f\n",
+            t, (unsigned long long)c.rows_total,
+            (unsigned long long)c.emitted, (unsigned long long)c.bound_sum,
+            (unsigned long long)c.max_bound, (unsigned long long)c.hash_threads,
+            (unsigned long long)c.dense_threads,
+            (double)c.ticks[P_MULT_TOTAL] / G.ticks_per_ms);
+    }
+    std::fprintf(out,
+        "PHASEPROFILE,CTX,rows=%llu,emitted=%llu,bound_sum=%llu,max_bound=%llu,"
+        "hash_threads=%llu,dense_threads=%llu,cols_b=%llu,ratio=%.3f,branch=%s\n",
+        (unsigned long long)rows_all, (unsigned long long)emitted_all,
+        (unsigned long long)bound_all, (unsigned long long)maxb,
+        (unsigned long long)nh, (unsigned long long)nd,
+        (unsigned long long)G.last_mult_cols_b,
+        maxb ? (double)G.last_mult_cols_b / (double)maxb : 0.0,
+        nh ? "hash" : (nd ? "dense" : "n/a"));
 }
 
 } // namespace phprof
@@ -359,10 +507,24 @@ public:
     ) {
         if (C.finalized_) throw std::logic_error("Matrix finalized");
 #ifdef PHASE_PROFILE
+        // A0: call-level wall for the whole build + the per-build memory
+        // ledger (allocator bytes, tmp/out/count buffers, HWM delta after a
+        // clear_refs reset taken at entry).
+        uint64_t t0_bcall = 0; phprof::RUsageSnap r0_bcall;
+        size_t alloc_bytes = 0;
+        long hwm_b0 = -1;
+        phprof::serial_begin(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
+        for (int i = 0; i < (int)allocators.size(); ++i)
+            alloc_bytes += allocators[i].ptr->capacity_bytes();
         {   long h = phprof::vmhwm_kb();
             if (h > phprof::g().hwm_before_build_max)
                 phprof::g().hwm_before_build_max = h;
             ++phprof::g().build_calls;
+        }
+        if (phprof::mem_enabled()) {
+            phprof::hwm_reset();               // peak rewind: measure THIS build
+            hwm_b0 = phprof::vmhwm_kb();
+            phprof::mem_point("build_entry");
         }
 #endif
 
@@ -386,6 +548,7 @@ public:
 
 #ifdef PHASE_PROFILE
         phprof::serial_end(phprof::P_B0_TEMP_RESIZE, t0_b0, r0_b0);
+        phprof::mem_point("after_B0_tmp_resize");
 #endif
         // 3. OPTIMIZED: Parallel copy with prefetching
 #ifdef PHASE_PROFILE
@@ -427,6 +590,7 @@ public:
 
 #ifdef PHASE_PROFILE
         phprof::serial_end(phprof::P_B2_SORT, t0_b2, r0_b2);
+        phprof::mem_point("after_B2_sort");
 #endif
         // 5. OPTIMIZED CSR Construction with NUMA awareness
         buildCSRParallel(C, total_elements, row_ranges, num_threads);
@@ -438,7 +602,29 @@ public:
         }
 #endif
         C.finalized_ = true;
+#ifdef PHASE_PROFILE
+        uint64_t t0_bfin; phprof::RUsageSnap r0_bfin;
+        phprof::serial_begin(phprof::P_BUILD_FINISH, t0_bfin, r0_bfin);
+#endif
         std::vector<Triplet>().swap(C.temp_triplets_);
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_BUILD_FINISH, t0_bfin, r0_bfin);
+        {
+            // A0/A3 ledger: what this build allocated vs what it produced,
+            // with the HWM delta measured from the reset taken at entry.
+            size_t out_bytes = C.values_.size() * sizeof(T) +
+                               C.col_idx_.size() * sizeof(index_type);
+            size_t tmp_bytes = total_elements * sizeof(Triplet);
+            size_t count_bytes =
+                (size_t)num_threads * C.rows_ * sizeof(size_type) +
+                C.rows_ * sizeof(size_type);
+            long hwm_a = phprof::vmhwm_kb();
+            phprof::mem_point("build_exit");
+            phprof::mem_build(total_elements, tmp_bytes, out_bytes, alloc_bytes,
+                              count_bytes, hwm_b0, hwm_a);
+            phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
+        }
+#endif
     }
 
 private:
@@ -448,7 +634,14 @@ private:
         
         // A. NUMA-aware histogram (each thread on its own memory)
         std::vector<std::vector<size_type>> thread_row_counts;
+#ifdef PHASE_PROFILE
+        uint64_t t0_bset; phprof::RUsageSnap r0_bset;
+        phprof::serial_begin(phprof::P_B3_SETUP, t0_bset, r0_bset);
+#endif
         thread_row_counts.resize(num_threads);
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_B3_SETUP, t0_bset, r0_bset);
+#endif
 #ifdef PHASE_PROFILE
         phprof::RUsageSnap r0_hist = phprof::rsnap();
 #endif
@@ -483,6 +676,7 @@ private:
 
 #ifdef PHASE_PROFILE
         phprof::ru_end(phprof::P_B3_HIST, r0_hist);
+        phprof::mem_point("after_B3_hist");
 #endif
         // B. Parallel reduction
 #ifdef PHASE_PROFILE
@@ -492,6 +686,9 @@ private:
         
         #pragma omp parallel for
         for (size_t r = 0; r < C.rows_; ++r) {
+#ifdef PHASE_PROFILE
+            phprof::PhaseMark pm_red(phprof::P_B3_RED);
+#endif
             size_type sum = 0;
             for (int t = 0; t < num_threads; ++t) {
                 sum += thread_row_counts[t][r];
@@ -500,12 +697,12 @@ private:
         }
 
 #ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B3_HIST, r0_red);
+        phprof::ru_end(phprof::P_B3_RED, r0_red);
 #endif
         // C. Prefix sum (Sequential but fast)
 #ifdef PHASE_PROFILE
         uint64_t t0_pre; phprof::RUsageSnap r0_pre;
-        phprof::serial_begin(phprof::P_B3_HIST, t0_pre, r0_pre);
+        phprof::serial_begin(phprof::P_B3_PREFIX, t0_pre, r0_pre);
 #endif
         C.row_ptr_[0] = 0;
         for (size_t i = 0; i < C.rows_; ++i) {
@@ -513,7 +710,7 @@ private:
         }
         
 #ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B3_HIST, t0_pre, r0_pre);
+        phprof::serial_end(phprof::P_B3_PREFIX, t0_pre, r0_pre);
 #endif
         size_t final_nnz = C.row_ptr_[C.rows_];
 #ifdef PHASE_PROFILE
@@ -524,6 +721,7 @@ private:
         C.col_idx_.resize(final_nnz);
 #ifdef PHASE_PROFILE
         phprof::serial_end(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
+        phprof::mem_point("after_B4_out_resize");
 #endif
 
         // D. Parallel fill with cache-aware iteration
@@ -584,6 +782,7 @@ private:
         }
 #ifdef PHASE_PROFILE
         phprof::ru_end(phprof::P_B5_FILL, r0_fill);
+        phprof::mem_point("after_B5_fill");
 #endif
     }
 private:
@@ -752,11 +951,24 @@ public:
 
     static CSRMatrix multiply_and_prune(const CSRMatrix& A, const CSRMatrix& B, size_t limit) {
         if (A.cols_ != B.rows_) throw std::invalid_argument("Dimension mismatch");
+#ifdef PHASE_PROFILE
+        // A0: call-level ledger. MP_CALL wraps everything except the
+        // allocator teardown, which gets its own phase so the residue of the
+        // pipe ledger is a named number instead of an unexplained gap.
+        uint64_t t0_mp; phprof::RUsageSnap r0_mp;
+        phprof::serial_begin(phprof::P_MP_CALL, t0_mp, r0_mp);
+        phprof::g().last_mult_cols_b = B.cols_;
+        phprof::mem_point("mult_entry");
+#endif
 
         CSRMatrix C(A.rows_, B.cols_, 0);
         int num_threads = omp_get_max_threads();
         
         // CRITICAL: Separate allocation to prevent false sharing
+#ifdef PHASE_PROFILE
+        uint64_t t0_as; phprof::RUsageSnap r0_as;
+        phprof::serial_begin(phprof::P_ALLOC_SETUP, t0_as, r0_as);
+#endif
         std::vector<PaddedAllocator> allocators;
         allocators.reserve(num_threads);
         for (int i = 0; i < num_threads; ++i) {
@@ -764,6 +976,10 @@ public:
         }
         
         std::vector<std::pair<size_type, size_type>> ranges(num_threads);
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_ALLOC_SETUP, t0_as, r0_as);
+        phprof::mem_point("after_alloc_setup");
+#endif
 
         // Below this B.cols_/bound ratio the plain dense array is faster in
         // practice (hash probing overhead isn't paid back yet). Calibration
@@ -796,6 +1012,7 @@ public:
             phprof::RowTimer rt_local;
             uint64_t reg_t0 = phprof::tick();
             uint64_t rows_local = 0, bound_sum_local = 0;
+            uint64_t t_prep0 = reg_t0;   // A0: ACC_PREP = bound scan + acc ctor
 #endif
             size_t max_bound = 0;
             for (size_t i = r_start; i < r_end; ++i) {
@@ -815,6 +1032,12 @@ public:
             if (use_hash) {
                 HashRowAccumulator acc;
                 acc.reserve_capacity(max_bound);
+#ifdef PHASE_PROFILE
+                phprof::accum_ticks(tid, phprof::P_ACC_PREP,
+                                    phprof::tick() - t_prep0);
+                phprof::counters()[tid].hash_threads = 1;
+                phprof::mem_point_t0("after_acc_prep_hash");
+#endif
                 for (size_t i = r_start; i < r_end; ++i) {
                     acc.begin_row((index_type)i);
 #ifdef PHASE_PROFILE
@@ -829,6 +1052,12 @@ public:
                 }
             } else {
                 DenseRowAccumulator acc(B.cols_);
+#ifdef PHASE_PROFILE
+                phprof::accum_ticks(tid, phprof::P_ACC_PREP,
+                                    phprof::tick() - t_prep0);
+                phprof::counters()[tid].dense_threads = 1;
+                phprof::mem_point_t0("after_acc_prep_dense");
+#endif
                 for (size_t i = r_start; i < r_end; ++i) {
                     acc.begin_row((index_type)i);
 #ifdef PHASE_PROFILE
@@ -858,26 +1087,56 @@ public:
                 c_pp.rows_f1    += rt_local.rows;
                 c_pp.emitted    += rt_local.emitted;
                 c_pp.bound_sum  += bound_sum_local;
+                c_pp.max_bound   = std::max<uint64_t>(c_pp.max_bound,
+                                                      (uint64_t)max_bound);
             }
+            phprof::mem_point_t0("after_emit");
 #endif
         }
         
         build_from_partial_results(C, allocators, ranges);
+#ifdef PHASE_PROFILE
+        phprof::mem_point("mult_exit");
+        phprof::serial_end(phprof::P_MP_CALL, t0_mp, r0_mp);
+        {
+            // Named teardown of the per-thread 2 MB allocator blocks, so the
+            // pipe/mult ledger has no unattributed free() at scope exit.
+            uint64_t t0_at; phprof::RUsageSnap r0_at;
+            phprof::serial_begin(phprof::P_ALLOC_TEARDOWN, t0_at, r0_at);
+            allocators.clear();
+            allocators.shrink_to_fit();
+            phprof::serial_end(phprof::P_ALLOC_TEARDOWN, t0_at, r0_at);
+            phprof::mem_point("after_alloc_teardown");
+        }
+#endif
         return C;
     }
 
     template <typename BinaryOp>
     static CSRMatrix merge(const CSRMatrix& A, const CSRMatrix& B, BinaryOp op) {
         if (A.rows_ != B.rows_) throw std::invalid_argument("Dim mismatch");
+#ifdef PHASE_PROFILE
+        uint64_t t0_mc; phprof::RUsageSnap r0_mc;
+        phprof::serial_begin(phprof::P_MERGE_CALL, t0_mc, r0_mc);
+        phprof::mem_point("merge_entry");
+#endif
         CSRMatrix C(A.rows_, A.cols_, 0);
 
         int num_threads = omp_get_max_threads();
+#ifdef PHASE_PROFILE
+        uint64_t t0_as; phprof::RUsageSnap r0_as;
+        phprof::serial_begin(phprof::P_ALLOC_SETUP, t0_as, r0_as);
+#endif
         std::vector<PaddedAllocator> allocators;
         allocators.reserve(num_threads);
         for (int i = 0; i < num_threads; ++i) {
             allocators.emplace_back();
         }
         std::vector<std::pair<size_type, size_type>> ranges(num_threads);
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_ALLOC_SETUP, t0_as, r0_as);
+        phprof::mem_point("merge_after_alloc_setup");
+#endif
 
         #pragma omp parallel
         {
@@ -944,20 +1203,44 @@ public:
         }
         
         build_from_partial_results(C, allocators, ranges);
+#ifdef PHASE_PROFILE
+        phprof::mem_point("merge_exit");
+        phprof::serial_end(phprof::P_MERGE_CALL, t0_mc, r0_mc);
+        {
+            uint64_t t0_at; phprof::RUsageSnap r0_at;
+            phprof::serial_begin(phprof::P_ALLOC_TEARDOWN, t0_at, r0_at);
+            allocators.clear();
+            allocators.shrink_to_fit();
+            phprof::serial_end(phprof::P_ALLOC_TEARDOWN, t0_at, r0_at);
+        }
+#endif
         return C;
     }
 
     static CSRMatrix combine(const CSRMatrix& A, const CSRMatrix& B) {
         if (A.rows_ != B.rows_) throw std::invalid_argument("Dim mismatch");
+#ifdef PHASE_PROFILE
+        uint64_t t0_cb; phprof::RUsageSnap r0_cb;
+        phprof::serial_begin(phprof::P_COMBINE_CALL, t0_cb, r0_cb);
+        phprof::mem_point("combine_entry");
+#endif
         CSRMatrix C(A.rows_, A.cols_, 0);
 
         int num_threads = omp_get_max_threads();
+#ifdef PHASE_PROFILE
+        uint64_t t0_as; phprof::RUsageSnap r0_as;
+        phprof::serial_begin(phprof::P_ALLOC_SETUP, t0_as, r0_as);
+#endif
         std::vector<PaddedAllocator> allocators;
         allocators.reserve(num_threads);
         for (int i = 0; i < num_threads; ++i) {
             allocators.emplace_back();
         }
         std::vector<std::pair<size_type, size_type>> ranges(num_threads);
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_ALLOC_SETUP, t0_as, r0_as);
+        phprof::mem_point("combine_after_alloc_setup");
+#endif
 
         #pragma omp parallel
         {
@@ -1000,6 +1283,17 @@ public:
         }
         
         build_from_partial_results(C, allocators, ranges);
+#ifdef PHASE_PROFILE
+        phprof::mem_point("combine_exit");
+        phprof::serial_end(phprof::P_COMBINE_CALL, t0_cb, r0_cb);
+        {
+            uint64_t t0_at; phprof::RUsageSnap r0_at;
+            phprof::serial_begin(phprof::P_ALLOC_TEARDOWN, t0_at, r0_at);
+            allocators.clear();
+            allocators.shrink_to_fit();
+            phprof::serial_end(phprof::P_ALLOC_TEARDOWN, t0_at, r0_at);
+        }
+#endif
         return C;
     }
 
@@ -1035,6 +1329,7 @@ public:
 #ifdef PHASE_PROFILE
         uint64_t t0_tr; phprof::RUsageSnap r0_tr;
         phprof::serial_begin(phprof::P_TRANSPOSE, t0_tr, r0_tr);
+        phprof::mem_point("transpose_entry");
 #endif
         CSRMatrix result(cols_, rows_, values_.size());
         std::vector<size_type> counts(cols_, 0);
@@ -1061,6 +1356,7 @@ public:
         }
         
 #ifdef PHASE_PROFILE
+        phprof::mem_point("transpose_exit");
         phprof::serial_end(phprof::P_TRANSPOSE, t0_tr, r0_tr);
 #endif
         result.finalized_ = true;
