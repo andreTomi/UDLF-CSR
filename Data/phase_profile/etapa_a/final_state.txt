@@ -1,0 +1,32 @@
+branch=dev commit=fa2d835
+--- status (should be empty):
+?? Data/phase_profile/etapa_a/final_state.txt
+?? Source/bench/_final_state.sh
+--- etapa_a files:
+a4_check.txt
+aggregate.txt
+aggregate_v2.txt
+bindcheck.txt
+decisive.txt
+final_check.txt
+final_state.txt
+machine.txt
+machine_v2.txt
+mask_audit_v2.log
+maskprobe.txt
+noisecheck.txt
+probe_bind.txt
+raw
+raw_v2
+README.md
+replication
+replication.txt
+raw_v2=58 raw_v1=55
+--- recent commits:
+fa2d835 ADD: final Etapa A verification -- both suites deterministic at 1..12 threads, 0 failures
+2aac985 ADD: Etapa A results -- unbound (correct) curve, named pipe ledger, memory ledger, ALOI LHRR runs, A4/E2E evidence
+c425958 FIX: A4 -- capture real per-run peak RSS (VmHWM of the child's session) in the harness
+2f40980 ADD: Etapa A instrumentation -- call ledger, memory ledger, params/real modes, campaign harness
+9dff5cb ADD: characterization tests for build/merge/combine/transpose (Etapa A, A6)
+e157626 CHORE: pin LF line endings (.gitattributes) and ignore Datasets/ + build artifacts
+979640b ADD: PHASE_PROFILE phase instrumentation (Phase 0) + bench_phase driver, aggregator and results
