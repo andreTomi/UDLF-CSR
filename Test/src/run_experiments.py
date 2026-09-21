@@ -494,6 +494,13 @@ def export_aggregated_summary(results: list, path: Path):
         "config", "approach", "wrapper", "threads", "n_success", "n_total",
         "mean_time_elapsed_time_sec", "std_time_elapsed_time_sec",
         "mean_max_rss_mb", "std_max_rss_mb",
+        # A4: real peak RSS. mean_peak_rss_mb is the per-run VmHWM peak of the
+        # engine (heaviest process in the child's tree); mean_peak_ru_maxrss_mb
+        # is RUSAGE_CHILDREN.ru_maxrss, a monotone high-water mark across all
+        # children, i.e. a ceiling. Like the other mean/std pairs these are also
+        # exported as mean_<metric> columns.
+        "mean_peak_rss_mb", "std_peak_rss_mb",
+        "mean_peak_ru_maxrss_mb", "std_peak_ru_maxrss_mb",
         "mean_cpu_percent_avg", "std_cpu_percent_avg"
     ]
     
@@ -523,12 +530,21 @@ def export_aggregated_summary(results: list, path: Path):
                 # Calculate means and deviations of base metrics
                 times = [r.elapsed_time for r in runs]
                 rss_values = [r.max_rss_mb for r in runs]
+                # A4: prefer the real per-run peak (VmHWM); fall back to the
+                # legacy instantaneous-RSS maximum when it is unavailable.
+                peak_values = [(getattr(r, "peak_rss_mb", 0.0) or r.max_rss_mb)
+                               for r in runs]
+                ru_values = [getattr(r, "peak_ru_maxrss_mb", 0.0) for r in runs]
                 cpu_values = [r.cpu_percent_avg for r in runs]
-                
+
                 row["mean_time_elapsed_time_sec"] = statistics.mean(times)
                 row["std_time_elapsed_time_sec"] = statistics.stdev(times) if len(times) > 1 else 0
                 row["mean_max_rss_mb"] = statistics.mean(rss_values)
                 row["std_max_rss_mb"] = statistics.stdev(rss_values) if len(rss_values) > 1 else 0
+                row["mean_peak_rss_mb"] = statistics.mean(peak_values)
+                row["std_peak_rss_mb"] = statistics.stdev(peak_values) if len(peak_values) > 1 else 0
+                row["mean_peak_ru_maxrss_mb"] = statistics.mean(ru_values)
+                row["std_peak_ru_maxrss_mb"] = statistics.stdev(ru_values) if len(ru_values) > 1 else 0
                 row["mean_cpu_percent_avg"] = statistics.mean(cpu_values)
                 row["std_cpu_percent_avg"] = statistics.stdev(cpu_values) if len(cpu_values) > 1 else 0
                 

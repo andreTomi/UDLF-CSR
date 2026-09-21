@@ -40,6 +40,12 @@ class DetailedMetrics:
     system_time: float = 0.0
     page_faults_minor: int = 0
     page_faults_major: int = 0
+    # Etapa A / A4 -- real per-run peak RSS.  peak_vmhwm_mb is the largest
+    # VmHWM (kernel peak-RSS counter) observed on the heaviest process in the
+    # child's tree; vmhwm_pid records which pid that was.  rss_samples (current
+    # RSS) is kept as-is for compatibility.
+    peak_vmhwm_mb: float = 0.0
+    vmhwm_pid: int = 0
 
 @dataclass
 class RunResult:
@@ -62,6 +68,13 @@ class RunResult:
     profiler_metrics: str = "{}"
     system_load_initial: float = 0.0
     memory_pressure_initial: float = 0.0
+    # Etapa A / A4 -- real peak RSS.  peak_rss_mb: per-run peak (VmHWM of the
+    # heaviest process in the child's tree, falling back to the largest RSS
+    # sample).  peak_ru_maxrss_mb: ceiling from RUSAGE_CHILDREN.ru_maxrss, which
+    # is a monotone high-water mark over every child of the harness already
+    # waited for (it never decreases, so read it as an upper bound).
+    peak_rss_mb: float = 0.0
+    peak_ru_maxrss_mb: float = 0.0
 
 class SystemMonitor:
     @staticmethod
