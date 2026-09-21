@@ -1,0 +1,14 @@
+# Line-ending policy: store LF in the repository and keep the working tree in
+# LF on every platform. The engine is built and benchmarked from WSL, where a
+# CRLF shell script is a hard syntax error (`for ... do\r`) and where git status
+# would otherwise flip-flop between the WSL and Windows checkouts.
+* text=auto eol=lf
+
+# Binary payloads: never touch these.
+*.bin binary
+*.mtx binary
+*.npy binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.zip binary

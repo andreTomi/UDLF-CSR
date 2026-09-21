@@ -1,0 +1,22 @@
+# Datasets are large external corpora (aloi, vegfru, sun397, ...): they are
+# downloaded/extracted locally and must never be committed.
+# NOTE: do not use a bare "data/" pattern here -- core.ignorecase=true makes it
+# match the tracked Data/ tree as well.
+Datasets/
+
+# Build artifacts
+Source/obj/
+Source/bin/
+*.o
+*.a
+*.so
+*.exe
+*.lftmp
+
+# Python
+__pycache__/
+*.pyc
+
+# Scratch/diagnostic output from the phase-profiling runs
+Data/phase_profile/etapa_a/_diag*.txt
+
