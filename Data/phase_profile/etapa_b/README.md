@@ -17,7 +17,7 @@ Fase 1: `fase1/README.md`.
 ## Estado final
 
 O kernel final é o da **Fase 1**: `Source/src/Core/hpp/SparseMatrix.hpp` restaurado de
-`0fba99c` (commit `2c8ceaf`, diff vazio contra aquele commit). Sem `pairs`, sem
+`0fba99c` (commit `4e57526`, diff vazio contra aquele commit). Sem `pairs`, sem
 materialização, `nth_element` indireto como na Fase 1. Reverificação no estado final:
 
 - diff contra `0fba99c`: **vazio**;

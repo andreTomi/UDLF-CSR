@@ -19,7 +19,7 @@ regime que era o seu melhor caso (w4).
 | `f13`   | `b3303ec` | Fase 1 + Fase 3: materializa `pairs` em **toda** linha e **sempre** ordena por coluna |
 | `f3b`   | `374a278` | materializa `pairs` **só** quando `touched > limit` **e** acumulador Hash; Dense e Hash-sem-poda ficam idênticos à Fase 1 |
 | `f1b`   | = `f1` | **controle de ruído**: mesmo binário de `f1`, rodado de novo |
-| `fin`   | `2c8ceaf` | estado final: `SparseMatrix.hpp` restaurado de `0fba99c` (kernel = Fase 1) |
+| `fin`   | `4e57526` | estado final: `SparseMatrix.hpp` restaurado de `0fba99c` (kernel = Fase 1) |
 
 Método: cada binário é recompilado do mesmo driver (`ab_build.sh`), mesmos flags,
 `taskset -c 0`, `PHASE_MEM=1`; **mediana dos reps 1..n** com rep 0 descartado
