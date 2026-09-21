@@ -500,6 +500,149 @@ public:
     // OPTIMIZED "ROW-SPLIT" ENGINE
     // =========================================================================
 
+    // =========================================================================
+    // FASE 1: Fragmento-CSR por thread (build_from_ordered_fragments)
+    //
+    // Assumes each thread's PaddedAllocator emits Triplets ordered by
+    // (row, col) within its assigned row range. Eliminates the global
+    // temp_triplets_ buffer, the O(M log M) parallel sort (B2), and the
+    // parallel histogram/reduce (B3). Instead performs a direct sequential
+    // write into the final CSR arrays.
+    //
+    // Caller invariant:
+    //   - thread tid emits rows strictly within row_ranges[tid]
+    //   - within those rows, Triplets are sorted by (row, col) with
+    //     duplicates coalesced (is_set=true replaces, is_set=false sums)
+    //
+    // For the symmetric mainMatrix build in LHRRSparse (which emits
+    // t2->row = neighbor, i.e. rows outside the thread's range), callers
+    // MUST use build_from_partial_results instead.
+    // =========================================================================
+    static void build_from_ordered_fragments(
+        CSRMatrix& C,
+        std::vector<PaddedAllocator>& allocators,
+        const std::vector<std::pair<size_type, size_type>>& row_ranges
+    ) {
+        if (C.finalized_) throw std::logic_error("Matrix finalized");
+
+#ifdef PHASE_PROFILE
+        uint64_t t0_bcall = 0; phprof::RUsageSnap r0_bcall;
+        size_t alloc_bytes = 0;
+        long hwm_b0 = -1;
+        phprof::serial_begin(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
+        for (int i = 0; i < (int)allocators.size(); ++i)
+            alloc_bytes += allocators[i].ptr->capacity_bytes();
+        if (phprof::mem_enabled()) {
+            phprof::hwm_reset();
+            hwm_b0 = phprof::vmhwm_kb();
+            phprof::mem_point("buildFrag_entry");
+        }
+#endif
+
+        int num_threads = allocators.size();
+
+        // 1. Compute per-thread sizes and total
+        std::vector<size_t> thread_sizes(num_threads);
+        size_t total_elements = 0;
+        for (int t = 0; t < num_threads; ++t) {
+            thread_sizes[t] = allocators[t].ptr->size();
+            total_elements += thread_sizes[t];
+        }
+
+        std::cout << "  [BuildFrag] Total triplets: " << total_elements << std::endl;
+
+        // 2. Count rows via single pass per thread (no global sort needed).
+        //    Invariant: in multiply_and_prune/merge/combine, each thread
+        //    emits rows strictly within its range with unique (row, col)
+        //    within a row. No cross-thread duplicates.
+        std::vector<size_type> row_counts(C.rows_, 0);
+
+#ifdef PHASE_PROFILE
+        phprof::RUsageSnap r0_b3 = phprof::rsnap();
+#endif
+        #pragma omp parallel
+        {
+            int tid = omp_get_thread_num();
+            if (tid < num_threads && thread_sizes[tid] > 0) {
+                allocators[tid].ptr->for_each([&](const Triplet& t) {
+                    row_counts[t.row]++;
+                });
+            }
+        }
+#ifdef PHASE_PROFILE
+        phprof::ru_end(phprof::P_B3_HIST, r0_b3);
+        phprof::mem_point("after_B3_frag_count");
+#endif
+
+        // 3. Prefix sum -> row_ptr_
+#ifdef PHASE_PROFILE
+        uint64_t t0_b3p; phprof::RUsageSnap r0_b3p;
+        phprof::serial_begin(phprof::P_B3_PREFIX, t0_b3p, r0_b3p);
+#endif
+        C.row_ptr_[0] = 0;
+        for (size_t i = 0; i < C.rows_; ++i)
+            C.row_ptr_[i+1] = C.row_ptr_[i] + row_counts[i];
+        size_t final_nnz = C.row_ptr_[C.rows_];
+
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_B3_PREFIX, t0_b3p, r0_b3p);
+#endif
+
+        // 4. Allocate output arrays (FINAL size -- no temp_triplets_ buffer!)
+#ifdef PHASE_PROFILE
+        uint64_t t0_b4; phprof::RUsageSnap r0_b4;
+        phprof::serial_begin(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
+#endif
+        C.values_.resize(final_nnz);
+        C.col_idx_.resize(final_nnz);
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
+        phprof::mem_point("after_B4_frag_resize");
+#endif
+
+        // 5. Parallel fill: each thread writes its rows directly into output.
+        //    Rows are disjoint per thread and triplet stream is (row, col)
+        //    sorted, so a running write cursor per thread works.
+#ifdef PHASE_PROFILE
+        phprof::RUsageSnap r0_fill = phprof::rsnap();
+#endif
+        #pragma omp parallel
+        {
+            int tid = omp_get_thread_num();
+            if (tid < num_threads && thread_sizes[tid] > 0) {
+                size_t r_start = row_ranges[tid].first;
+                size_t write_pos = C.row_ptr_[r_start];
+
+                allocators[tid].ptr->for_each([&](const Triplet& t) {
+                    C.values_[write_pos] = t.value;
+                    C.col_idx_[write_pos] = t.col;
+                    write_pos++;
+                });
+            }
+        }
+#ifdef PHASE_PROFILE
+        phprof::ru_end(phprof::P_B5_FILL, r0_fill);
+        phprof::mem_point("after_B5_frag_fill");
+#endif
+
+        C.finalized_ = true;
+
+#ifdef PHASE_PROFILE
+        {
+            long hwm_a = phprof::vmhwm_kb();
+            if (hwm_a > phprof::g().hwm_after_build_max)
+                phprof::g().hwm_after_build_max = hwm_a;
+            size_t out_bytes = C.values_.size() * sizeof(T) +
+                               C.col_idx_.size() * sizeof(index_type);
+            phprof::mem_build(total_elements, 0, out_bytes, alloc_bytes,
+                              0, hwm_b0, hwm_a);
+            phprof::mem_point("buildFrag_exit");
+            phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
+        }
+#endif
+    }
+
+
     static void build_from_partial_results(
         CSRMatrix& C, 
         std::vector<PaddedAllocator>& allocators,
@@ -928,6 +1071,17 @@ private:
             emit_count = limit;  // do NOT used.resize(...) -- see note above
         }
 
+                // FASE 1: sort columns within this row so the fragment-CSR builder
+        // receives (row, col) ordered streams. nth_element reorders by |v|,
+        // not by col; with emit_count <= limit (small) this sort is cheap.
+        // For DenseRowAccumulator, col_of(slot) = slot (already col-sorted),
+        // so we skip the sort to avoid needless overhead.
+        if constexpr (!std::is_same_v<Acc, DenseRowAccumulator>) {
+            std::sort(used.begin(), used.begin() + emit_count,
+                [&](size_t a, size_t b) {
+                    return acc.col_of(a) < acc.col_of(b);
+                });
+        }
         for (size_t idx = 0; idx < emit_count; ++idx) {
             size_t slot = used[idx];
             T v = acc.val_of(slot);
@@ -1094,7 +1248,7 @@ public:
 #endif
         }
         
-        build_from_partial_results(C, allocators, ranges);
+        build_from_ordered_fragments(C, allocators, ranges);
 #ifdef PHASE_PROFILE
         phprof::mem_point("mult_exit");
         phprof::serial_end(phprof::P_MP_CALL, t0_mp, r0_mp);
@@ -1202,7 +1356,7 @@ public:
             }
         }
         
-        build_from_partial_results(C, allocators, ranges);
+        build_from_ordered_fragments(C, allocators, ranges);
 #ifdef PHASE_PROFILE
         phprof::mem_point("merge_exit");
         phprof::serial_end(phprof::P_MERGE_CALL, t0_mc, r0_mc);
@@ -1282,7 +1436,7 @@ public:
             }
         }
         
-        build_from_partial_results(C, allocators, ranges);
+        build_from_ordered_fragments(C, allocators, ranges);
 #ifdef PHASE_PROFILE
         phprof::mem_point("combine_exit");
         phprof::serial_end(phprof::P_COMBINE_CALL, t0_cb, r0_cb);
