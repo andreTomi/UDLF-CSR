@@ -1042,7 +1042,8 @@ private:
     // resizing the list itself.
     template <typename Acc>
     static void multiply_prune_row(size_type i, const CSRMatrix& A, const CSRMatrix& B,
-                                    size_t limit, Acc& acc, BlockAllocator<Triplet>& allocator
+                                    size_t limit, Acc& acc, BlockAllocator<Triplet>& allocator,
+                                    std::vector<std::pair<index_type, T>>& pairs
 #ifdef PHASE_PROFILE
                                     , phprof::RowTimer* rt = nullptr
 #endif
@@ -1061,33 +1062,42 @@ private:
         if (rt) { rt->f1 += phprof::tick() - t0_row; t0_row = phprof::tick(); ++rt->rows; }
 #endif
 
+        // FASE 3: materialize contiguous (col, val) pairs from the accumulator,
+        // then run nth_element + col-sort on contiguous memory. This eliminates
+        // the indirect comparator lookups (acc.val_of(slot)) that dominated
+        // F2_PRUNE on the HashRowAccumulator (random access into slot_val).
+        // The pairs buffer is reused across rows via clear()+reserve().
         auto& used = acc.used();
-        size_t emit_count = used.size();
-        if (emit_count > limit) {
-            std::nth_element(used.begin(), used.begin() + limit, used.end(),
-                [&](size_t a, size_t b) {
-                    return std::abs(acc.val_of(a)) > std::abs(acc.val_of(b));
-                });
-            emit_count = limit;  // do NOT used.resize(...) -- see note above
+        size_t touched = used.size();
+
+        pairs.clear();
+        pairs.reserve(touched);
+        for (size_t idx = 0; idx < touched; ++idx) {
+            pairs.emplace_back(acc.col_of(used[idx]), acc.val_of(used[idx]));
         }
 
-                // FASE 1: sort columns within this row so the fragment-CSR builder
-        // receives (row, col) ordered streams. nth_element reorders by |v|,
-        // not by col; with emit_count <= limit (small) this sort is cheap.
-        // For DenseRowAccumulator, col_of(slot) = slot (already col-sorted),
-        // so we skip the sort to avoid needless overhead.
-        if constexpr (!std::is_same_v<Acc, DenseRowAccumulator>) {
-            std::sort(used.begin(), used.begin() + emit_count,
-                [&](size_t a, size_t b) {
-                    return acc.col_of(a) < acc.col_of(b);
+        size_t emit_count = pairs.size();
+        if (emit_count > limit) {
+            std::nth_element(pairs.begin(), pairs.begin() + limit, pairs.end(),
+                [](const std::pair<index_type, T>& a,
+                   const std::pair<index_type, T>& b) {
+                    return std::abs(a.second) > std::abs(b.second);
                 });
+            pairs.resize(limit);
         }
-        for (size_t idx = 0; idx < emit_count; ++idx) {
-            size_t slot = used[idx];
-            T v = acc.val_of(slot);
-            if (std::abs(v) > 1e-9) {
+
+        // FASE 1: sort by col so build_from_ordered_fragments receives
+        // (row, col) ordered streams. Contiguous sort on pairs.
+        std::sort(pairs.begin(), pairs.end(),
+            [](const std::pair<index_type, T>& a,
+               const std::pair<index_type, T>& b) {
+                return a.first < b.first;
+            });
+
+        for (auto& p : pairs) {
+            if (std::abs(p.second) > 1e-9) {
                 Triplet* t = allocator.allocate();
-                t->row = i; t->col = acc.col_of(slot); t->value = v; t->is_set = false;
+                t->row = i; t->col = p.first; t->value = p.second; t->is_set = false;
 #ifdef PHASE_PROFILE
                 if (rt) ++rt->emitted;
 #endif
@@ -1168,6 +1178,7 @@ public:
             uint64_t rows_local = 0, bound_sum_local = 0;
             uint64_t t_prep0 = reg_t0;   // A0: ACC_PREP = bound scan + acc ctor
 #endif
+            std::vector<std::pair<index_type, T>> pairs;  // FASE 3: reused across rows
             size_t max_bound = 0;
             for (size_t i = r_start; i < r_end; ++i) {
                 size_t bound = 0;
@@ -1197,11 +1208,11 @@ public:
 #ifdef PHASE_PROFILE
                     bool timed = (PHASE_PROFILE_ROW_SAMPLE == 1) ||
                                  (((i - r_start) % (size_t)PHASE_PROFILE_ROW_SAMPLE) == 0);
-                    multiply_prune_row(i, A, B, limit, acc, allocator,
+                    multiply_prune_row(i, A, B, limit, acc, allocator, pairs,
                                        timed ? &rt_local : nullptr);
                     ++rows_local;
 #else
-                    multiply_prune_row(i, A, B, limit, acc, allocator);
+                    multiply_prune_row(i, A, B, limit, acc, allocator, pairs);
 #endif
                 }
             } else {
@@ -1217,11 +1228,11 @@ public:
 #ifdef PHASE_PROFILE
                     bool timed = (PHASE_PROFILE_ROW_SAMPLE == 1) ||
                                  (((i - r_start) % (size_t)PHASE_PROFILE_ROW_SAMPLE) == 0);
-                    multiply_prune_row(i, A, B, limit, acc, allocator,
+                    multiply_prune_row(i, A, B, limit, acc, allocator, pairs,
                                        timed ? &rt_local : nullptr);
                     ++rows_local;
 #else
-                    multiply_prune_row(i, A, B, limit, acc, allocator);
+                    multiply_prune_row(i, A, B, limit, acc, allocator, pairs);
 #endif
                 }
             }
