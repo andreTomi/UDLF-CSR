@@ -55,7 +55,7 @@ for f in sorted(glob.glob(os.path.join(DIR, '*.txt'))):
                               hwm=hwm, nnz=sorted(nnz), chk=sorted(checks))
 
 order = ['w1', 'w2', 'w3', 'w4']
-variants = ['base', 'f1', 'f13', 'f3b', 'f1b']
+variants = ['base', 'f1', 'f13', 'f3b', 'f1b', 'fin']
 print(f'{"wl":<4}{"var":<6}{"n":>3}{"median_ms":>12}{"min":>10}{"max":>10}{"spread%":>9}'
       f'{"F1_ACC":>10}{"F2_PRUN":>10}{"MP_CALL":>10}{"BUILD":>9}{"HWM_MB":>9}  checksum')
 for w in order:
