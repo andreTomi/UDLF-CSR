@@ -22,8 +22,18 @@ g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/bench/bench_e2e.cpp -o /tmp/b
 g++ -std=gnu++2b -fsyntax-only -fopenmp -I Source/src Source/tests/check_instantiations.cpp || exit 1
 echo "=== Instantiation check: OK"
 
-echo "=== Unit suite ==="
+echo "=== Unit suite: adaptive multiply_and_prune ==="
 /tmp/test_map | tail -n +2 | grep -v Build
+
+echo "=== Characterization suite: build/merge/combine/transpose ==="
+g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_csr_ops.cpp -o /tmp/test_csr_ops -ltbb || exit 1
+/tmp/test_csr_ops | tail -n +2 | grep -v Build
+
+echo "=== C-thread determinism: characterization suite at 1/2/4/8/12 threads ==="
+echo "   (all five md5 must be identical; the header prints the thread count)"
+for t in 1 2 4 8 12; do
+  OMP_NUM_THREADS=$t /tmp/test_csr_ops | tail -n +2 | grep -v Build | md5sum
+done
 
 echo "=== A9 thread determinism (all four md5 must be identical) ==="
 OMP_NUM_THREADS=1 /tmp/test_map | tail -n +2 | grep -v Build | md5sum
