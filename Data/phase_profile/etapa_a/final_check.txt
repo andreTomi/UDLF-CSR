@@ -1,0 +1,8 @@
+builds OK
+t=1 ops=b04547bd43c4 map=112fb4874911
+t=2 ops=b04547bd43c4 map=112fb4874911
+t=4 ops=b04547bd43c4 map=112fb4874911
+t=8 ops=b04547bd43c4 map=112fb4874911
+t=12 ops=b04547bd43c4 map=112fb4874911
+ALL TESTS PASSED: 72 checks, 0 failures
+ALL TESTS PASSED
