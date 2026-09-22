@@ -23,8 +23,12 @@ corrompia silenciosamente `combine` (`get`/`lower_bound`) e `merge` (two-pointer
 **tornou inválida a A5-bis** (o pipeline real perdeu ~3,9M células). Correção +
 asserções `#ifndef NDEBUG` + teste C18 + validação in-run (`PHASE_VALIDATE=1`) em
 `6d1c86e`; análise completa, prova de corrupção, custo da correção e matriz de bind em
-`ordem/README.md`. A seção A5-bis abaixo está **superada**. As rotas (b)/(c) para o
-`position_build` seguem bloqueadas até um A/B same-session.
+`ordem/README.md`. A seção A5-bis abaixo está **superada**. **Veredito de tempo
+(same-session, `ordem/README.md` §8)**: com o A/B intercalado ABBA + canário, a Fase 1
+corrigida é **1,16× (global) / 1,26× (pareado) mais rápida** que o kernel pré-Fase 1
+no real @12t — a "regressão @6-12t" anterior era artefato de comparação entre sessões
+(retratada). As rotas (b)/(c) para o `position_build` seguem bloqueadas para decisão,
+agora com o embasamento de tempo same-session disponível.
 
 ## A5-bis — a Fase 1 medida no LHRR real (ALOI)
 

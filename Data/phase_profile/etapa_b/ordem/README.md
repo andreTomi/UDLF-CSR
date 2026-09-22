@@ -133,6 +133,50 @@ disponível é o da matriz de bind, sem-bind: HEAD 4 195,7 vs base 5 259,4 → 1
 mas confundido pela ordem de execução/warm-up); (c) os deltas por etapa grandes são
 robustos. Qualquer número da tese deve vir de A/B same-session ou de muitas sessões.
 
+## 8. VEREDITO FINAL — A/B same-session intercalado (`s1_ab/`)
+
+O A/B que o item (b) exigia foi executado conforme o desenho acordado: 6 blocos
+intercalados × 2 reps (**base → head → head → base → base → head**), mesma sessão,
+mesma janela de ~3 min, `taskset -c 0-11`, kernels compilados dos commits `86898d5`
+(base) e `4e57526` (head, com o fix de ordenação) — **ambos produzem o resultado
+correto** (nnz 5 248 535 / checksum 119 396 289 001.122040, idêntico entre si e ao
+pré-Fase 1). Canário de carga fixa antes/depois; probe de resfriamento (180 s ocioso).
+
+| bloco | kernel | ms (mediana das 2 reps) |
+|---|---|---|
+| 1 | base | 5 026,1 |
+| 2 | head | 3 671,5 |
+| 3 | head | 3 669,8 |
+| 4 | base | 4 247,5 |
+| 5 | base | 4 194,3 |
+| 6 | head | 3 487,6 |
+
+- **Global**: base 4 247,5 vs head 3 669,8 → **head/base = 1,16×**
+- **Pareado por posição** (cada head vs a média dos blocos base adjacentes):
+  **1,263 / 1,264 / 1,203 → mediana 1,26×**
+- **Canário** (w1, carga fixa, mesmo binário, antes/depois): 78,7 → 85,0 ms
+  (**+8,0%** de deriva na sessão — muito abaixo do efeito medido)
+- **Probe de throttle**: cold-base após 180 s ocioso = 4 392,7 ms (**+3,4%** vs warm)
+  → **sem assinatura de throttling acumulado**; o padrão dos blocos base
+  (5 026 → 4 247 → 4 194) é **warm-up** (melhora com o tempo), não degradação.
+
+**Conclusão**: no pipeline LHRR real (ALOI, L=400, T=1), **a Fase 1 corrigida é
+~1,2-1,3× mais rápida que o kernel pré-Fase 1 @12t**. A "regressão @6-12t" (0,85×)
+da seção 4 era **arte-fato de comparação entre sessões** — exatamente o que o caveat
+da seção 7 alertava, e que eu, incorretamente, apresentei como conclusão. Retração
+registrada. A leitura correta e final:
+
+- Fase 1 corrigida: **mais rápida no real @12t (1,2-1,3×), com pico de memória
+  semelhante (~4,0 GB vs 4,3 GB)**;
+- o gargalo dominante continua sendo o `position_build` no caminho global (Builder
+  v2 / rota (c)), agora com o custo do builder global **e** o do fragmento medidos
+  na mesma sessão (2,1× por entrada a favor do fragmento).
+
+Agora sim os números de tempo do pipeline real estão aptos a embasar a decisão
+(b) vs (c) — embora a decisão permaneça motivada pela arquitetura (um contrato de
+emissão único), não pelo tempo.
+
+
 ## Arquivos
 
 `prefix_fail.txt`/`postfix_pass.txt` (C18) · `val_pre_aloi.txt`/`val_post_aloi.txt`

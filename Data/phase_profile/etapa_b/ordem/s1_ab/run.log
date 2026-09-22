@@ -1,0 +1,10 @@
+[14:10:49] blk1=base done
+[14:10:57] blk2=head done
+[14:11:05] blk3=head done
+[14:11:13] blk4=base done
+[14:11:22] blk5=base done
+[14:11:29] blk6=head done
+canary done
+=== cooldown 180s, then base run again (throttle probe) ===
+cold-base done
+ALL DONE
