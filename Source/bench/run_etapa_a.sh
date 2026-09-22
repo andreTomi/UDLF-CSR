@@ -53,9 +53,12 @@ stage_wanted() { case " $STAGES " in *" $1 "*) return 0;; *) return 1;; esac; }
 
 if stage_wanted build; then
   echo "=== Building drivers"
-  g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/bench/bench_phase.cpp -o /tmp/bench_a_base -ltbb || exit 1
-  g++ -std=gnu++2b -O2 -fopenmp -DPHASE_PROFILE -I Source/src Source/bench/bench_phase.cpp -o /tmp/bench_a_s1 -ltbb || exit 1
-  g++ -std=gnu++2b -O2 -fopenmp -DPHASE_PROFILE -DPHASE_PROFILE_ROW_SAMPLE=8 -I Source/src Source/bench/bench_phase.cpp -o /tmp/bench_a_s8 -ltbb || exit 1
+  # -DNDEBUG: the kernel carries #ifndef NDEBUG order assertions (ordem item);
+  # the release kernel is built with NDEBUG (Source/Makefile), so the timed
+  # captures must be too -- the tests keep the asserts on instead.
+  g++ -std=gnu++2b -O2 -fopenmp -DNDEBUG -I Source/src Source/bench/bench_phase.cpp -o /tmp/bench_a_base -ltbb || exit 1
+  g++ -std=gnu++2b -O2 -fopenmp -DNDEBUG -DPHASE_PROFILE -I Source/src Source/bench/bench_phase.cpp -o /tmp/bench_a_s1 -ltbb || exit 1
+  g++ -std=gnu++2b -O2 -fopenmp -DNDEBUG -DPHASE_PROFILE -DPHASE_PROFILE_ROW_SAMPLE=8 -I Source/src Source/bench/bench_phase.cpp -o /tmp/bench_a_s8 -ltbb || exit 1
 fi
 
 {

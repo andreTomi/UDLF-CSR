@@ -232,6 +232,39 @@ static double checksum(const M& m) {
 }
 
 // ---------------------------------------------------------------------------
+// Ordem: raw-order validation of pipeline outputs. Enabled with
+// PHASE_VALIDATE=1; O(nnz) per call, so use it on dedicated validation
+// captures, not on timed runs. Mirrors test_csr_ops.cpp csr_well_formed():
+// get() is lower_bound and merge() is a two-pointer, so a row whose columns
+// are not strictly increasing silently corrupts the consumers.
+// ---------------------------------------------------------------------------
+static int g_validate = 0;
+
+static bool csr_cols_ascending(const M& m, const char** why) {
+    size_t total = 0;
+    for (idx_t r = 0; r < m.rows(); ++r) {
+        total += (size_t)m.row_nnz(r);
+        idx_t prev = 0;
+        bool first = true, ok = true;
+        m.for_each_in_row(r, [&](idx_t c, float) {
+            if (!first && c <= prev) ok = false;
+            prev = c;
+            first = false;
+        });
+        if (!ok) { *why = "columns not strictly increasing in a row"; return false; }
+    }
+    if (total != m.nnz()) { *why = "row_ptr_ total != nnz()"; return false; }
+    return true;
+}
+
+static void validate_wf(const M& m, const char* what) {
+    const char* why = "";
+    bool ok = csr_cols_ascending(m, &why);
+    std::printf("VALIDATE,%s,%s,%s\n", what, ok ? "ok" : "FAIL", why);
+    std::fflush(stdout);
+}
+
+// ---------------------------------------------------------------------------
 // A0/A5: real-data support (rkLists text -> u32 binary -> W / H matrices).
 //
 // The text parser mirrors VirtualArray::assignFromTextFile + the methods: a
@@ -527,15 +560,19 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
             { double a = now_ms();
               S = std::make_unique<M>(M::multiply_and_prune(*H, *HT, limit));
               drv.add("mult_S", now_ms() - a); }
+            if (g_validate) validate_wf(*S, "S");
             { double a = now_ms();
               Srev = std::make_unique<M>(M::multiply_and_prune(*HT, *H, limit));
               drv.add("mult_Srev", now_ms() - a); }
+            if (g_validate) validate_wf(*Srev, "Srev");
             { double a = now_ms();
               Stot = std::make_unique<M>(M::combine(*S, *Srev));
               drv.add("combine_S_total", now_ms() - a); }
+            if (g_validate) validate_wf(*Stot, "Stot");
             { double a = now_ms();
               result = M::combine(*MM, *Stot);
               drv.add("combine_main", now_ms() - a); }
+            if (g_validate) validate_wf(result, "result");
             { double a = now_ms();
               update_ranked_lists(result, rk, N, L);
               drv.add("update_ranked_lists", now_ms() - a); }
@@ -567,6 +604,7 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
 
 int main(int argc, char** argv) {
     g_affinity_at_entry = affinity_mask();
+    g_validate = (env_or("PHASE_VALIDATE", "0") == std::string("1")) ? 1 : 0;
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: %s <mult|pipe> <w1|w2|w3> [reps=7]\n"
@@ -694,6 +732,7 @@ int main(int argc, char** argv) {
             double a = now_ms();
             result = M::multiply_and_prune(A, B, W->limit);
             drv.add("mult_call", now_ms() - a);
+            if (g_validate) validate_wf(result, "mult_result");
         }
         double ms = now_ms() - t0;
         // Freeing the previous rep's result used to be inside the timed window
