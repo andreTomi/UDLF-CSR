@@ -12,7 +12,34 @@ Fases 2, 4 e 5 ficaram fora de escopo por decisão (ver README da Etapa A).
 
 Detalhe da investigação, método, controle de ruído e tabelas completas:
 `fase3/README.md`. Brutos: `ab_raw/` (19 arquivos) e `ab_raw/summary.txt`.
-Fase 1: `fase1/README.md`.
+Fase 1: `fase1/README.md`. **S1-bis** (número final da Fase 1, política de descarte
+permanente): `ordem/s1_bis/README.md`. **S2.1** (Builder v2): `s2/README.md`.
+
+## S2.1 — Builder v2: construtor único, ordem de emissão livre (`s2/README.md`)
+
+`build_from_partial_results` passou a ser o **Builder v2** (histograma por thread →
+cursores → scatter → sort por linha → compactação serial); o construtor antigo virou
+`build_from_partial_results_legacy`, mantido **só** como referência de A/B. Os métodos
+(`LHRRSparse`, `CprrSparse`) **não** mudaram — o caso de exceção (`t2->row = neighbor`,
+fora da faixa da thread) deixou de ser exceção.
+
+| gate (ALOI LHRR, build da matriz de posição) | resultado |
+|---|---|
+| `tmp_bytes` (`MEMBUILD`) | 921 600 000 → **0** (sem `temp_triplets_`, sem TBB, sem bind) |
+| ΔHWM do build | 1 939 → **441 MB (−77%)**; `bytes_per_triplet` 35,3 → **8,0** |
+| nnz(posição) | **40 215 456** = previsão independente do modelo de duplicatas (pré-check falsificável) ✅ |
+| dump canônico sintético (12 combos builder×sort×threads) | **md5 idêntico** |
+| dump canônico real `MM` (40,2M entradas) | **bit-idêntico** |
+| `H` / `result` | colunas e nnz idênticos; valores diferem **≤ 7e-7 relativo** (soma de células com ≥3 duplicatas — ordem não especificada nos dois construtores) |
+| `test_csr_ops` (96 checks, C19-C22) e `test_multiply_and_prune` | PASSAM em T=1/2/4/8/12, com asserts e com `-DNDEBUG`; md5 estável entre T |
+| `PHASE_VALIDATE=1` em `S`/`Srev`/`Stot`/`result` | ✅ nos dois construtores |
+
+Knobs do driver: `PHASE_BUILDER={v2,legacy}`, `PHASE_ROWSORT={idx,zip}`,
+`PHASE_DUMP_DIR=<dir>`; comparador `Source/bench/dump_cmp.py`; matriz de equivalência
+`Source/bench/s2_dump_matrix.sh`. Evidência bruta em `s2/`.
+**Pendente (S2.2):** A/B same-session formal (ABBA + canário) de tempo e ΔHWM por fase,
+com a decomposição do ΔHWM e do resíduo (indicação preliminar, T=4, 1 rep, mesma
+sessão: **3 252 vs 5 111 ms** e **3 939 vs 8 279 ms** em duas sessões).
 
 ## Bug de ordenação do Dense (corrigido — lê-se primeiro)
 

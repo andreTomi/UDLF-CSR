@@ -498,10 +498,197 @@ int main() {
         }
     }
 
-    std::printf("\n%s: %d checks, %d failures\n",
-                g_failures ? "FAILED" : "ALL TESTS PASSED", g_checks, g_failures);
-    return g_failures ? 1 : 0;
+        // -------------------------------------------------------------------
+        // C19-C22: builder v2 (S2.1). The contract under test: any emission
+        // order, any thread (rows may leave the emitting thread's range),
+        // is_set semantics, and a per-row sort that keeps (col, value) paired.
+        // -------------------------------------------------------------------
+        {
+            // C19: is_set == true replaces, is_set == false sums, with three
+            // records collapsing into one cell.
+            std::vector<std::tuple<idx_t, idx_t, float, bool>> in = {
+                {0, 1, 2.0f, false}, {0, 1, 5.0f, true},   // replace -> 5
+                {0, 2, 1.0f, false}, {0, 2, 2.0f, false}, // sum -> 3
+                {0, 3, 4.0f, true},  {0, 3, 1.0f, false}}; // replace then sum -> 5
+            M A = build_csr_flags(1, 8, in);
+            CHECK(A.nnz() == 3, "C19: three cells after coalescing");
+            CHECK(A.get(0, 1) == 5.0f, "C19: is_set=true replaces the value");
+            CHECK(A.get(0, 2) == 3.0f, "C19: is_set=false sums");
+            CHECK(A.get(0, 3) == 5.0f,
+                  "C19: replace then sum in record order (4 -> +1)");
+            CHECK(csr_well_formed(A, &why), "C19: CSR invariants hold");
+            NOTE("C19: v2 carries the is_set flag through the scatter; the "
+                 "fragment-CSR path ignores it (documented gap).");
+        }
+
+        {
+            // C20: the same record set, but distributed over threads in a
+            // different way (and with duplicates), must give the SAME matrix
+            // from both builders -- the real equivalence gate, since the driver
+            // checksum cannot see intra-row order or value swaps.
+            std::mt19937 rng(7);
+            std::vector<std::tuple<idx_t, idx_t, float, bool>> in;
+            for (idx_t r = 0; r < 64; ++r) {
+                for (int j = 0; j < 12; ++j) {
+                    idx_t c = (idx_t)(rng() % 40);
+                    float v = 0.25f * (float)(1 + (rng() % 8));
+                    in.emplace_back(r, c, v, false);
+                }
+                // a guaranteed duplicate triple (order-sensitive sum)
+                in.emplace_back(r, 7, 0.25f, false);
+                in.emplace_back(r, 7, 0.5f, false);
+                in.emplace_back(r, 7, 1.0f, false);
+            }
+            M v2 = build_csr_flags(64, 40, in);
+
+            // Same content through the legacy builder (private-but-public for
+            // the A/B): emit every record into thread 0's allocator, i.e. rows
+            // far outside its range -> exercises the global path.
+            M lg(64, 40);
+            {
+                int nt = omp_get_max_threads();
+                std::vector<M::PaddedAllocator> allocators;
+                allocators.reserve(nt);
+                for (int i = 0; i < nt; ++i) allocators.emplace_back();
+                std::vector<std::pair<idx_t, idx_t>> ranges(nt);
+                size_t chunk = (64 + nt - 1) / nt;
+                for (int t = 0; t < nt; ++t)
+                    ranges[t] = {(idx_t)std::min<size_t>(64, t * chunk),
+                                 (idx_t)std::min<size_t>(64, (t + 1) * chunk)};
+                for (const auto& t : in) {
+                    Triplet* tr = allocators[0].ptr->allocate();
+                    tr->row = std::get<0>(t); tr->col = std::get<1>(t);
+                    tr->value = std::get<2>(t); tr->is_set = std::get<3>(t);
+                }
+                M::build_from_partial_results_legacy(lg, allocators, ranges);
+            }
+
+            CHECK(csr_well_formed(v2, &why), "C20: v2 output well formed");
+            CHECK(csr_well_formed(lg, &why), "C20: legacy output well formed");
+            CHECK(v2.nnz() == lg.nnz(), "C20: same nnz");
+            auto ma = to_map(v2), mb = to_map(lg);
+            bool same_keys = ma.size() == mb.size();
+            for (const auto& kv : ma)
+                if (!mb.count(kv.first)) same_keys = false;
+            CHECK(same_keys, "C20: same (row,col) support");
+            // Cells with >= 3 duplicate records may differ in the last bits
+            // (summation order is unspecified in BOTH paths); everything else
+            // must be exact. Reported through a relative tolerance.
+            int inexact = 0;
+            float worst = 0.0f;
+            for (const auto& kv : ma) {
+                float a = kv.second, b = mb.at(kv.first);
+                float d = std::fabs(a - b);
+                float scale = std::fmax(1.0f, std::fmax(std::fabs(a), std::fabs(b)));
+                if (d / scale > 1e-6f) { ++inexact; worst = std::fmax(worst, d / scale); }
+            }
+            CHECK(inexact == 0, "C20: v2 == legacy within 1e-6 relative");
+            if (inexact) std::printf("  [fail] C20: %d cells inexact, worst "
+                                     "rel %.3e\n", inexact, (double)worst);
+        }
+
+        {
+            // C21: the LHRR exception case -- a thread emits records for rows
+            // OUTSIDE its range (t2->row = neighbor in the symmetric build).
+            // v2 must not depend on the range invariant at all; the
+            // fragment-CSR path would reject this stream.
+            std::vector<std::tuple<idx_t, idx_t, float, bool>> in;
+            for (idx_t r = 0; r < 32; ++r)
+                for (int j = 0; j < 6; ++j)
+                    in.emplace_back(r, (idx_t)((r * 7 + j * 3) % 24), 0.5f, false);
+            M inrange = build_csr_flags(32, 24, in);
+
+            M shuffled(32, 24);
+            {
+                int nt = omp_get_max_threads();
+                std::vector<M::PaddedAllocator> allocators;
+                allocators.reserve(nt);
+                for (int i = 0; i < nt; ++i) allocators.emplace_back();
+                std::vector<std::pair<idx_t, idx_t>> ranges(nt);
+                size_t chunk = (32 + nt - 1) / nt;
+                for (int t = 0; t < nt; ++t)
+                    ranges[t] = {(idx_t)std::min<size_t>(32, t * chunk),
+                                 (idx_t)std::min<size_t>(32, (t + 1) * chunk)};
+                int k = 0;
+                for (const auto& t : in) {
+                    int tid = (int)((k++ * 5 + 3) % nt);   // wrong owner on purpose
+                    Triplet* tr = allocators[tid].ptr->allocate();
+                    tr->row = std::get<0>(t); tr->col = std::get<1>(t);
+                    tr->value = std::get<2>(t); tr->is_set = std::get<3>(t);
+                }
+                M::build_from_partial_results(shuffled, allocators, ranges);
+            }
+            CHECK(csr_well_formed(shuffled, &why),
+                  "C21: out-of-range emission is well formed");
+            CHECK(shuffled.nnz() == inrange.nnz(), "C21: same nnz as in-range");
+            CHECK(to_map(shuffled) == to_map(inrange),
+                  "C21: identical support and values vs the in-range build");
+        }
+
+        {
+            // C22a: adversarial pairing test for the per-row sort. Each value
+            // carries a fingerprint of its column, so a sort that desyncs the
+            // two arrays -- or is off by one -- is caught even when the columns
+            // still come out ascending: exactly the silent class C18 exposed.
+            auto fp = [](idx_t c) { return (float)((c % 61) + 1) * 0.25f; };
+            for (int mode = 0; mode < 2; ++mode) {
+                M::set_v2_row_sort_mode(mode);
+                std::vector<std::tuple<idx_t, idx_t, float, bool>> in;
+                for (idx_t r = 0; r < 8; ++r)
+                    for (int j = 0; j < 300; ++j) {    // > 16 -> introsort paths
+                        idx_t c = (idx_t)((r * 37 + j * 17) % 300);
+                        in.emplace_back(r, c, fp(c), false);
+                    }
+                M A = build_csr_flags(8, 300, in);
+                int bad_pair = 0, bad_order = 0;
+                for (idx_t r = 0; r < A.rows(); ++r) {
+                    idx_t prev = 0;
+                    bool first = true;
+                    A.for_each_in_row(r, [&](idx_t c, float v) {
+                        if (v != fp(c)) ++bad_pair;
+                        if (!first && c <= prev) ++bad_order;
+                        prev = c;
+                        first = false;
+                    });
+                }
+                CHECK(bad_pair == 0,
+                      mode ? "C22a: zip sort keeps (col,value) paired"
+                           : "C22a: idx sort keeps (col,value) paired");
+                CHECK(bad_order == 0, mode ? "C22a: zip sort columns ascending"
+                                           : "C22a: idx sort columns ascending");
+                if (bad_pair)
+                    std::printf("  [fail] C22a mode=%d: %d unpaired entries\n",
+                                mode, bad_pair);
+            }
+            M::set_v2_row_sort_mode(0);
+            NOTE("C22a: RandomAccessIterator conformance of the zip iterator is "
+                 "covered implicitly -- std::sort only instantiates for a "
+                 "conforming iterator, and the pairing check above is the "
+                 "behavioural half.");
+        }
+
+        {
+            // C22b: equal columns (many duplicates per cell) under both sort
+            // strategies -> same matrix, so equal keys cannot make the two
+            // strategies diverge.
+            std::vector<std::tuple<idx_t, idx_t, float, bool>> in;
+            for (idx_t r = 0; r < 16; ++r)
+                for (int j = 0; j < 40; ++j)
+                    in.emplace_back(r, (idx_t)(j % 5), 0.25f, false);
+            M::set_v2_row_sort_mode(0);
+            M a0 = build_csr_flags(16, 5, in);
+            M::set_v2_row_sort_mode(1);
+            M a1 = build_csr_flags(16, 5, in);
+            M::set_v2_row_sort_mode(0);
+            CHECK(a0.nnz() == 80, "C22b: 40 records per row collapse to 5 cells");
+            CHECK(to_map(a0) == to_map(a1), "C22b: strategies agree exactly");
+        }
+
+        std::printf("\n%s: %d checks, %d failures\n",
+                    g_failures ? "FAILED" : "ALL TESTS PASSED", g_checks, g_failures);
+        return g_failures ? 1 : 0;
 }
+
 
         M B = build_csr(4, 3, {{0, 0, 1.0f}});
         bool threw = false;

@@ -1,0 +1,14 @@
+== workload w1: builder x rowsort x threads -> md5(ab.bin, result.bin)
+w1_v2_idx_t1                           b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_v2_idx_t4                           b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_v2_idx_t12                          b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_v2_zip_t1                           b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_v2_zip_t4                           b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_v2_zip_t12                          b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_legacy_idx_t1                       b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_legacy_idx_t4                       b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_legacy_idx_t12                      b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_legacy_zip_t1                       b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_legacy_zip_t4                       b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+w1_legacy_zip_t12                      b38ad4da452f2afc1595cb4f0e53b463 397515becc41d459df247e82d01c0783 2500000 
+(columns: ab.bin md5 | result.bin md5 | nnz)

@@ -173,6 +173,12 @@ static const Workload WORKLOADS[] = {
 };
 
 // Build a CSR matrix through the production Row-Split API.
+// (build_into / dump_matrix are defined after validate_wf; forward declaration
+// so this earlier call site can use the A/B switch + dump.)
+static void build_into(M& m, std::vector<M::PaddedAllocator>& allocators,
+                       std::vector<std::pair<idx_t, idx_t>>& ranges,
+                       const char* tag);
+
 static M build_csr(idx_t rows, idx_t cols,
                    const std::vector<std::tuple<idx_t, idx_t, float>>& in) {
     M m(rows, cols);
@@ -200,7 +206,7 @@ static M build_csr(idx_t rows, idx_t cols,
             }
         }
     }
-    M::build_from_partial_results(m, allocators, ranges);
+    build_into(m, allocators, ranges, "ab");
     return m;
 }
 
@@ -266,6 +272,71 @@ static void validate_wf(const M& m, const char* what) {
     bool ok = csr_cols_ascending(m, &why);
     std::printf("VALIDATE,%s,%s,%s\n", what, ok ? "ok" : "FAIL", why);
     std::fflush(stdout);
+}
+
+// ---------------------------------------------------------------------------
+// S2.1 A/B knobs and the canonical dump.
+//   PHASE_BUILDER=legacy|v2   builder used by every driver-side build
+//   PHASE_ROWSORT=idx|zip     v2 per-row sort strategy
+//   PHASE_DUMP_DIR=<dir>      write canonical dumps of every driver-side build
+//                             (rep 0 only)
+//
+// Why the dump exists: the driver `checksum` is a weak invariant (a double
+// accumulation ordered by column: it cannot see intra-row order or a value
+// swap). The canonical dump is row-major with the raw value bits, so md5sum
+// over it is the strong equivalence check the S2 gate requires.
+// ---------------------------------------------------------------------------
+static int g_use_legacy = 0;
+static std::string g_dump_dir;
+static int g_dump_now = 0;
+
+static void dump_matrix(const M& m, const char* tag) {
+    if (!g_dump_now || g_dump_dir.empty()) return;
+    std::string path = g_dump_dir;
+    path += "/";
+    path += tag;
+    path += ".bin";
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) {
+        std::fprintf(stderr, "dump: cannot open %s\n", path.c_str());
+        return;
+    }
+    uint64_t hdr[3] = {(uint64_t)m.rows(), (uint64_t)m.cols(), (uint64_t)m.nnz()};
+    std::fwrite(hdr, sizeof(uint64_t), 3, f);
+    // Self-describing layout, so an external reader (dump_cmp.py) can parse it:
+    //   rows, cols, nnz (u64) | row_ptr rows+1 (u64) | per row: col u32, val u32
+    std::vector<uint64_t> rp(m.rows() + 1);
+    uint64_t acc = 0;
+    for (idx_t r = 0; r < m.rows(); ++r) {
+        rp[r] = acc;
+        acc += (uint64_t)m.row_nnz(r);
+    }
+    rp[m.rows()] = acc;
+    std::fwrite(rp.data(), sizeof(uint64_t), rp.size(), f);
+    std::vector<uint32_t> buf;                 // 2 entries per nnz
+    for (idx_t r = 0; r < m.rows(); ++r) {
+        buf.clear();
+        m.for_each_in_row(r, [&](idx_t c, float v) {
+            uint32_t cb = (uint32_t)c;
+            uint32_t vb;
+            std::memcpy(&vb, &v, sizeof(vb));
+            buf.push_back(cb);
+            buf.push_back(vb);
+        });
+        if (!buf.empty()) std::fwrite(buf.data(), sizeof(uint32_t), buf.size(), f);
+    }
+    std::fclose(f);
+    std::printf("DUMP,%s,nnz=%zu\n", tag, m.nnz());
+}
+
+// Single entry point for the driver's own builds, so neither the A/B switch nor
+// the dump can be forgotten at a call site.
+static void build_into(M& m, std::vector<M::PaddedAllocator>& allocators,
+                       std::vector<std::pair<idx_t, idx_t>>& ranges,
+                       const char* tag) {
+    if (g_use_legacy) M::build_from_partial_results_legacy(m, allocators, ranges);
+    else              M::build_from_partial_results(m, allocators, ranges);
+    dump_matrix(m, tag);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +459,7 @@ static M build_w_from_rk(const std::vector<uint32_t>& rk, idx_t N, idx_t L, int 
             }
         }
     }
-    M::build_from_partial_results(W, allocators, ranges);
+    build_into(W, allocators, ranges, "W");
     return W;
 }
 
@@ -422,7 +493,7 @@ static M build_position_from_rk(const std::vector<uint32_t>& rk, idx_t N, idx_t 
             }
         }
     }
-    M::build_from_partial_results(MM, allocators, ranges);
+    build_into(MM, allocators, ranges, "MM");
     return MM;
 }
 
@@ -459,7 +530,7 @@ static M build_h_from_rk(const std::vector<uint32_t>& rk, idx_t N, idx_t L, int 
             }
         }
     }
-    M::build_from_partial_results(H, allocators, ranges);
+    build_into(H, allocators, ranges, "H");
     return H;
 }
 
@@ -523,6 +594,7 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
 #ifdef PHASE_PROFILE
         phprof::reset();
 #endif
+        g_dump_now = (rep == 0 && !g_dump_dir.empty()) ? 1 : 0;
         double tr = now_ms();
         std::copy(rk0.begin(), rk0.end(), rk.begin());
         drv.add("restore_rk_state", now_ms() - tr);
@@ -535,6 +607,7 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
             { double a = now_ms();
               Wm = std::make_unique<M>(build_w_from_rk(rk, N, L, k));
               drv.add("w_build", now_ms() - a); }
+            if (g_dump_now) dump_matrix(*Wm, "W");
             { double a = now_ms();
               WT = std::make_unique<M>(Wm->transpose());
               drv.add("w_transpose", now_ms() - a); }
@@ -548,6 +621,7 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
               result = M::merge(*MA, *MB,
                                 [](float x, float y) { return x + y; });
               drv.add("merge", now_ms() - a); }
+            if (g_dump_now) dump_matrix(result, "result");
             { double a = now_ms();
               MA.reset(); MB.reset(); WT.reset(); Wm.reset();
               drv.add("iter_free", now_ms() - a); }
@@ -557,12 +631,14 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
             { double a = now_ms();
               MM = std::make_unique<M>(build_position_from_rk(rk, N, L));
               drv.add("position_build", now_ms() - a); }
+            if (g_dump_now) dump_matrix(*MM, "MM");
             { double a = now_ms();
               update_ranked_lists(*MM, rk, N, L);
               drv.add("update_ranked_lists_pos", now_ms() - a); }
             { double a = now_ms();
               H = std::make_unique<M>(build_h_from_rk(rk, N, L, k));
               drv.add("H_build", now_ms() - a); }
+            if (g_dump_now) dump_matrix(*H, "H");
             { double a = now_ms();
               HT = std::make_unique<M>(H->transpose());
               drv.add("H_transpose", now_ms() - a); }
@@ -581,6 +657,7 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
             { double a = now_ms();
               result = M::combine(*MM, *Stot);
               drv.add("combine_main", now_ms() - a); }
+            if (g_dump_now) dump_matrix(result, "result");
             if (g_validate) validate_wf(result, "result");
             { double a = now_ms();
               update_ranked_lists(result, rk, N, L);
@@ -624,6 +701,17 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
 int main(int argc, char** argv) {
     g_affinity_at_entry = affinity_mask();
     g_validate = (env_or("PHASE_VALIDATE", "0") == std::string("1")) ? 1 : 0;
+    // S2.1 A/B knobs (see the dump_matrix comment block).
+    g_use_legacy = (env_or("PHASE_BUILDER", "v2") == std::string("legacy")) ? 1 : 0;
+    {
+        std::string rs = env_or("PHASE_ROWSORT", "idx");
+        M::set_v2_row_sort_mode(rs == std::string("zip") ? 1 : 0);
+    }
+    g_dump_dir = env_or("PHASE_DUMP_DIR", "");
+    std::printf("ABKNOBS,builder=%s,rowsort=%s,dumpdir=%s,validate=%d\n",
+                g_use_legacy ? "legacy" : "v2",
+                M::v2_row_sort_mode() ? "zip" : "idx",
+                g_dump_dir.empty() ? "(none)" : g_dump_dir.c_str(), g_validate);
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: %s <mult|pipe> <w1|w2|w3> [reps=7]\n"
@@ -700,6 +788,9 @@ int main(int argc, char** argv) {
 
     int reps = (mode == "params" || argc < 4) ? 7 : std::atoi(argv[3]);
     if (reps < 1) reps = 1;
+    // Synthetic workloads build A/B/Wsq before the rep loop, so the dump is
+    // armed here; the first rep then dumps `result` and disarms it.
+    g_dump_now = g_dump_dir.empty() ? 0 : 1;
 
     std::mt19937 rngA(42), rngB(1000 + (int)W->cols_b);
     M A = random_csr(W->rows_a, W->inner, W->ra, rngA);
@@ -761,6 +852,7 @@ int main(int argc, char** argv) {
             prev.reset();
             drv.add("prev_result_dtor", now_ms() - a);
         }
+        if (g_dump_now) { dump_matrix(result, "result"); g_dump_now = 0; }
         std::printf("REP,%d,%.3f,%zu,%.6f\n", rep, ms, result.nnz(), checksum(result));
         std::fflush(stdout);
 #ifdef PHASE_PROFILE

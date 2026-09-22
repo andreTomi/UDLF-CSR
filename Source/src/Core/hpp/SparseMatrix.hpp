@@ -93,6 +93,9 @@ enum : int {
     P_MERGE_CALL,      // call-level: whole merge
     P_COMBINE_CALL,    // call-level: whole combine
     P_BUILD_CALL,      // call-level: whole build_from_partial_results
+    // ---- S2: builder v2 sub-phases ----
+    P_V4_ROWSORT,      // v2 build: per-row sort by column + coalesce (parallel)
+    P_V5_COMPACT,      // v2 build: serial in-place compaction move (row shifts)
     P_MAX
 };
 constexpr int MAX_THREADS = 128;
@@ -346,7 +349,8 @@ inline void report(FILE* out) {
         "MULT_TOTAL",
         "ACC_PREP", "B3_SETUP", "B3_RED", "B3_PREFIX", "BUILD_FINISH",
         "ALLOC_SETUP", "ALLOC_TEARDOWN", "MP_CALL", "MERGE_CALL",
-        "COMBINE_CALL", "BUILD_CALL"
+        "COMBINE_CALL", "BUILD_CALL",
+        "V4_ROWSORT", "V5_COMPACT"
     };
     const ThreadCtr* C = counters();
     for (int p = 0; p < P_MAX; ++p) {
@@ -662,7 +666,118 @@ public:
     }
 
 
-    static void build_from_partial_results(
+    // =========================================================================
+    // Builder v2 (S2.1) -- one order-agnostic builder, no global temp buffer.
+    //
+    // CONTRACT (what any caller -- present or future method -- may rely on):
+    //   * Emission order is FREE: any thread, any row, any column order, and
+    //     `row` may fall outside the emitting thread's row range (the LHRR
+    //     symmetric mainMatrix case). The producer needs no invariants.
+    //   * Output: row_ptr_ monotone from 0, columns strictly increasing inside
+    //     each row (get() is a lower_bound, merge() is a two-pointer).
+    //   * Duplicate (row,col): is_set == false sums, is_set == true replaces,
+    //     processed in record order (thread id ascending, then emission order).
+    //   * Memory: NO copy of the emitted stream. The legacy builder allocated
+    //     16 B per emitted record (921.6 MB on the ALOI position build); v2
+    //     needs T*rows*4 B of cursors plus the CSR output itself.
+    //   * Determinism: bit-identical for a fixed thread count. Across thread
+    //     counts the summation order of a cell with >= 3 duplicate records is
+    //     unspecified -- the legacy path was equally unspecified (std::sort is
+    //     unstable and par_unseq is not deterministic).
+    //
+    // Phases: V1 histogram (P_B3_HIST) -> V2 prefix + per-thread cursors
+    // (P_B3_PREFIX) -> V3 scatter (P_B5_FILL) -> V4 per-row sort + coalesce
+    // (P_V4_ROWSORT) -> V5 compaction (P_V5_COMPACT, skipped when nothing
+    // shrank).
+    //
+    // V5 is SERIAL BY DESIGN. With new_ptr[r] <= old_ptr[r] (prefix of counts
+    // that only shrink), the destination range of row r can overlap the SOURCE
+    // range of earlier rows, so a parallel per-row memmove is a data race;
+    // ascending serial order is safe because every earlier row has already been
+    // read and written when row r moves, and new_ptr[r+1] <= old_ptr[r+1] means
+    // the move never touches a row that is still pending. Known debt: this is a
+    // new serial step, O(nnz); re-evaluate if a future dataset pushes the
+    // dedupe fraction or nnz up by orders of magnitude.
+    // =========================================================================
+
+    // Row-sort strategy inside v2 (measured in the S2 A/B):
+    //   0 = index permutation + contiguous pair scratch (default)
+    //   1 = zip iterator: a single std::sort permutes both arrays in lockstep
+    inline static int v2_row_sort_mode_ = 0;
+
+public:
+    static void set_v2_row_sort_mode(int m) { v2_row_sort_mode_ = (m == 1) ? 1 : 0; }
+    static int v2_row_sort_mode() { return v2_row_sort_mode_; }
+
+private:
+    // Zip random-access iterator over (col_idx_, values_). The reference is a
+    // proxy that writes through to both arrays and converts to
+    // std::pair<index_type,T> so libstdc++'s introsort can move elements
+    // through its internal _ValueType. Used only when mode == 1; covered by
+    // the adversarial C22 pairing test.
+    struct RowZipRef {
+        index_type* c;
+        T* v;
+        RowZipRef(index_type* cc, T* vv) : c(cc), v(vv) {}
+        operator std::pair<index_type, T>() const {
+            return std::pair<index_type, T>(*c, *v);
+        }
+        RowZipRef& operator=(const RowZipRef& o) { *c = *o.c; *v = *o.v; return *this; }
+        RowZipRef& operator=(const std::pair<index_type, T>& o) {
+            *c = o.first; *v = o.second; return *this;
+        }
+        // std::iter_swap does an unqualified swap(*a, *b), and operator* yields
+        // a prvalue proxy, so std::swap (T&) is not viable. This ADL-visible
+        // overload takes the proxies by value and swaps the pointed-to slots,
+        // which is what lets libstdc++'s introsort move elements.
+        friend void swap(RowZipRef a, RowZipRef b) {
+            std::swap(*a.c, *b.c);
+            std::swap(*a.v, *b.v);
+        }
+    };
+    struct RowZipIt {
+        index_type* c;
+        T* v;
+        using iterator_category = std::random_access_iterator_tag;
+        using value_type = std::pair<index_type, T>;
+        using difference_type = std::ptrdiff_t;
+        using pointer = void;
+        using reference = RowZipRef;
+        RowZipRef operator*() const { return RowZipRef(c, v); }
+        RowZipRef operator[](difference_type n) const { return RowZipRef(c + n, v + n); }
+        RowZipIt& operator++() { ++c; ++v; return *this; }
+        RowZipIt operator++(int) { RowZipIt t = *this; ++c; ++v; return t; }
+        RowZipIt& operator--() { --c; --v; return *this; }
+        RowZipIt operator--(int) { RowZipIt t = *this; --c; --v; return t; }
+        RowZipIt& operator+=(difference_type n) { c += n; v += n; return *this; }
+        RowZipIt& operator-=(difference_type n) { c -= n; v -= n; return *this; }
+        RowZipIt operator+(difference_type n) const { return RowZipIt{c + n, v + n}; }
+        RowZipIt operator-(difference_type n) const { return RowZipIt{c - n, v - n}; }
+        difference_type operator-(const RowZipIt& o) const { return c - o.c; }
+        bool operator==(const RowZipIt& o) const { return c == o.c; }
+        bool operator!=(const RowZipIt& o) const { return c != o.c; }
+        bool operator<(const RowZipIt& o) const { return c < o.c; }
+    };
+    struct RowZipLess {
+        // libstdc++'s introsort compares a mix of *it (the proxy) and its
+        // internal _ValueType (std::pair) moved out of the range, so the
+        // comparator must accept both through the zcol() overload set.
+        template <typename A, typename B>
+        bool operator()(const A& a, const B& b) const {
+            return zcol(a) < zcol(b);
+        }
+    };
+    static index_type zcol(const RowZipRef& r) { return *r.c; }
+    static index_type zcol(const std::pair<index_type, T>& p) { return p.first; }
+
+    // =========================================================================
+    // LEGACY global-sort builder -- kept ONLY as the A/B reference for the S2
+    // comparison (temp_triplets_ copy + std::sort(par_unseq) + histogram fill).
+    // New code must call build_from_partial_results (the v2 builder below);
+    // this one is removable once the S2 A/B is closed.
+    // =========================================================================
+public:
+    static void build_from_partial_results_legacy(
         CSRMatrix& C, 
         std::vector<PaddedAllocator>& allocators,
         const std::vector<std::pair<size_type, size_type>>& row_ranges
@@ -784,6 +899,248 @@ public:
             phprof::mem_point("build_exit");
             phprof::mem_build(total_elements, tmp_bytes, out_bytes, alloc_bytes,
                               count_bytes, hwm_b0, hwm_a);
+            phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
+        }
+#endif
+    }
+
+public:
+    static void build_from_partial_results(
+        CSRMatrix& C, 
+        std::vector<PaddedAllocator>& allocators,
+        const std::vector<std::pair<size_type, size_type>>& row_ranges
+    ) {
+        if (C.finalized_) throw std::logic_error("Matrix finalized");
+        (void)row_ranges;   // scheduling hint only: v2 needs no range invariant
+#ifdef PHASE_PROFILE
+        uint64_t t0_bcall = 0; phprof::RUsageSnap r0_bcall;
+        size_t alloc_bytes = 0;
+        long hwm_b0 = -1;
+        phprof::serial_begin(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
+        for (int i = 0; i < (int)allocators.size(); ++i)
+            alloc_bytes += allocators[i].ptr->capacity_bytes();
+        {   long h = phprof::vmhwm_kb();
+            if (h > phprof::g().hwm_before_build_max)
+                phprof::g().hwm_before_build_max = h;
+            ++phprof::g().build_calls;
+        }
+        if (phprof::mem_enabled()) {
+            phprof::hwm_reset();               // peak rewind: measure THIS build
+            hwm_b0 = phprof::vmhwm_kb();
+            phprof::mem_point("buildV2_entry");
+        }
+#endif
+        const int NT = (int)allocators.size();
+        const size_t NR = C.rows_;
+
+        // ---- V1: per-thread row histogram + is_set detection ----------------
+#ifdef PHASE_PROFILE
+        phprof::RUsageSnap r0_h = phprof::rsnap();
+#endif
+        std::vector<size_type> cur((size_t)NT * NR, 0);
+        std::vector<char> any_set_t((size_t)NT, 0);
+        {
+            #pragma omp parallel
+            {
+                int tid = omp_get_thread_num();
+                if (tid < NT && allocators[tid].ptr->size() > 0) {
+                    size_type* mine = &cur[(size_t)tid * NR];
+                    char s = 0;
+                    allocators[tid].ptr->for_each([&](const Triplet& t) {
+                        mine[t.row]++;
+                        s |= (char)t.is_set;
+                    });
+                    any_set_t[(size_t)tid] = s;
+                }
+            }
+        }
+#ifdef PHASE_PROFILE
+        phprof::ru_end(phprof::P_B3_HIST, r0_h);
+        phprof::mem_point("after_V1_hist");
+#endif
+        bool any_set = false;
+        for (int t = 0; t < NT; ++t) any_set |= (any_set_t[(size_t)t] != 0);
+
+        // ---- V2: row_ptr_ prefix + in-place histogram -> cursor transform ---
+        // One serial pass: the row totals give row_ptr_, and the same pass
+        // rewrites each thread's count into its absolute cursor in that row.
+#ifdef PHASE_PROFILE
+        uint64_t t0_pre; phprof::RUsageSnap r0_pre;
+        phprof::serial_begin(phprof::P_B3_PREFIX, t0_pre, r0_pre);
+#endif
+        size_t total = 0;
+        for (size_t r = 0; r < NR; ++r) {
+            C.row_ptr_[r] = (index_type)total;
+            size_t off = total;
+            for (int t = 0; t < NT; ++t) {
+                size_type c = cur[(size_t)t * NR + r];
+                cur[(size_t)t * NR + r] = (size_type)off;
+                off += c;
+            }
+            total = off;
+        }
+        C.row_ptr_[NR] = (index_type)total;
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_B3_PREFIX, t0_pre, r0_pre);
+#endif
+        std::cout << "  [BuildV2] Total triplets: " << total << std::endl;
+
+        // ---- V3: scatter each thread's own stream into its cursor slots -----
+        // Order inside a row = (thread id, emission order): deterministic, and
+        // it is the same summation order the legacy path had before its sort.
+        C.values_.resize(total);
+        C.col_idx_.resize(total);
+        std::vector<uint8_t> flags;
+        if (any_set) flags.assign(total, 0);
+#ifdef PHASE_PROFILE
+        phprof::RUsageSnap r0_sc = phprof::rsnap();
+#endif
+        {
+            #pragma omp parallel
+            {
+                int tid = omp_get_thread_num();
+                if (tid < NT && allocators[tid].ptr->size() > 0) {
+                    size_type* mine = &cur[(size_t)tid * NR];
+                    uint8_t* fl = any_set ? flags.data() : nullptr;
+                    allocators[tid].ptr->for_each([&](const Triplet& t) {
+                        size_type pos = mine[t.row]++;
+                        C.values_[pos] = t.value;
+                        C.col_idx_[pos] = t.col;
+                        if (fl) fl[pos] = (uint8_t)(t.is_set ? 1 : 0);
+                    });
+                }
+            }
+        }
+#ifdef PHASE_PROFILE
+        phprof::ru_end(phprof::P_B5_FILL, r0_sc);
+        phprof::mem_point("after_V3_scatter");
+#endif
+        // ---- V4: per-row sort by column + coalesce (parallel over rows) -----
+        std::vector<size_type> new_cnt(NR, 0);
+        size_t kept_total = 0;
+#ifdef PHASE_PROFILE
+        phprof::RUsageSnap r0_rs = phprof::rsnap();
+#endif
+        {
+            #pragma omp parallel reduction(+:kept_total)
+            {
+                std::vector<index_type> idx;                    // mode 0 scratch
+                std::vector<std::pair<index_type, T>> buf;      // mode 0 scratch
+                size_t kept = 0;
+#ifdef PHASE_PROFILE
+                phprof::PhaseMark pm_v4(phprof::P_V4_ROWSORT);
+#endif
+                #pragma omp for schedule(dynamic, 256)
+                for (long long r = 0; r < (long long)NR; ++r) {
+                    const size_t rs = C.row_ptr_[r];
+                    const size_t m = (size_t)C.row_ptr_[r + 1] - rs;
+                    if (m == 0) continue;
+                    index_type* cols = C.col_idx_.data() + rs;
+                    T* vals = C.values_.data() + rs;
+                    if (m > 1) {
+                        if (v2_row_sort_mode_ == 1) {
+                            std::sort(RowZipIt{cols, vals},
+                                      RowZipIt{cols + m, vals + m},
+                                      RowZipLess{});
+                        } else {
+                            idx.resize(m);
+                            for (size_t i = 0; i < m; ++i) idx[i] = (index_type)i;
+                            std::sort(idx.begin(), idx.end(),
+                                      [cols](index_type a, index_type b) {
+                                          return cols[a] < cols[b];
+                                      });
+                            buf.resize(m);
+                            for (size_t i = 0; i < m; ++i)
+                                buf[i] = std::make_pair(cols[idx[i]], vals[idx[i]]);
+                            for (size_t i = 0; i < m; ++i) {
+                                cols[i] = buf[i].first;
+                                vals[i] = buf[i].second;
+                            }
+                        }
+                    }
+                    uint8_t* fl = any_set ? flags.data() + rs : nullptr;
+                    size_t w = 0;
+                    for (size_t i = 1; i < m; ++i) {
+                        if (cols[i] == cols[w]) {
+                            if (fl && fl[i]) vals[w] = vals[i];   // is_set: replace
+                            else vals[w] += vals[i];              // else: sum
+                        } else {
+                            ++w;
+                            cols[w] = cols[i];
+                            vals[w] = vals[i];
+                            if (fl) fl[w] = fl[i];
+                        }
+                    }
+                    new_cnt[(size_t)r] = (size_type)(w + 1);
+                    kept += w + 1;
+                }
+                kept_total += kept;
+            }
+        }
+#ifdef PHASE_PROFILE
+        phprof::ru_end(phprof::P_V4_ROWSORT, r0_rs);
+        phprof::mem_point("after_V4_rowsort");
+#endif
+
+        // ---- V5: compaction across rows (serial; see the contract note) -----
+#ifdef PHASE_PROFILE
+        uint64_t t0_v5; phprof::RUsageSnap r0_v5;
+        phprof::serial_begin(phprof::P_V5_COMPACT, t0_v5, r0_v5);
+#endif
+        if (kept_total != total) {
+            std::vector<size_type> new_ptr(NR + 1);
+            size_t acc = 0;
+            for (size_t r = 0; r < NR; ++r) {
+                new_ptr[r] = (size_type)acc;
+                acc += new_cnt[r];
+            }
+            new_ptr[NR] = (size_type)acc;
+            for (size_t r = 0; r < NR; ++r) {
+                const size_t src = C.row_ptr_[r];
+                const size_t dst = new_ptr[r];
+                const size_t len = new_cnt[r];
+                if (len == 0 || dst == src) continue;
+                std::memmove(C.values_.data() + dst, C.values_.data() + src,
+                             len * sizeof(T));
+                std::memmove(C.col_idx_.data() + dst, C.col_idx_.data() + src,
+                             len * sizeof(index_type));
+            }
+            std::memcpy(C.row_ptr_.data(), new_ptr.data(),
+                        (NR + 1) * sizeof(index_type));
+        }
+        // Trim the logical size; the capacity (the pre-dedupe footprint) stays
+        // on purpose -- shrink_to_fit() would reallocate and spike the peak,
+        // which is the memory this builder exists to remove.
+        C.values_.resize(kept_total);
+        C.col_idx_.resize(kept_total);
+        C.finalized_ = true;
+#ifdef PHASE_PROFILE
+        phprof::serial_end(phprof::P_V5_COMPACT, t0_v5, r0_v5);
+        phprof::mem_point("after_V5_compact");
+#endif
+
+#ifndef NDEBUG
+        // Builder-side invariant check (debug builds only): every producer of
+        // every future method goes through here, so a regression fails loudly.
+        assert(C.row_ptr_[NR] == (index_type)C.values_.size());
+        assert(C.row_ptr_[NR] == (index_type)C.col_idx_.size());
+        for (size_t r = 0; r < NR; ++r)
+            for (index_type i = C.row_ptr_[r]; i + 1 < C.row_ptr_[r + 1]; ++i)
+                assert(C.col_idx_[i] < C.col_idx_[i + 1]);
+#endif
+
+#ifdef PHASE_PROFILE
+        {
+            long hwm_a = phprof::vmhwm_kb();
+            if (hwm_a > phprof::g().hwm_after_build_max)
+                phprof::g().hwm_after_build_max = hwm_a;
+            size_t out_bytes = C.values_.size() * sizeof(T) +
+                               C.col_idx_.size() * sizeof(index_type);
+            size_t count_bytes = (size_t)NT * NR * sizeof(size_type) +
+                                 (NR + 1) * sizeof(size_type);
+            phprof::mem_build(total, 0, out_bytes, alloc_bytes, count_bytes,
+                              hwm_b0, hwm_a);
+            phprof::mem_point("buildV2_exit");
             phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
         }
 #endif

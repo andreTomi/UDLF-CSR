@@ -1,0 +1,49 @@
+### REP / VALIDATE / ABKNOBS (T=4, T=1 iteration, ALOI L=400)
+ABKNOBS,builder=v2,rowsort=idx,dumpdir=/home/andre/dmp_rv,validate=1
+VALIDATE,S,ok,
+VALIDATE,Srev,ok,
+VALIDATE,Stot,ok,
+VALIDATE,result,ok,
+REP,0,3251.620,5248535,119396288415.396088
+ABKNOBS,builder=legacy,rowsort=idx,dumpdir=/home/andre/dmp_rl,validate=1
+VALIDATE,S,ok,
+VALIDATE,Srev,ok,
+VALIDATE,Stot,ok,
+VALIDATE,result,ok,
+REP,0,5111.426,5248535,119396289001.122040
+
+### MEMBUILD n=1 (v2 first, legacy second)
+PHASEPROFILE,MEMBUILD,n=1,emitted=57600000,tmp_bytes=0,out_bytes=321723648,alloc_bytes=926941184,count_bytes=1440004,hwm_before_kb=1138656,hwm_after_kb=1590496,delta_hwm_kb=451840,bytes_per_triplet=8.033,reset_rc=1
+PHASEPROFILE,MEMBUILD,n=1,emitted=57600000,tmp_bytes=921600000,out_bytes=321723648,alloc_bytes=926941184,count_bytes=1440000,hwm_before_kb=1138648,hwm_after_kb=3124056,delta_hwm_kb=1985408,bytes_per_triplet=35.296,reset_rc=1
+
+### canonical dump comparison: v2 vs legacy
+== MM.bin ==
+   header a: rows=72000 cols=72000 nnz=40215456
+   header b: rows=72000 cols=72000 nnz=40215456
+   structural: row_ptr identical
+   values: BIT-IDENTICAL (40215456 entries)
+   RESULT: EQUIVALENT (bit-identical)
+== H.bin ==
+   header a: rows=72000 cols=72000 nnz=1982199
+   header b: rows=72000 cols=72000 nnz=1982199
+   structural: row_ptr identical
+   structural: columns identical | values: 242126 of 1982199 entries differ (12.2150%)
+   max |delta| = 0.000001  (3.36e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 1) 1.9384019374847412 vs 1.9384018182754517 delta=0.000000
+     (0, 4) 0.6771637201309204 vs 0.6771637797355652 delta=0.000000
+     (0, 5) 0.22051680088043213 vs 0.22051678597927094 delta=0.000000
+     ... 242123 more
+   RESULT: columns equal, values differ in the last bits
+== result.bin ==
+   header a: rows=72000 cols=72000 nnz=5248535
+   header b: rows=72000 cols=72000 nnz=5248535
+   structural: row_ptr identical
+   structural: columns identical | values: 1421850 of 5248535 entries differ (27.0904%)
+   max |delta| = 1.500000  (6.96e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 249138.203125 vs 249138.1875 delta=0.015625
+     (0, 2) 232398.25 vs 232398.21875 delta=0.031250
+     (0, 3) 136178.34375 vs 136178.375 delta=0.031250
+     ... 1421847 more
+   RESULT: columns equal, values differ in the last bits
