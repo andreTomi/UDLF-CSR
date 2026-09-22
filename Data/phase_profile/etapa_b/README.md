@@ -14,7 +14,28 @@ Detalhe da investigação, método, controle de ruído e tabelas completas:
 `fase3/README.md`. Brutos: `ab_raw/` (19 arquivos) e `ab_raw/summary.txt`.
 Fase 1: `fase1/README.md`.
 
+## Bug de ordenação do Dense (corrigido — lê-se primeiro)
+
+A Fase 1 ordenava o prefixo emitido só no acumulador Hash, com o argumento de que
+`col_of(slot) == slot` implica ordem crescente no Dense. **Falso**: `active_` está em
+ordem de primeiro toque, e linhas de A com ≥2 `k` emitiam colunas desordenadas — o que
+corrompia silenciosamente `combine` (`get`/`lower_bound`) e `merge` (two-pointer), e
+**tornou inválida a A5-bis** (o pipeline real perdeu ~3,9M células). Correção +
+asserções `#ifndef NDEBUG` + teste C18 + validação in-run (`PHASE_VALIDATE=1`) em
+`6d1c86e`; análise completa, prova de corrupção, custo da correção e matriz de bind em
+`ordem/README.md`. A seção A5-bis abaixo está **superada**. As rotas (b)/(c) para o
+`position_build` seguem bloqueadas até um A/B same-session.
+
 ## A5-bis — a Fase 1 medida no LHRR real (ALOI)
+
+> **SUPERADO**: as capturas `a5bis/raw/` foram geradas pelo kernel pré-correção de
+> ordenação e **produziam um resultado corrompido** (nnz 1 356 712 vs 5 248 535
+> corretos; checksum 47,3e9 vs 119,4e9) — o `combine` perdeu células porque o branch
+> Dense emitia colunas desordenadas (bug e correção em `ordem/README.md`). Os números
+> abaixo são de uma computação que perdeu ~3,9M células e **não** devem ser citados.
+> Versão corrigida: `a5bis/raw_fix/` + `ordem/README.md` — conclusão revisada:
+> **paridade @1-4t e regressão @6-12t** vs o kernel pré-Fase 1 (não o ganho de
+> 1,07-1,17× listado aqui).
 
 Mesma campanha da Etapa A (`real`, ALOI `N=72000, L=400, k=10, limit=400, T=1`,
 `taskset`, sem bind, 5 reps, mediana dos reps 1..n), agora com o kernel da Fase 1.
@@ -56,9 +77,9 @@ materialização, `nth_element` indireto como na Fase 1. Reverificação no esta
 
 | Critério | Resultado |
 |---|---|
-| md5 do resultado idêntico ao pré-mudança em 1/2/4/8/12 threads | ✅ `f1`, `f3b` e `fin`: `b04547bd43c462daa82838f23a2d4b4a` / `112fb48749110da3c1cf31a5612fbe91` |
+| md5 do resultado idêntico ao pré-mudança em 1/2/4/8/12 threads | ✅ `f1`, `f3b` e `fin`: `b04547bd43c462daa82838f23a2d4b4a` / `112fb48749110da3c1cf31a5612fbe91` — **retratação**: o md5 hasheia lista-de-casos + pass/fail, **não** valores nem ordem (nenhuma suíte imprime matriz). Prova de valores = `same_result`/`to_map`; prova de ordem = C18 + asserções `#ifndef NDEBUG` (adicionadas em `6d1c86e`) |
 | Testes passando | ✅ 72 checks/0 falhas · ALL TESTS PASSED (1..12 threads) |
-| ΔHWM e tempo de build (CPU, 1 core) antes/depois | `BUILD_CALL` 153,6 → **12,5** ms (w1) · 145,9 → **13,0** (w2) · 2384,1 → **227,7** (w3) = **11-15×**; HWM 207,6 → **143,5** MB (w1) · 190,1 → **126,2** (w2) · 654,8 → **408,9** (w3) = **−25%..−38%** |
+| ΔHWM e tempo de build (CPU, 1 core) antes/depois | `BUILD_CALL` 153,6 → **12,5** ms (w1) · 145,9 → **13,0** (w2) · 2384,1 → **227,7** (w3) = **11-15×**; **VmHWM real** (linha `DONE`, capturas sem `PHASE_MEM`): w1 **157,7 → 118,8 MB** (−24,7%) · w2 **157,6 → 118,6** (−24,7%) · w3 **1 337,3 → 1 337,6** (inalterado — o pico de w3 são as matrizes, não o build). A coluna "HWM_MB" do resumo A/B original estava **errada** (lia `rss_final_kb`, RSS instantâneo) — corrigida em `ab_agg.py`/`summary.txt` |
 | `merge`/`combine` emitem colunas ordenadas; só `multiply_and_prune` ordena por linha | ✅ `merge`/`combine` usam o mesmo builder ordenado; `multiply_and_prune` ordena ≤ `limit` entradas por linha (Dense: nenhuma ordenação, pois `col_of(slot) == slot`) |
 | Sem `std::vector` + `push_back` por thread | ✅ emissão via `BlockAllocator` (arena `PaddedAllocator`); `build_from_ordered_fragments` faz histograma + prefix-sum + `resize` **exato** e escreve direto no CSR final — nenhum buffer global, nenhum pico transitório de realocação |
 | API de triplets e caminho global mantidos para o `mainMatrix` simétrico do LHRR | ✅ `build_from_partial_results` preservado para o build simétrico de `LHRRSparse` (emite `row = neighbor`, fora do intervalo da thread) |

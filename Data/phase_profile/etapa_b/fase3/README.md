@@ -101,14 +101,17 @@ contíguos poderiam pagar: branch **Hash** com `bound_max = 65536`,
 
 ## Nota sobre o critério de aceite (md5)
 
-O md5 das duas suítes é idêntico ao baseline em `f3b` a 1/2/4/8/12 threads
-(`b04547bd…` em `test_csr_ops`, `112fb487…` em `test_multiply_and_prune`) e as duas
-suítes passam (72 checks/0 falhas · ALL TESTS PASSED). Isso **não** prova igualdade de
-comportamento linha-a-linha, porém: o `checksum` do driver soma `float` em ordem de
-armazenamento acumulando em `double` e imprime com 6 decimais, então diferenças de
-ordem intra-linha ficam abaixo da resolução impressa. O md5 das suítes é forte porque
-elas imprimem o conteúdo das linhas; o `checksum` do driver é um invariante fraco
-(mesmo multiset por linha, ordem não verificada). Vale registrar na tese.
+O `checksum` do driver é um invariante **fraco** (soma `float` em ordem de
+armazenamento acumulando em `double`, 6 decimais, ordem intra-linha não verificada).
+**Retratação**: eu afirmei antes que "o md5 das suítes é forte porque elas imprimem o
+conteúdo das linhas" — **falso**. Nenhum dos dois arquivos imprime matriz alguma: o
+md5 hasheia apenas títulos de caso, linhas `[note]`/`[FAIL]` e o resumo final, i.e. é
+um fingerprint de lista-de-casos + pass/fail. A prova de **valores** vinha do
+`same_result`/`to_map` (mapa: insensível a ordem **e** a duplicatas) — e a prova de
+**ordem** não existia (o `csr_well_formed` do `test_csr_ops` só era aplicado a saídas
+de helpers cujas entradas já eram ordenadas). É por isso que o bug de ordenação do
+Dense (este README) passou por todos os critérios de aceite anteriores. A partir de
+`6d1c86e` a ordem é verificada por C18 e por asserções `#ifndef NDEBUG` no kernel.
 
 ## Reprodução
 

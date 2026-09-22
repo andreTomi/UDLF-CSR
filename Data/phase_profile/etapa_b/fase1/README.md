@@ -22,14 +22,14 @@ Implementação de `build_from_ordered_fragments`: k-way merge de fragments orde
 | Phase | Baseline (ms) | Fase 1 (ms) | Delta |
 |-------|--------------|-------------|-------|
 | B0_TEMP_RESIZE | 13.07 | 0.00 | eliminated |
-| B1_COPY | ~280 (part of build) | 0.00 | eliminated |
+| B1_COPY | 5.0 (medido; o "~280" anterior era número sem fonte) | 0.00 | eliminated |
 | B2_SORT | 113.14 | 0.00 | eliminated |
 | B3_HIST | 4.58 | 0.00 | eliminated |
 | B3_PREFIX | 0.03 | 0.02 | ~same |
 | B4_VALS_RESIZE | 7.55 | 7.45 | ~same |
 | B5_FILL | 4.38 | 0.00 | eliminated |
 | **BUILD_CALL** | **150.01** | **15.14** | **9.9x faster** |
-| **HWM** | **157.7MB** | **118.7MB** | **-24.7%** |
+| **VmHWM** (linha DONE, captura sem PHASE_MEM; MB decimais) | **157,7** | **118,8** | **-24,7%** |
 
 ### Wall-clock comparison (7 reps, discard rep 0)
 
