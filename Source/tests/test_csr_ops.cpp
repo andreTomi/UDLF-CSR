@@ -439,6 +439,65 @@ int main() {
         }
     }
 
+    // ---- C18: multiply_and_prune -- the DENSE branch must emit columns
+    // ascending. Regression guard for the fragment-CSR rewrite (Fase 1): the
+    // emitted prefix used to be sorted only for the Hash accumulator, on the
+    // argument that col_of(slot) == slot implies ascending order for Dense.
+    // It does not: active_ is in FIRST-TOUCH order (accumulate() pushes a
+    // column the first time it is touched in the row), and a row of A with
+    // two k's whose B rows overlap in non-monotone column order emits columns
+    // out of order. get() is lower_bound and merge() is a two-pointer, so an
+    // unsorted row silently corrupts every consumer that binary-searches.
+    {
+        std::printf("== C18 multiply dense branch: emitted columns ascending\n");
+        // A row 0 has two k's; B rows overlap with non-monotone columns:
+        //   k=0 -> cols {1,3,5}   (B row 0)
+        //   k=1 -> cols {0,2,3}   (B row 1)
+        // First-touch order in the dense accumulator: [1,3,5,0,2].
+        std::vector<std::tuple<idx_t, idx_t, float>> ta = {{0, 0, 1.0f}, {0, 1, 1.0f}};
+        std::vector<std::tuple<idx_t, idx_t, float>> tb = {
+            {0, 1, 1.0f}, {0, 3, 1.0f}, {0, 5, 1.0f},
+            {1, 0, 1.0f}, {1, 2, 1.0f}, {1, 3, 1.0f}};
+        M A = build_csr(1, 2, ta);
+        M B = build_csr(2, 6, tb);
+        // Branch guard: B.cols (6) <= 200 * max_bound (3+3) -> DENSE branch.
+        CHECK(B.cols() <= 200 * 6, "C18: case is on the dense branch by ratio");
+        {   // unpruned: touched (5) <= limit -> no nth_element at all
+            M got = M::multiply_and_prune(A, B, 10);
+            std::printf("  [order] row0 cols emitted (limit=10):");
+            got.for_each_in_row(0, [&](idx_t c, float) {
+                std::printf(" %u", (unsigned)c);
+            });
+            std::printf("\n");
+            CHECK(csr_well_formed(got, &why),
+                  "C18: unpruned dense emit is column-sorted");
+        }
+        {   // pruned: touched (5) > limit (3) -> nth_element permutes the prefix
+            M got = M::multiply_and_prune(A, B, 3);
+            std::printf("  [order] row0 cols emitted (limit=3):");
+            got.for_each_in_row(0, [&](idx_t c, float) {
+                std::printf(" %u", (unsigned)c);
+            });
+            std::printf("\n");
+            CHECK(csr_well_formed(got, &why),
+                  "C18: pruned dense emit is column-sorted");
+        }
+        {   // bigger pruned case: touched = 25 (two k's of 15 overlapping),
+            // limit = 20 -> nth_element scrambles a 20-entry prefix.
+            std::vector<std::tuple<idx_t, idx_t, float>> ta2 = {{0, 0, 1.0f},
+                                                                {0, 1, 1.0f}};
+            std::vector<std::tuple<idx_t, idx_t, float>> tb2;
+            for (idx_t c = 10; c < 25; ++c) tb2.emplace_back(0, c, 1.0f);
+            for (idx_t c = 0; c < 15; ++c) tb2.emplace_back(1, c, 1.0f);
+            M A2 = build_csr(1, 2, ta2);
+            M B2 = build_csr(2, 40, tb2);
+            M got = M::multiply_and_prune(A2, B2, 20);
+            CHECK(got.nnz() == 20, "C18: limit entries emitted");
+            CHECK(csr_well_formed(got, &why),
+                  "C18: pruned dense emit is column-sorted (25 touched)");
+        }
+    }
+
     std::printf("\n%s: %d checks, %d failures\n",
                 g_failures ? "FAILED" : "ALL TESTS PASSED", g_checks, g_failures);
     return g_failures ? 1 : 0;

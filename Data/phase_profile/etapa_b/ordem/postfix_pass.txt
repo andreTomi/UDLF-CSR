@@ -1,0 +1,86 @@
+Test suite: CSR ops characterization (threads=12)
+== C1 builder: structure/value contract
+  [Build] Total triplets: 5
+== C2 builder duplicates: is_set=false sums
+  [Build] Total triplets: 3
+== C3 builder duplicates: later is_set=true replaces
+  [Build] Total triplets: 2
+== C4 builder duplicates: first is_set=true is IGNORED
+  [Build] Total triplets: 2
+  [note] C4 characterization: only a LATER is_set triplet replaces; a leading is_set is summed away. Producers must emit their authoritative value last if they want set semantics.
+== C5 builder duplicates across element chunks
+  [Build] Total triplets: 16000
+== C6 merge: union semantics
+  [Build] Total triplets: 3
+  [Build] Total triplets: 2
+  [BuildFrag] Total triplets: 5
+== C7 merge: overlap
+  [Build] Total triplets: 1
+  [Build] Total triplets: 1
+  [BuildFrag] Total triplets: 1
+== C8 merge: op result == T{} is dropped
+  [Build] Total triplets: 2
+  [Build] Total triplets: 1
+  [BuildFrag] Total triplets: 1
+  [note] C8: merge drops any op result equal to T{} (5-5 == 0 -> no slot), so with plus the operator is lossless and with subtraction it is not: C8 must stay in sync with the fragment-CSR builder.
+== C9 merge: dimension checks
+  [Build] Total triplets: 1
+  [Build] Total triplets: 1
+  [Build] Total triplets: 1
+  [BuildFrag] Total triplets: 2
+  [note] C9 characterization: only rows_ is checked; a B with extra columns silently contributes entries with col >= cols().
+== C10 combine: intersection semantics
+  [Build] Total triplets: 4
+  [Build] Total triplets: 4
+  [BuildFrag] Total triplets: 2
+== C11 combine: zero filter is one-sided
+  [Build] Total triplets: 1
+  [Build] Total triplets: 1
+  [BuildFrag] Total triplets: 1
+  [note] C11 characterization: combine filters `val_other != T{}`, i.e. it tests the row it is NOT iterating, so an explicit 0 on the iterated side still contributes a 0-valued entry.
+  [Build] Total triplets: 1
+  [Build] Total triplets: 1
+  [BuildFrag] Total triplets: 0
+== C12 combine: dimension check
+  [Build] Total triplets: 1
+== C13 transpose: rectangular + empty rows
+  [Build] Total triplets: 3
+== C14 transpose: explicit zeros survive
+  [Build] Total triplets: 2
+== C15 transpose: double transpose == identity
+  [Build] Total triplets: 601
+== C16 transpose: empty matrix
+  [Build] Total triplets: 0
+== C17 randomized cross-check vs map model
+  [Build] Total triplets: 160
+  [Build] Total triplets: 160
+  [BuildFrag] Total triplets: 270
+  [BuildFrag] Total triplets: 26
+  [Build] Total triplets: 160
+  [Build] Total triplets: 160
+  [BuildFrag] Total triplets: 274
+  [BuildFrag] Total triplets: 26
+  [Build] Total triplets: 160
+  [Build] Total triplets: 160
+  [BuildFrag] Total triplets: 279
+  [BuildFrag] Total triplets: 24
+  [Build] Total triplets: 160
+  [Build] Total triplets: 160
+  [BuildFrag] Total triplets: 287
+  [BuildFrag] Total triplets: 17
+  [Build] Total triplets: 160
+  [Build] Total triplets: 160
+  [BuildFrag] Total triplets: 280
+  [BuildFrag] Total triplets: 27
+== C18 multiply dense branch: emitted columns ascending
+  [Build] Total triplets: 2
+  [Build] Total triplets: 6
+  [BuildFrag] Total triplets: 5
+  [order] row0 cols emitted (limit=10): 0 1 2 3 5
+  [BuildFrag] Total triplets: 3
+  [order] row0 cols emitted (limit=3): 1 2 3
+  [Build] Total triplets: 2
+  [Build] Total triplets: 30
+  [BuildFrag] Total triplets: 20
+
+ALL TESTS PASSED: 77 checks, 0 failures

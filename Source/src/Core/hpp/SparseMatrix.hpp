@@ -613,7 +613,26 @@ public:
                 size_t r_start = row_ranges[tid].first;
                 size_t write_pos = C.row_ptr_[r_start];
 
+#ifndef NDEBUG
+                // Order invariant of the fragment path, checked per stream:
+                // rows non-decreasing (the linear write cursor depends on it)
+                // and columns strictly increasing inside a row (get() is
+                // lower_bound; merge() is a two-pointer). Debug builds only.
+                size_t dbg_row = 0;
+                index_type dbg_col = 0;
+                bool dbg_first = true;
+#endif
                 allocators[tid].ptr->for_each([&](const Triplet& t) {
+#ifndef NDEBUG
+                    if (dbg_first) {
+                        dbg_first = false;
+                    } else {
+                        assert(t.row >= dbg_row);
+                        if (t.row == dbg_row) assert(t.col > dbg_col);
+                    }
+                    dbg_row = t.row;
+                    dbg_col = t.col;
+#endif
                     C.values_[write_pos] = t.value;
                     C.col_idx_[write_pos] = t.col;
                     write_pos++;
@@ -1071,17 +1090,29 @@ private:
             emit_count = limit;  // do NOT used.resize(...) -- see note above
         }
 
-                // FASE 1: sort columns within this row so the fragment-CSR builder
-        // receives (row, col) ordered streams. nth_element reorders by |v|,
-        // not by col; with emit_count <= limit (small) this sort is cheap.
-        // For DenseRowAccumulator, col_of(slot) = slot (already col-sorted),
-        // so we skip the sort to avoid needless overhead.
-        if constexpr (!std::is_same_v<Acc, DenseRowAccumulator>) {
+        // FASE 1 (corrected): sort columns within this row so the fragment-CSR
+        // builder receives (row, col) ordered streams. nth_element reorders by
+        // |v|, not by col -- and even the un-pruned order is the accumulator's
+        // FIRST-TOUCH order, which is not ascending whenever row i of A has
+        // more than one k and the k-th rows of B overlap out of column order.
+        // Both branches must sort: get() is lower_bound and merge() is a
+        // two-pointer, so an unsorted row silently corrupts every consumer.
+        if constexpr (std::is_same_v<Acc, DenseRowAccumulator>) {
+            // col_of(slot) == slot: ordering the slots ascending IS ordering
+            // the columns. Plain integer sort -- no indirect comparator.
+            std::sort(used.begin(), used.begin() + emit_count);
+        } else {
             std::sort(used.begin(), used.begin() + emit_count,
                 [&](size_t a, size_t b) {
                     return acc.col_of(a) < acc.col_of(b);
                 });
         }
+#ifndef NDEBUG
+        // Order invariant of the emitted stream (debug builds only): the
+        // fragment-CSR builder and every consumer depend on it.
+        for (size_t idx = 1; idx < emit_count; ++idx)
+            assert(acc.col_of(used[idx - 1]) < acc.col_of(used[idx]));
+#endif
         for (size_t idx = 0; idx < emit_count; ++idx) {
             size_t slot = used[idx];
             T v = acc.val_of(slot);
@@ -1316,21 +1347,21 @@ public:
                         T res = op(A.values_[idx_a], T{});
                         if (res != T{}) {
                             Triplet* t = allocator.allocate();
-                            t->row = i; t->col = ca; t->value = res;
+                            t->row = i; t->col = ca; t->value = res; t->is_set = false;
                         }
                         idx_a++;
                     } else if (cb < ca) {
                         T res = op(T{}, B.values_[idx_b]);
                         if (res != T{}) {
                             Triplet* t = allocator.allocate();
-                            t->row = i; t->col = cb; t->value = res;
+                            t->row = i; t->col = cb; t->value = res; t->is_set = false;
                         }
                         idx_b++;
                     } else {
                         T res = op(A.values_[idx_a], B.values_[idx_b]);
                         if (res != T{}) {
                             Triplet* t = allocator.allocate();
-                            t->row = i; t->col = ca; t->value = res;
+                            t->row = i; t->col = ca; t->value = res; t->is_set = false;
                         }
                         idx_a++; idx_b++;
                     }
@@ -1340,7 +1371,7 @@ public:
                     T res = op(A.values_[idx_a], T{});
                     if (res != T{}) {
                         Triplet* t = allocator.allocate();
-                        t->row = i; t->col = A.col_idx_[idx_a]; t->value = res;
+                        t->row = i; t->col = A.col_idx_[idx_a]; t->value = res; t->is_set = false;
                     }
                     idx_a++;
                 }
@@ -1349,7 +1380,7 @@ public:
                     T res = op(T{}, B.values_[idx_b]);
                     if (res != T{}) {
                         Triplet* t = allocator.allocate();
-                        t->row = i; t->col = B.col_idx_[idx_b]; t->value = res;
+                        t->row = i; t->col = B.col_idx_[idx_b]; t->value = res; t->is_set = false;
                     }
                     idx_b++;
                 }
@@ -1420,7 +1451,7 @@ public:
                         T val_b = B.get(i, col);
                         if (val_b != T{}) {
                             Triplet* t = allocator.allocate();
-                            t->row = i; t->col = col; t->value = A.values_[idx] * val_b;
+                            t->row = i; t->col = col; t->value = A.values_[idx] * val_b; t->is_set = false;
                         }
                     }
                 } else {
@@ -1429,7 +1460,7 @@ public:
                         T val_a = A.get(i, col);
                         if (val_a != T{}) {
                             Triplet* t = allocator.allocate();
-                            t->row = i; t->col = col; t->value = val_a * B.values_[idx];
+                            t->row = i; t->col = col; t->value = val_a * B.values_[idx]; t->is_set = false;
                         }
                     }
                 }
