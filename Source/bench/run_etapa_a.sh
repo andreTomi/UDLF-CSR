@@ -107,13 +107,18 @@ run() { # run <bin> <tag> <taskset-cpus> <threads> <args...>
   # set EA_BIND=1 to reproduce the old (crippled) numbers.
   local bind_env=""
   [ "${EA_BIND:-0}" = "1" ] && bind_env="OMP_PROC_BIND=true OMP_PLACES=cores"
+  # EA_MEM=1 inserts PHASE_MEM=1 (per-phase RSS points + per-build ledger with
+  # clear_refs reset) without touching the timing protocol. Default 0 keeps the
+  # Etapa A captures reproducible.
+  local mem_env=""
+  [ "${EA_MEM:-0}" = "1" ] && mem_env="PHASE_MEM=1"
   check_mask "$cpus" "$th" || { echo "ABORT: $tag"; return 1; }
-  echo "[$(date +%H:%M:%S)] $tag  ($cpus, T=$th, bind=${EA_BIND:-0}, $*)"
+  echo "[$(date +%H:%M:%S)] $tag  ($cpus, T=$th, bind=${EA_BIND:-0}, mem=${EA_MEM:-0}, $*)"
   if [ "$cpus" = "all" ]; then
-    env $bind_env PHASE_MASK="all" PHASE_THREADS=$th OMP_NUM_THREADS=$th \
+    env $bind_env $mem_env PHASE_MASK="all" PHASE_THREADS=$th OMP_NUM_THREADS=$th \
       "$bin" "$@" > "$f" 2>&1
   else
-    taskset -c "$cpus" env $bind_env PHASE_MASK="$cpus" PHASE_THREADS=$th \
+    taskset -c "$cpus" env $bind_env $mem_env PHASE_MASK="$cpus" PHASE_THREADS=$th \
       OMP_NUM_THREADS=$th "$bin" "$@" > "$f" 2>&1
   fi
 }
@@ -229,10 +234,16 @@ fi
 if stage_wanted real; then
   BIN=${EA_BIN:-/tmp/udlf_rk_aloi_N72000_L400.bin}
   N=${EA_N:-72000}; L=${EA_L:-400}; K=${EA_K:-10}; LIM=${EA_LIM:-400}
+  # EA_MEM=1 runs the memory variant of the same grid: PHASE_MEM=1 and 3 reps
+  # (the Etapa A `mem` protocol), written to a `_mem`-suffixed tag so the timing
+  # captures stay comparable with the Etapa A `real_lhrr_aloi_*` files.
+  R_REAL_THIS=$R_REAL
+  TAGSUF=""
+  if [ "${EA_MEM:-0}" = "1" ]; then R_REAL_THIS=3; TAGSUF="_mem"; fi
   for spec in "0:1" "0-1:2" "0-3:4" "0-5:6" "all:12"; do
     cpus=${spec%%:*}; th=${spec##*:}
-    run /tmp/bench_a_s1 "real_lhrr_aloi_c${cpus}_t${th}" "$cpus" "$th" \
-      real "$BIN" "$N" "$L" "$K" "$LIM" lhrr "$R_REAL" || exit 90
+    run /tmp/bench_a_s1 "real_lhrr_aloi_c${cpus}_t${th}${TAGSUF}" "$cpus" "$th" \
+      real "$BIN" "$N" "$L" "$K" "$LIM" lhrr "$R_REAL_THIS" || exit 90
   done
 fi
 

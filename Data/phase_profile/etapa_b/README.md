@@ -14,6 +14,30 @@ Detalhe da investigação, método, controle de ruído e tabelas completas:
 `fase3/README.md`. Brutos: `ab_raw/` (19 arquivos) e `ab_raw/summary.txt`.
 Fase 1: `fase1/README.md`.
 
+## A5-bis — a Fase 1 medida no LHRR real (ALOI)
+
+Mesma campanha da Etapa A (`real`, ALOI `N=72000, L=400, k=10, limit=400, T=1`,
+`taskset`, sem bind, 5 reps, mediana dos reps 1..n), agora com o kernel da Fase 1.
+Resultado (`a5bis/README.md`, `a5bis/aggregate.txt`, `a5bis/mem_table.txt`):
+
+- **wall**: 1,07× @1t · 1,14× @2t · **1,17× @4t** · 1,11× @6t · 1,13× @12t;
+- **pico de memória (VmHWM)**: 4,30 GB → **3,86-3,90 GB** (−8,5%..−10,3%);
+- **etapas**: `mult_S` 3,6× · `mult_Srev` 4,4× · `combine_S_total` 4,2× ·
+  `combine_main` 6,6× (todas @12t), coerentes com a Fase 1 (fragment-CSR);
+- **o gargalo dominante não melhorou porque não passa pela Fase 1**:
+  `position_build` emite `t2->row = neighbor` sob `schedule(dynamic)` ⇒ linhas fora do
+  range da thread ⇒ `build_from_partial_results` (caminho global). É o caso de exceção
+  documentado em `LHRRSparse.hpp:73-81` e em `bench_phase.cpp:358-360`. Prova pelo
+  ledger de memória: esse build (e o `H_build`) mostra `tmp_bytes = 921,6 MB`
+  (buffer global) e **35,3 B/entrada emitida**, contra **8,0 B/entrada** nos builds que
+  usam fragment-CSR (`tmp_bytes = 0`). Depois da Fase 1 o `position_build` passou a ser
+  **82,6%** do pipeline @12t.
+- **próximo alvo, com números**: mover esse build para o fragment-CSR vale ~2,1-2,3 s
+  @12t (pipeline ~3 155 → ~1,0-1,2 s) e ~0,9 GB de pico (→ ~2,9-3,2 GB). Opções (b)
+  `merge(P_fwd, transpose(P_fwd))` — menor resistência — ou (c) paralelizar o próprio
+  builder global — maior alcance. Detalhes em `a5bis/README.md`.
+
+
 ## Estado final
 
 O kernel final é o da **Fase 1**: `Source/src/Core/hpp/SparseMatrix.hpp` restaurado de

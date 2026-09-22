@@ -1,0 +1,3 @@
+TSET,omp_threads=1,tbb_max=1,affinity_omp=0,1,2,3,4,5,6,7,8,9,10,11,affinity_at_entry=0,1,2,3,4,5,6,7,8,9,10,11,req_mask=unset,cpus=12,max_concurrency=12,pid=1327
+EXTRACT,in=Datasets/aloi/rkLists.txt,rows=72000,cols=400,min_tokens=400,max_id=71999,elapsed_ms=84208.6,bytes_out=115200000
+DONE,extract,bytes=115200000
