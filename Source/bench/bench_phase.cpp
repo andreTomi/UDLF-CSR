@@ -8,6 +8,10 @@
 //
 //   RUN,<mode>,<workload>,<omp_threads>,<reps>,<phase_profile_flag>
 //   REP,<i>,<total_ms>,<nnz>,<checksum>          one per repetition
+//   REPRU,<i>,<minflt_delta>,<majflt_delta>,<maxrss_kb>
+//                                                per-rep resource delta (S1-bis:
+//                                                tells a first-touch/cold-start
+//                                                penalty from a real slowdown)
 //   PHASEPROFILE,...                             per-phase CSV (only when
 //                                                built with -DPHASE_PROFILE)
 //   DONE,<workload>,<vmhwm_kb>,<ru_maxrss_kb>
@@ -510,6 +514,11 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
     DrvLedger drv;
     M result;
 
+    // S1-bis: rusage is cumulative for the process, so keep the previous
+    // snapshot to report per-rep deltas (see the REPRU line below).
+    struct rusage ru_prev;
+    getrusage(RUSAGE_SELF, &ru_prev);
+
     for (int rep = 0; rep < reps; ++rep) {
 #ifdef PHASE_PROFILE
         phprof::reset();
@@ -582,8 +591,18 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
               drv.add("iter_free", now_ms() - a); }
         }
         double ms = now_ms() - t0;
+        struct rusage ru_cur;
+        getrusage(RUSAGE_SELF, &ru_cur);
         std::printf("REP,%d,%.3f,%zu,%.6f\n", rep, ms, result.nnz(),
                     checksum(result));
+        // Mechanism evidence for the rep-0 penalty: every rep allocates and
+        // frees the whole pipeline working set, so the first rep of a process
+        // pays first-touch page faults that later reps reuse from the allocator.
+        std::printf("REPRU,%d,%ld,%ld,%ld\n", rep,
+                    ru_cur.ru_minflt - ru_prev.ru_minflt,
+                    ru_cur.ru_majflt - ru_prev.ru_majflt,
+                    ru_cur.ru_maxrss);
+        ru_prev = ru_cur;
         std::fflush(stdout);
 #ifdef PHASE_PROFILE
         phprof::report(stdout);
