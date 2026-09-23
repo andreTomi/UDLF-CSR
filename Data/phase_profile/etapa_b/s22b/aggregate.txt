@@ -1,0 +1,110 @@
+=== TIMING (rep 1 only, warm excluded, ABBA pairs) ===
+  T=1  legacy samples_ms=['14833.3', '15068.7', '14882.2'] median_ms=14882.2
+  T=1  v2     samples_ms=['7714.0', '7749.8', '7706.6'] median_ms=7714.0
+  T=1  delta legacy-v2 = +7168.2 ms (+48.17% of legacy)
+  T=2  legacy samples_ms=['9092.5', '8452.5', '8105.2'] median_ms=8452.5
+  T=2  v2     samples_ms=['4500.3', '4507.5', '4600.9'] median_ms=4507.5
+  T=2  delta legacy-v2 = +3945.0 ms (+46.67% of legacy)
+  T=12 legacy samples_ms=['4073.9', '4207.1', '3934.2'] median_ms=4073.9
+  T=12 v2     samples_ms=['2153.2', '2142.9', '2197.1'] median_ms=2153.2
+  T=12 delta legacy-v2 = +1920.7 ms (+47.15% of legacy)
+=== PHASES (rep 1 only, median ms over 3 samples) ===
+  -- T=1
+    ACC_PREP               legacy=    5.515  v2=    5.653  ratio=0.98x
+    ALLOC_SETUP            legacy=    0.082  v2=    0.072  ratio=1.14x
+    ALLOC_TEARDOWN         legacy=    0.110  v2=    0.083  ratio=1.33x
+    B0_TEMP_RESIZE         legacy=  565.429  v2=    0.000  ratio=n/a
+    B1_COPY                legacy=  244.659  v2=    0.000  ratio=n/a
+    B2_SORT                legacy= 8966.655  v2=    0.000  ratio=n/a
+    B3_HIST                legacy=  202.777  v2=    0.000  ratio=n/a
+    B3_PREFIX              legacy=    0.454  v2=    0.555  ratio=0.82x
+    B3_RED                 legacy=    1.227  v2=    0.000  ratio=n/a
+    B3_SETUP               legacy=    0.009  v2=    0.000  ratio=n/a
+    B4_VALS_RESIZE         legacy=  254.502  v2=  142.830  ratio=1.78x
+    B5_FILL                legacy=  279.465  v2=    0.000  ratio=n/a
+    BUILD_CALL             legacy=10805.362  v2= 3929.799  ratio=2.75x
+    BUILD_FINISH           legacy=   68.084  v2=    0.000  ratio=n/a
+    COMBINE_CALL           legacy=  659.469  v2=  564.340  ratio=1.17x
+    COMBINE_LOOP           legacy=  550.804  v2=  452.262  ratio=1.22x
+    F1_ACCUM               legacy=  439.178  v2=  532.101  ratio=0.83x
+    F2_PRUNE               legacy=  502.370  v2=  659.013  ratio=0.76x
+    MERGE_CALL             legacy=    0.000  v2=    0.000  ratio=n/a
+    MERGE_LOOP             legacy=    0.000  v2=    0.000  ratio=n/a
+    MP_CALL                legacy= 1132.420  v2= 1410.347  ratio=0.80x
+    MULT_TOTAL             legacy=  949.209  v2= 1200.060  ratio=0.79x
+    TRANSPOSE              legacy=   23.227  v2=   15.338  ratio=1.51x
+    V4_ROWSORT             legacy=    0.000  v2= 2419.519  ratio=0.00x
+    V5_COMPACT             legacy=    0.000  v2=   90.375  ratio=0.00x
+  -- T=2
+    ACC_PREP               legacy=    6.777  v2=    5.381  ratio=1.26x
+    ALLOC_SETUP            legacy=    0.069  v2=    0.068  ratio=1.01x
+    ALLOC_TEARDOWN         legacy=    2.484  v2=    2.076  ratio=1.20x
+    B0_TEMP_RESIZE         legacy=  449.254  v2=    0.000  ratio=n/a
+    B1_COPY                legacy=  318.934  v2=    0.000  ratio=n/a
+    B2_SORT                legacy= 5093.745  v2=    0.000  ratio=n/a
+    B3_HIST                legacy=  247.639  v2=    0.000  ratio=n/a
+    B3_PREFIX              legacy=    0.501  v2=    0.627  ratio=0.80x
+    B3_RED                 legacy=    1.168  v2=    0.000  ratio=n/a
+    B3_SETUP               legacy=    0.005  v2=    0.000  ratio=n/a
+    B4_VALS_RESIZE         legacy=  247.710  v2=   85.235  ratio=2.91x
+    B5_FILL                legacy=  314.432  v2=    0.000  ratio=n/a
+    BUILD_CALL             legacy= 6409.956  v2= 2511.917  ratio=2.55x
+    BUILD_FINISH           legacy=   59.755  v2=    0.000  ratio=n/a
+    COMBINE_CALL           legacy=  358.350  v2=  365.088  ratio=0.98x
+    COMBINE_LOOP           legacy=  521.484  v2=  519.850  ratio=1.00x
+    F1_ACCUM               legacy=  547.527  v2=  463.031  ratio=1.18x
+    F2_PRUNE               legacy=  606.118  v2=  537.579  ratio=1.13x
+    MERGE_CALL             legacy=    0.000  v2=    0.000  ratio=n/a
+    MERGE_LOOP             legacy=    0.000  v2=    0.000  ratio=n/a
+    MP_CALL                legacy=  761.111  v2=  629.016  ratio=1.21x
+    MULT_TOTAL             legacy= 1164.865  v2= 1008.630  ratio=1.15x
+    TRANSPOSE              legacy=   19.075  v2=   15.489  ratio=1.23x
+    V4_ROWSORT             legacy=    0.000  v2= 2565.620  ratio=0.00x
+    V5_COMPACT             legacy=    0.000  v2=  101.345  ratio=0.00x
+  -- T=12
+    ACC_PREP               legacy=   17.338  v2=   18.981  ratio=0.91x
+    ALLOC_SETUP            legacy=    0.160  v2=    0.101  ratio=1.58x
+    ALLOC_TEARDOWN         legacy=    0.131  v2=    0.139  ratio=0.94x
+    B0_TEMP_RESIZE         legacy=  388.688  v2=    0.000  ratio=n/a
+    B1_COPY                legacy= 1053.978  v2=    0.000  ratio=n/a
+    B2_SORT                legacy= 2328.327  v2=    0.000  ratio=n/a
+    B3_HIST                legacy=  513.916  v2=    0.000  ratio=n/a
+    B3_PREFIX              legacy=    0.339  v2=    2.078  ratio=0.16x
+    B3_RED                 legacy=    3.199  v2=    0.000  ratio=n/a
+    B3_SETUP               legacy=    0.007  v2=    0.000  ratio=n/a
+    B4_VALS_RESIZE         legacy=  241.990  v2=  138.046  ratio=1.75x
+    B5_FILL                legacy=  832.912  v2=    0.000  ratio=n/a
+    BUILD_CALL             legacy= 3398.251  v2= 1399.600  ratio=2.43x
+    BUILD_FINISH           legacy=   61.912  v2=    0.000  ratio=n/a
+    COMBINE_CALL           legacy=  141.794  v2=  179.546  ratio=0.79x
+    COMBINE_LOOP           legacy=  742.164  v2=  793.602  ratio=0.94x
+    F1_ACCUM               legacy=  780.396  v2=  863.876  ratio=0.90x
+    F2_PRUNE               legacy=  781.352  v2=  865.466  ratio=0.90x
+    MERGE_CALL             legacy=    0.000  v2=    0.000  ratio=n/a
+    MERGE_LOOP             legacy=    0.000  v2=    0.000  ratio=n/a
+    MP_CALL                legacy=  270.339  v2=  313.664  ratio=0.86x
+    MULT_TOTAL             legacy= 1584.167  v2= 1774.574  ratio=0.89x
+    TRANSPOSE              legacy=   13.185  v2=   19.275  ratio=0.68x
+    V4_ROWSORT             legacy=    0.000  v2= 4536.055  ratio=0.00x
+    V5_COMPACT             legacy=    0.000  v2=  103.923  ratio=0.00x
+=== DRIFT (canary w1, rep 1 totals) ===
+  T=1  canary_0=99.1 canary_1=106.0 drift=+7.04%
+  T=2  canary_0=118.4 canary_1=110.6 drift=-6.61%
+  T=12 canary_0=115.2 canary_1=102.3 drift=-11.23%
+=== REPRU (minflt median over captures) ===
+  T=1  legacy rep0=697604 rep1=683678 (1.02x)
+  T=1  v2     rep0=186194 rep1=174308 (1.07x)
+  T=2  legacy rep0=697703 rep1=688649 (1.01x)
+  T=2  v2     rep0=186485 rep1=188454 (0.99x)
+  T=12 legacy rep0=699634 rep1=694337 (1.01x)
+  T=12 v2     rep0=189217 rep1=184382 (1.03x)
+=== MEM: 6 builds, 2 conventions ===
+  T=1  conv1_peak  legacy=3358256 v2=1627368 d=+1730888 kB (+51.5%)
+  T=1  conv2_build legacy=2348224 v2=604224 d=+1744000 kB (+74.3%)
+  T=1  residue(conv1-conv2)=-13112 kB  gate=PASS
+  T=2  conv1_peak  legacy=3360632 v2=1630360 d=+1730272 kB (+51.5%)
+  T=2  conv2_build legacy=2384128 v2=631616 d=+1752512 kB (+73.5%)
+  T=2  residue(conv1-conv2)=-22240 kB  gate=PASS
+  T=12 conv1_peak  legacy=3382796 v2=1656172 d=+1726624 kB (+51.0%)
+  T=12 conv2_build legacy=2317376 v2=653568 d=+1663808 kB (+71.8%)
+  T=12 residue(conv1-conv2)=+62816 kB  gate=PASS

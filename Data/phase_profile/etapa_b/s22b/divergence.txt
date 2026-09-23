@@ -1,0 +1,114 @@
+=== dump_cmp T=12 (v2 vs legacy)
+== MM.bin ==
+   header a: rows=72000 cols=72000 nnz=40215456
+   header b: rows=72000 cols=72000 nnz=40215456
+   structural: row_ptr identical
+   values: BIT-IDENTICAL (40215456 entries)
+   RESULT: EQUIVALENT (bit-identical)
+== H.bin ==
+   header a: rows=72000 cols=72000 nnz=1982199
+   header b: rows=72000 cols=72000 nnz=1982199
+   structural: row_ptr identical
+   structural: columns identical | values: 242126 of 1982199 entries differ (12.2150%)
+   max |delta| = 0.000001  (3.36e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 1) 1.9384019374847412 vs 1.9384018182754517 delta=0.000000
+     ... 242125 more
+   RESULT: columns equal, values differ in the last bits
+== S.bin ==
+   header a: rows=72000 cols=72000 nnz=7286865
+   header b: rows=72000 cols=72000 nnz=7286865
+   structural: row_ptr identical
+   structural: columns identical | values: 1157459 of 7286865 entries differ (15.8842%)
+   max |delta| = 0.000008  (3.99e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 22.248315811157227 vs 22.248313903808594 delta=0.000002
+     ... 1157458 more
+   RESULT: columns equal, values differ in the last bits
+== Srev.bin ==
+   header a: rows=72000 cols=72000 nnz=8685190
+   header b: rows=72000 cols=72000 nnz=8685190
+   structural: row_ptr identical
+   structural: columns identical | values: 1137568 of 8685190 entries differ (13.0978%)
+   max |delta| = 0.000061  (5.88e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 2) 15.588663101196289 vs 15.588662147521973 delta=0.000001
+     ... 1137567 more
+   RESULT: columns equal, values differ in the last bits
+== Stot.bin ==
+   header a: rows=72000 cols=72000 nnz=5756659
+   header b: rows=72000 cols=72000 nnz=5756659
+   structural: row_ptr identical
+   structural: columns identical | values: 1613213 of 5756659 entries differ (28.0234%)
+   max |delta| = 0.001953  (6.79e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 311.4227600097656 vs 311.4227294921875 delta=0.000031
+     ... 1613212 more
+   RESULT: columns equal, values differ in the last bits
+== result.bin ==
+   header a: rows=72000 cols=72000 nnz=5248535
+   header b: rows=72000 cols=72000 nnz=5248535
+   structural: row_ptr identical
+   structural: columns identical | values: 1421850 of 5248535 entries differ (27.0904%)
+   max |delta| = 1.500000  (6.96e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 249138.203125 vs 249138.1875 delta=0.015625
+     ... 1421849 more
+   RESULT: columns equal, values differ in the last bits
+=== dump_cmp T=1 (v2 vs legacy)
+== MM.bin ==
+   header a: rows=72000 cols=72000 nnz=40215456
+   header b: rows=72000 cols=72000 nnz=40215456
+   structural: row_ptr identical
+   values: BIT-IDENTICAL (40215456 entries)
+   RESULT: EQUIVALENT (bit-identical)
+== H.bin ==
+   header a: rows=72000 cols=72000 nnz=1982199
+   header b: rows=72000 cols=72000 nnz=1982199
+   structural: row_ptr identical
+   structural: columns identical | values: 242126 of 1982199 entries differ (12.2150%)
+   max |delta| = 0.000001  (3.36e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 1) 1.9384019374847412 vs 1.9384018182754517 delta=0.000000
+     ... 242125 more
+   RESULT: columns equal, values differ in the last bits
+== S.bin ==
+   header a: rows=72000 cols=72000 nnz=7286865
+   header b: rows=72000 cols=72000 nnz=7286865
+   structural: row_ptr identical
+   structural: columns identical | values: 1157459 of 7286865 entries differ (15.8842%)
+   max |delta| = 0.000008  (3.99e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 22.248315811157227 vs 22.248313903808594 delta=0.000002
+     ... 1157458 more
+   RESULT: columns equal, values differ in the last bits
+== Srev.bin ==
+   header a: rows=72000 cols=72000 nnz=8685190
+   header b: rows=72000 cols=72000 nnz=8685190
+   structural: row_ptr identical
+   structural: columns identical | values: 1137568 of 8685190 entries differ (13.0978%)
+   max |delta| = 0.000061  (5.88e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 2) 15.588663101196289 vs 15.588662147521973 delta=0.000001
+     ... 1137567 more
+   RESULT: columns equal, values differ in the last bits
+== Stot.bin ==
+   header a: rows=72000 cols=72000 nnz=5756659
+   header b: rows=72000 cols=72000 nnz=5756659
+   structural: row_ptr identical
+   structural: columns identical | values: 1613213 of 5756659 entries differ (28.0234%)
+   max |delta| = 0.001953  (6.79e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 311.4227600097656 vs 311.4227294921875 delta=0.000031
+     ... 1613212 more
+   RESULT: columns equal, values differ in the last bits
+== result.bin ==
+   header a: rows=72000 cols=72000 nnz=5248535
+   header b: rows=72000 cols=72000 nnz=5248535
+   structural: row_ptr identical
+   structural: columns identical | values: 1421850 of 5248535 entries differ (27.0904%)
+   max |delta| = 1.500000  (6.96e-07 relative to the affected values)
+   samples (row, col, a, b, delta):
+     (0, 0) 249138.203125 vs 249138.1875 delta=0.015625
+     ... 1421849 more
+   RESULT: columns equal, values differ in the last bits

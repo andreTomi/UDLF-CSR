@@ -1,0 +1,10 @@
+=== rk_cmp layer-0 (v2 vs legacy)
+== /home/andre/udlf_cache/s22b_t1/v2/rk.bin vs /home/andre/udlf_cache/s22b_t1/legacy/rk.bin ==
+   rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
+   RESULT: IDENTICAL
+== /home/andre/udlf_cache/s22_smoke_lhrr/rk_lhrr.bin vs /home/andre/udlf_cache/s22_smoke_lhrr_legacy/rk_lhrr_legacy.bin ==
+   rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
+   RESULT: IDENTICAL
+== /home/andre/udlf_cache/s22_smoke_cprr/rk_cprr.bin vs /home/andre/udlf_cache/s22_smoke_cprr_legacy/rk_cprr_legacy.bin ==
+   rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
+   RESULT: IDENTICAL
