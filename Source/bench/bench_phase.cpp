@@ -280,6 +280,9 @@ static void validate_wf(const M& m, const char* what) {
 //   PHASE_ROWSORT=idx|zip     v2 per-row sort strategy
 //   PHASE_DUMP_DIR=<dir>      write canonical dumps of every driver-side build
 //                             (rep 0 only)
+//   PHASE_RK_OUT=<file>       run_real only: after the last rep, write the
+//                             final reranked lists as raw row-major u32 (N*L),
+//                             for rk_cmp.py (layer-0 legacy-vs-v2 comparison)
 //
 // Why the dump exists: the driver `checksum` is a weak invariant (a double
 // accumulation ordered by column: it cannot see intra-row order or a value
@@ -289,6 +292,7 @@ static void validate_wf(const M& m, const char* what) {
 static int g_use_legacy = 0;
 static std::string g_dump_dir;
 static int g_dump_now = 0;
+static std::string g_rk_out;   // PHASE_RK_OUT: final rk lists (raw u32) sink
 
 static void dump_matrix(const M& m, const char* tag) {
     if (!g_dump_now || g_dump_dir.empty()) return;
@@ -622,6 +626,13 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
                                 [](float x, float y) { return x + y; });
               drv.add("merge", now_ms() - a); }
             if (g_dump_now) dump_matrix(result, "result");
+            // CprrSparse.hpp:92 applies updateRankedLists(finalMat) before
+            // returning; driver-cprr did not, which made any rk output (and
+            // the S2.2b layer-0 spot-check) a no-op copy of the input. Same
+            // routine as the LHRR branch, with its own timed ledger entry.
+            { double a = now_ms();
+              update_ranked_lists(result, rk, N, L);
+              drv.add("update_ranked_lists", now_ms() - a); }
             { double a = now_ms();
               MA.reset(); MB.reset(); WT.reset(); Wm.reset();
               drv.add("iter_free", now_ms() - a); }
@@ -645,14 +656,17 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
             { double a = now_ms();
               S = std::make_unique<M>(M::multiply_and_prune(*H, *HT, limit));
               drv.add("mult_S", now_ms() - a); }
+            if (g_dump_now) dump_matrix(*S, "S");
             if (g_validate) validate_wf(*S, "S");
             { double a = now_ms();
               Srev = std::make_unique<M>(M::multiply_and_prune(*HT, *H, limit));
               drv.add("mult_Srev", now_ms() - a); }
+            if (g_dump_now) dump_matrix(*Srev, "Srev");
             if (g_validate) validate_wf(*Srev, "Srev");
             { double a = now_ms();
               Stot = std::make_unique<M>(M::combine(*S, *Srev));
               drv.add("combine_S_total", now_ms() - a); }
+            if (g_dump_now) dump_matrix(*Stot, "Stot");
             if (g_validate) validate_wf(*Stot, "Stot");
             { double a = now_ms();
               result = M::combine(*MM, *Stot);
@@ -694,6 +708,20 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
 #else
     long hwm = -1;
 #endif
+    // PHASE_RK_OUT: raw reranked lists of the LAST rep (each rep restores rk0
+    // and recomputes deterministically, so every rep ends with the same rk).
+    // Untimed, after the loop; row-major u32 N*L, parsed by rk_cmp.py.
+    if (!g_rk_out.empty()) {
+        FILE* f = std::fopen(g_rk_out.c_str(), "wb");
+        if (!f) {
+            std::fprintf(stderr, "rk_out: cannot open %s\n", g_rk_out.c_str());
+        } else {
+            std::fwrite(rk.data(), sizeof(uint32_t), rk.size(), f);
+            std::fclose(f);
+            std::printf("RKOUT,%s,bytes=%zu\n", g_rk_out.c_str(),
+                        rk.size() * sizeof(uint32_t));
+        }
+    }
     std::printf("DONE,%s,%ld,%ld\n", dataset, hwm, ru.ru_maxrss);
     return 0;
 }
@@ -708,10 +736,12 @@ int main(int argc, char** argv) {
         M::set_v2_row_sort_mode(rs == std::string("zip") ? 1 : 0);
     }
     g_dump_dir = env_or("PHASE_DUMP_DIR", "");
-    std::printf("ABKNOBS,builder=%s,rowsort=%s,dumpdir=%s,validate=%d\n",
+    g_rk_out = env_or("PHASE_RK_OUT", "");
+    std::printf("ABKNOBS,builder=%s,rowsort=%s,dumpdir=%s,rkout=%s,validate=%d\n",
                 g_use_legacy ? "legacy" : "v2",
                 M::v2_row_sort_mode() ? "zip" : "idx",
-                g_dump_dir.empty() ? "(none)" : g_dump_dir.c_str(), g_validate);
+                g_dump_dir.empty() ? "(none)" : g_dump_dir.c_str(),
+                g_rk_out.empty() ? "(none)" : g_rk_out.c_str(), g_validate);
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: %s <mult|pipe> <w1|w2|w3> [reps=7]\n"
