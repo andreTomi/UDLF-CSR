@@ -500,6 +500,20 @@ public:
     CSRMatrix(CSRMatrix&& other) noexcept = default;
     CSRMatrix& operator=(CSRMatrix&& other) noexcept = default;
 
+#ifdef PHASE_PROFILE
+    // S2.3 (PHASE_FRAGAB): bench-side measurement hook for the
+    // fragment-CSR-vs-v2 same-base A/B. The class keeps ONLY a function
+    // pointer (bench/phase_ab.hpp registers it from bench_phase), so Core
+    // has no dependency on bench code. Inert when unset; the whole block
+    // disappears without -DPHASE_PROFILE (suites/production binaries).
+    using ABHook = void (*)(CSRMatrix&,
+                            std::vector<PaddedAllocator>&,
+                            const std::vector<std::pair<size_type, size_type>>&,
+                            double);
+    inline static ABHook ab_hook_ = nullptr;
+    static void ab_set_hook(ABHook h) { ab_hook_ = h; }
+#endif
+
     // =========================================================================
     // OPTIMIZED "ROW-SPLIT" ENGINE
     // =========================================================================
@@ -541,6 +555,9 @@ public:
             hwm_b0 = phprof::vmhwm_kb();
             phprof::mem_point("buildFrag_entry");
         }
+#endif
+#ifdef PHASE_PROFILE
+        auto ab_t0 = std::chrono::steady_clock::now();
 #endif
 
         int num_threads = allocators.size();
@@ -662,6 +679,10 @@ public:
             phprof::mem_point("buildFrag_exit");
             phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
         }
+        if (ab_hook_)
+            ab_hook_(C, allocators, row_ranges,
+                     std::chrono::duration<double, std::milli>(
+                         std::chrono::steady_clock::now() - ab_t0).count());
 #endif
     }
 

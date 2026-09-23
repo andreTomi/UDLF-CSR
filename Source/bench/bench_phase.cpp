@@ -76,6 +76,10 @@
 #include <tbb/global_control.h>
 #include <tbb/task_arena.h>
 
+#ifdef PHASE_PROFILE
+#include "phase_ab.hpp"   // S2.3: fragment-CSR vs v2, same emitted base
+#endif
+
 using M = CSRMatrix<float>;
 using idx_t = M::size_type;
 using Triplet = M::Triplet;
@@ -335,11 +339,29 @@ static void dump_matrix(const M& m, const char* tag) {
 
 // Single entry point for the driver's own builds, so neither the A/B switch nor
 // the dump can be forgotten at a call site.
+// S2.3 (PHASE_FRAGAB): under the knob, the natural v2 build is timed and handed
+// to phaseab together with the LIVE base -- it runs the per-matrix
+// fragment-vs-v2 interleave (contract probe / charged normalization /
+// 3+3 samples / structure+value check). The one-shot synthetic "ab" tag and
+// CPRR's "W" are out of scope: the six real matrices are MM, H, S, Srev, Stot,
+// result (LHRR rep order, seq 1..6).
 static void build_into(M& m, std::vector<M::PaddedAllocator>& allocators,
                        std::vector<std::pair<idx_t, idx_t>>& ranges,
                        const char* tag) {
-    if (g_use_legacy) M::build_from_partial_results_legacy(m, allocators, ranges);
-    else              M::build_from_partial_results(m, allocators, ranges);
+    if (g_use_legacy) {
+        M::build_from_partial_results_legacy(m, allocators, ranges);
+    } else {
+#ifdef PHASE_PROFILE
+        double ab_t = now_ms();
+        M::build_from_partial_results(m, allocators, ranges);
+        if (phaseab::on && std::string(tag) != "W" &&
+            std::string(tag) != "ab")
+            phaseab::after_partial(m, allocators, ranges, tag,
+                                   now_ms() - ab_t);
+#else
+        M::build_from_partial_results(m, allocators, ranges);
+#endif
+    }
     dump_matrix(m, tag);
 }
 
@@ -597,6 +619,7 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
     for (int rep = 0; rep < reps; ++rep) {
 #ifdef PHASE_PROFILE
         phprof::reset();
+        phaseab::new_rep();   // S2.3: seq 1..6 restarts each rep
 #endif
         g_dump_now = (rep == 0 && !g_dump_dir.empty()) ? 1 : 0;
         double tr = now_ms();
@@ -737,11 +760,20 @@ int main(int argc, char** argv) {
     }
     g_dump_dir = env_or("PHASE_DUMP_DIR", "");
     g_rk_out = env_or("PHASE_RK_OUT", "");
-    std::printf("ABKNOBS,builder=%s,rowsort=%s,dumpdir=%s,rkout=%s,validate=%d\n",
+    int g_ab = 0;  // PHASE_FRAGAB=1: S2.3 fragment-CSR-vs-v2 A/B active
+#ifdef PHASE_PROFILE
+    if (env_or("PHASE_FRAGAB", "0") == std::string("1")) {
+        g_ab = 1;
+        phaseab::enable();
+        M::ab_set_hook(&phaseab::after_frag<M>);
+    }
+#endif
+    std::printf("ABKNOBS,builder=%s,rowsort=%s,dumpdir=%s,rkout=%s,validate=%d,fragab=%d\n",
                 g_use_legacy ? "legacy" : "v2",
                 M::v2_row_sort_mode() ? "zip" : "idx",
                 g_dump_dir.empty() ? "(none)" : g_dump_dir.c_str(),
-                g_rk_out.empty() ? "(none)" : g_rk_out.c_str(), g_validate);
+                g_rk_out.empty() ? "(none)" : g_rk_out.c_str(), g_validate,
+                g_ab);
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: %s <mult|pipe> <w1|w2|w3> [reps=7]\n"

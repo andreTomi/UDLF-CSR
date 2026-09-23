@@ -49,6 +49,12 @@
 - `REPRU`: minflt/rep legacy ~698k vs v2 ~186k -> **3,75x menos faltas de
   pagina** (mecanismo direto do `temp_triplets_` eliminado). A razao
   rep0/rep1 ~ 1,0x **reconfirma a falsificacao** do first-touch (S1-bis).
+- **End-to-end (6 matrizes)**: o delta `BUILD_CALL` (legacy - v2) explica
+  **96% / 99% / 104%** do delta total do LHRR (T=1/2/12): 6875,6 / 3898,0 /
+  1998,7 ms contra 7168,2 / 3945,0 / 1920,7 ms de (legacy - v2) ponta a
+  ponta. As demais fases somam ~par ou favorecem o legacy (ex.: T=12,
+  F1_ACCUM+F2_PRUNE ~164 ms a favor do legacy), por isso a razao ultrapassa
+  100% -- **o speedup ponta a ponta e integralmente o build**.
 
 ## Equivalencia: 6 matrizes (dump_cmp v2 vs legacy)
 
