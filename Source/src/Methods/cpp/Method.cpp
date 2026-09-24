@@ -8,6 +8,7 @@
 #include "LHRRMKL.hpp"
 #include "Cprr.hpp"
 #include "LHRR.hpp"
+#include "RDPAC.hpp"
 
 MethodRegister<Cprr> Cprr::signInMethod("CPRR");
 MethodRegister<CprrSparse> CprrSparse::signInMethod("CPRR_SPARSE");
@@ -19,3 +20,4 @@ MethodRegister<LHRRBLAS> LHRRBLAS::signInMethod("LHRR_BLAS");
 MethodRegister<LHRRMKL> LHRRMKL::signInMethod("LHRR_MKL");
 MethodRegister<LHRRSparse> LHRRSparse::signInMethod("LHRR_SPARSE");
 MethodRegister<LHRREigen> LHRREigen::signInMethod("LHRR_EIGEN");
+MethodRegister<RDPAC> RDPAC::signInMethod("RDPAC");
