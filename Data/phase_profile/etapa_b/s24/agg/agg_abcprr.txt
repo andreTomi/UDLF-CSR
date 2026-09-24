@@ -1,0 +1,80 @@
+== mode=abcprr  T=12 ==
+runs: pre=['c1_pre_a', 'c1_pre_b', 'c2_pre_a', 'c2_pre_b', 'c3_pre_a', 'c3_pre_b']
+      new=['c1_new_a', 'c1_new_b', 'c2_new_a', 'c2_new_b', 'c3_new_a', 'c3_new_b']
+      canary=['canary_0', 'canary_1', 'canary_2', 'canary_3']
+
+== REP total (rep0 descartado) ==
+  c1_pre_a   n=4 med=   164.6  vals=['136', '193', '194', '135']
+  c1_pre_b   n=4 med=   117.3  vals=['156', '117', '118', '102']
+  c2_pre_a   n=4 med=   135.3  vals=['185', '134', '137', '117']
+  c2_pre_b   n=4 med=   142.5  vals=['133', '141', '147', '144']
+  c3_pre_a   n=4 med=   116.3  vals=['118', '115', '125', '115']
+  c3_pre_b   n=4 med=   125.8  vals=['124', '130', '128', '105']
+  c1_new_a   n=4 med=   158.5  vals=['159', '158', '182', '136']
+  c1_new_b   n=4 med=   171.5  vals=['208', '148', '129', '195']
+  c2_new_a   n=4 med=   187.8  vals=['248', '188', '188', '165']
+  c2_new_b   n=4 med=   159.4  vals=['196', '184', '128', '135']
+  c3_new_a   n=4 med=   145.3  vals=['175', '162', '129', '127']
+  c3_new_b   n=4 med=   136.5  vals=['133', '140', '126', '179']
+  POOL pre: n=24 med=131.6  |  new: n=24 med=160.4  | ratio=1.2194
+
+== ABBA pareado por ciclo (mean(new) - mean(pre)) ==
+  c1: pre=143.9  new=164.4  delta=+20.5 ms
+  c2: pre=142.2  new=179.0  delta=+36.7 ms
+  c3: pre=119.9  new=146.3  delta=+26.3 ms
+  delta ABBA medio=+27.9 ms (std=8.2)
+
+== DRVAGG por stage (mediana das medianas/run; rep0 incluso) ==
+  label                      pre(ms)   new(ms)     delta       %
+  restore_rk_state              12.4      14.8      +2.4   19.6%
+  w_build                       17.3      19.3      +2.0   11.3%
+  w_transpose                    3.7       3.7      +0.0    0.2%
+  mult_A                        27.4      39.4     +12.0   43.7%
+  mult_B                        34.6      43.6      +9.0   26.1%
+  merge                         30.9      40.3      +9.4   30.3%
+  update_ranked_lists           11.0      11.3      +0.3    2.4%
+  iter_free                      0.0       0.0      -0.0  -51.6%
+
+== Fases seriais: wall_ms confiavel (medianas por rep util) ==
+  fase                 pre(ms)   new(ms)     delta       %  nota
+  MP_CALL                 64.3      81.9     +17.6   27.4%  calls/rep=2.0
+  MERGE_CALL              29.9      39.0      +9.2   30.8%  calls/rep=1.0
+  COMBINE_CALL             0.0       0.0      +0.0    0.0%  calls/rep=0.0
+  BUILD_CALL              65.7      92.1     +26.3   40.1%  calls/rep=4.0
+  ALLOC_SETUP              0.1       0.1      +0.0   22.2%  calls/rep=3.0
+  ALLOC_TEARDOWN           0.1       0.0      -0.0  -13.2%  calls/rep=3.0
+  V5_COMPACT               0.0       0.0      +0.0  300.0%
+  B3_PREFIX                1.0       3.9      +2.9  307.9%
+  TRANSPOSE                3.5       3.7      +0.2    5.6%
+
+== Fases paralelas: wall estimado = total_ms/T (T=12) ==
+  fase                 pre(ms)   new(ms)     delta       %  nota
+  MULT_TOTAL              23.0      23.3      +0.3    1.3%  wall_stamp(pre/new)=17.4/17.1
+  MERGE_LOOP               4.4       4.6      +0.2    5.2%  wall_stamp(pre/new)=6.7/6.5
+  COMBINE_LOOP             0.0       0.0      +0.0    0.0%  wall_stamp(pre/new)=0.0/0.0
+
+== Fases de build paralelas: CPU (user_ms) + calls ==
+  V4_ROWSORT         user pre=    53.3 new=   265.1 delta=  +211.8 | calls/rep pre=12 new=48
+  B3_HIST            user pre=   107.2 new=   149.6 delta=   +42.3 | calls/rep pre=0 new=0
+  B5_FILL            user pre=   152.1 new=   123.7 delta=   -28.3 | calls/rep pre=0 new=0
+  build_calls/rep (HWM delta): pre=1 new=4
+
+== Atribuicao de delta (new-pre) por chamada ==
+  chamada            dCALL     dLOOP     dREST   REST = alloc + build interno
+  combine             +0.0      +0.0      +0.0   (combine)
+  mult               +17.6      +0.3     +17.3   (mults)
+  merge               +9.2      +0.2      +9.0   (merge)
+  dBUILD_CALL(todos os builds)=+26.3 ms   dALLOC=+0.0 ms   dREP=+28.9 ms
+  dLOOP estimado (todas as loops, total/T)=+0.5 ms
+
+== Gates ==
+  GATE checksum (1 valor distinto, warm/canary excluidos): PASS ['458820174.000000']
+  GATE nnz identico: PASS ['2748676']
+  canary vals (todos=['124', '102', '103', '99']) (mid-sessao=['102', '103', '99'])
+  GATE deriva mid-sessao canary_1..N (<=5%): PASS  drift=4.13%
+  (referencia: drift completo incl. canary_0 = 25.41%)
+
+== Heuristica de veredito ==
+  |dLOOP|/|dREP| = 2%   |dBUILD_CALL|/|dREP| = 91%
+  -> H1: delta concentrado no BUILD_CALL (work extra do builder).
+done.

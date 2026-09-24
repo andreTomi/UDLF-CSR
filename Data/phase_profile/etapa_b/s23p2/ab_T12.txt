@@ -1,0 +1,28 @@
+arms: {'pre': ['r1_pre', 'r2_pre', 'r3_pre'], 'new': ['r1_new', 'r2_new', 'r3_new']}
+=== ab12: medians per run (REP cols: all / rep>0 discarded), DONE hwm ===
+r1_pre   REP med=1714.272 (discard0=1611.179)  hwm=1766768
+r2_pre   REP med=1701.828 (discard0=1684.353)  hwm=1762020
+r3_pre   REP med=1682.612 (discard0=1578.082)  hwm=1750444
+r1_new   REP med=1740.850 (discard0=1809.728)  hwm=1772544
+r2_new   REP med=1708.117 (discard0=1676.236)  hwm=1778648
+r3_new   REP med=1618.592 (discard0=1755.014)  hwm=1758108
+
+label                         pre(ms)    new(ms)  new/pre
+restore_rk_state               11.999      9.008   0.751
+position_build               1058.354    985.149   0.931
+update_ranked_lists_pos       157.885    161.054   1.020
+H_build                        91.943     86.762   0.944
+H_transpose                    11.284     11.707   1.037
+mult_S                         95.053    105.244   1.107
+mult_Srev                     113.522    121.212   1.068
+combine_S_total                55.157     70.708   1.282
+combine_main                   56.718     73.247   1.291
+update_ranked_lists            16.712     17.320   1.036
+iter_free                      26.909     23.639   0.878
+
+REP total (rep0 discarded, 6 values/arm): pre med=1674.7  new med=1724.5  ratio=1.030
+checksums pre: ['119396288415.396088']
+checksums new: ['119396288415.396088']
+GATE checksum pre==new (1 distinct value): PASS
+hwm set pre: ['1750444', '1762020', '1766768']
+hwm set new: ['1758108', '1772544', '1778648']

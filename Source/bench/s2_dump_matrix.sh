@@ -19,6 +19,8 @@ for b in v2 legacy; do
       d="$OUT/${WL}_${b}_${s}_t${t}"
       mkdir -p "$d"
       taskset -c 0-11 env OMP_NUM_THREADS=$t PHASE_THREADS=$t \
+# S2.3 p2: PHASE_BUILDER is ignored by the post-removal driver (the
+# legacy arm is gone); this harness needs commit <= 1f56845.
         PHASE_BUILDER=$b PHASE_ROWSORT=$s PHASE_DUMP_DIR="$d" \
         "$BIN" mult "$WL" 1 > "$d/log.txt" 2>&1
       printf '%-38s ' "${WL}_${b}_${s}_t${t}"

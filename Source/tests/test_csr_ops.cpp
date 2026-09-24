@@ -1,7 +1,7 @@
 // test_csr_ops.cpp
 //
-// Characterization suite for the CSR helpers that Fase 1 (fragment-CSR) will
-// rewrite the producers of: build_from_partial_results, merge, combine and
+// Characterization suite for the CSR helpers of the engine: the single builder
+// v2 (build_from_partial_results, S2.3 step 2) plus merge, combine and
 // transpose (Source/src/Core/hpp/SparseMatrix.hpp).
 //
 // "Characterization" means: every assertion below is the behaviour the code
@@ -13,7 +13,7 @@
 // (-O2), because the kernel is compiled with -ffast-math -march=native and the
 // tests must not diverge from it:
 //   g++ -std=gnu++2b -O2 -fopenmp -I Source/src \
-//       Source/tests/test_csr_ops.cpp -o /tmp/test_csr_ops -ltbb
+//       Source/tests/test_csr_ops.cpp -o /tmp/test_csr_ops
 //
 // FP policy: -ffast-math lets the release kernel reassociate and fuse, so a
 // suite that asserted sums could drift from the kernel. This suite only
@@ -260,7 +260,7 @@ int main() {
         CHECK(csr_well_formed(C, &why), "C8: CSR invariants hold");
         NOTE("C8: merge drops any op result equal to T{} (5-5 == 0 -> no slot), "
              "so with plus the operator is lossless and with subtraction it is "
-             "not: C8 must stay in sync with the fragment-CSR builder.");
+             "not: C8 pins the merge contract every producer shares.");
     }
 
     // ---- C9: merge -- row-count mismatch throws, col-count mismatch does not ----
@@ -440,7 +440,7 @@ int main() {
     }
 
     // ---- C18: multiply_and_prune -- the DENSE branch must emit columns
-    // ascending. Regression guard for the fragment-CSR rewrite (Fase 1): the
+    // ascending. Regression guard: the
     // emitted prefix used to be sorted only for the Hash accumulator, on the
     // argument that col_of(slot) == slot implies ascending order for Dense.
     // It does not: active_ is in FIRST-TOUCH order (accumulate() pushes a
@@ -499,9 +499,11 @@ int main() {
     }
 
         // -------------------------------------------------------------------
-        // C19-C22: builder v2 (S2.1). The contract under test: any emission
-        // order, any thread (rows may leave the emitting thread's range),
-        // is_set semantics, and a per-row sort that keeps (col, value) paired.
+        // C19, C21, C22: builder v2 -- the single builder since S2.3 step 2
+        // (C20, which compared it against the retired legacy builder, is gone
+        // with it). The contract under test: any emission order, any thread
+        // (rows may leave the emitting thread's range), is_set semantics, and
+        // a per-row sort that keeps (col, value) paired.
         // -------------------------------------------------------------------
         {
             // C19: is_set == true replaces, is_set == false sums, with three
@@ -517,81 +519,16 @@ int main() {
             CHECK(A.get(0, 3) == 5.0f,
                   "C19: replace then sum in record order (4 -> +1)");
             CHECK(csr_well_formed(A, &why), "C19: CSR invariants hold");
-            NOTE("C19: v2 carries the is_set flag through the scatter; the "
-                 "fragment-CSR path ignores it (documented gap).");
+            NOTE("C19: v2 carries the is_set flag through the scatter and the "
+                 "per-row coalesce honours it (replace vs sum, in emission "
+                 "order).");
         }
 
         {
-            // C20: the same record set, but distributed over threads in a
-            // different way (and with duplicates), must give the SAME matrix
-            // from both builders -- the real equivalence gate, since the driver
-            // checksum cannot see intra-row order or value swaps.
-            std::mt19937 rng(7);
-            std::vector<std::tuple<idx_t, idx_t, float, bool>> in;
-            for (idx_t r = 0; r < 64; ++r) {
-                for (int j = 0; j < 12; ++j) {
-                    idx_t c = (idx_t)(rng() % 40);
-                    float v = 0.25f * (float)(1 + (rng() % 8));
-                    in.emplace_back(r, c, v, false);
-                }
-                // a guaranteed duplicate triple (order-sensitive sum)
-                in.emplace_back(r, 7, 0.25f, false);
-                in.emplace_back(r, 7, 0.5f, false);
-                in.emplace_back(r, 7, 1.0f, false);
-            }
-            M v2 = build_csr_flags(64, 40, in);
-
-            // Same content through the legacy builder (private-but-public for
-            // the A/B): emit every record into thread 0's allocator, i.e. rows
-            // far outside its range -> exercises the global path.
-            M lg(64, 40);
-            {
-                int nt = omp_get_max_threads();
-                std::vector<M::PaddedAllocator> allocators;
-                allocators.reserve(nt);
-                for (int i = 0; i < nt; ++i) allocators.emplace_back();
-                std::vector<std::pair<idx_t, idx_t>> ranges(nt);
-                size_t chunk = (64 + nt - 1) / nt;
-                for (int t = 0; t < nt; ++t)
-                    ranges[t] = {(idx_t)std::min<size_t>(64, t * chunk),
-                                 (idx_t)std::min<size_t>(64, (t + 1) * chunk)};
-                for (const auto& t : in) {
-                    Triplet* tr = allocators[0].ptr->allocate();
-                    tr->row = std::get<0>(t); tr->col = std::get<1>(t);
-                    tr->value = std::get<2>(t); tr->is_set = std::get<3>(t);
-                }
-                M::build_from_partial_results_legacy(lg, allocators, ranges);
-            }
-
-            CHECK(csr_well_formed(v2, &why), "C20: v2 output well formed");
-            CHECK(csr_well_formed(lg, &why), "C20: legacy output well formed");
-            CHECK(v2.nnz() == lg.nnz(), "C20: same nnz");
-            auto ma = to_map(v2), mb = to_map(lg);
-            bool same_keys = ma.size() == mb.size();
-            for (const auto& kv : ma)
-                if (!mb.count(kv.first)) same_keys = false;
-            CHECK(same_keys, "C20: same (row,col) support");
-            // Cells with >= 3 duplicate records may differ in the last bits
-            // (summation order is unspecified in BOTH paths); everything else
-            // must be exact. Reported through a relative tolerance.
-            int inexact = 0;
-            float worst = 0.0f;
-            for (const auto& kv : ma) {
-                float a = kv.second, b = mb.at(kv.first);
-                float d = std::fabs(a - b);
-                float scale = std::fmax(1.0f, std::fmax(std::fabs(a), std::fabs(b)));
-                if (d / scale > 1e-6f) { ++inexact; worst = std::fmax(worst, d / scale); }
-            }
-            CHECK(inexact == 0, "C20: v2 == legacy within 1e-6 relative");
-            if (inexact) std::printf("  [fail] C20: %d cells inexact, worst "
-                                     "rel %.3e\n", inexact, (double)worst);
-        }
-
-        {
-            // C21: the LHRR exception case -- a thread emits records for rows
-            // OUTSIDE its range (t2->row = neighbor in the symmetric build).
-            // v2 must not depend on the range invariant at all; the
-            // fragment-CSR path would reject this stream.
+            // C21: the LHRR case -- a thread emits records for rows OUTSIDE
+            // its range (t2->row = neighbor in the symmetric build). It is why
+            // the single builder must not depend on a range invariant, and why
+            // the fragment-CSR path that required one was removed (S2.3 p2).
             std::vector<std::tuple<idx_t, idx_t, float, bool>> in;
             for (idx_t r = 0; r < 32; ++r)
                 for (int j = 0; j < 6; ++j)
@@ -682,6 +619,45 @@ int main() {
             M::set_v2_row_sort_mode(0);
             CHECK(a0.nnz() == 80, "C22b: 40 records per row collapse to 5 cells");
             CHECK(to_map(a0) == to_map(a1), "C22b: strategies agree exactly");
+        }
+
+        {
+            // C23: V4 fast-path predicate (S2.4/Fase 1) -- the builder skips
+            // the per-row sort iff v2_row_is_presorted() holds, and that
+            // criterion is STRICT. Regression guard for the row [1,3,3,5]:
+            // non-decreasing WITH an adjacent duplicate must NOT qualify, so
+            // the row takes the full sort exactly as the pre-fast-path code
+            // did. If someone "simplifies" the predicate to std::is_sorted
+            // (which accepts duplicates), the first CHECK fails: std::sort is
+            // unstable, so skipping there could permute equal keys relative
+            // to the old behaviour and change the is_set/sum order inside
+            // coalesce (float addition is not associative) -- a silently
+            // different result, not just a different code path.
+            std::vector<M::index_type> dup_row = {1, 3, 3, 5};
+            CHECK(!M::v2_row_is_presorted(dup_row.data(), dup_row.size()),
+                  "C23: [1,3,3,5] does NOT take the fast path (duplicate)");
+            std::vector<M::index_type> asc_row = {1, 3, 4, 5};
+            CHECK(M::v2_row_is_presorted(asc_row.data(), asc_row.size()),
+                  "C23: strictly increasing row takes the fast path");
+            CHECK(M::v2_row_is_presorted(asc_row.data(), 1),
+                  "C23: single-column row is trivially presorted");
+
+            // Behavioural half: build the duplicate row [1,3,3,5] end-to-end.
+            // The pre-fast-path code always sorted; with m <= 16 libstdc++
+            // falls back to insertion sort, which preserves arrival order for
+            // equal keys, so coalesce sees col 3 as (1,false) then (2,true)
+            // and the is_set rule (C19) must hold -- identical to the
+            // pre-Fase-1 result. Values are exact in binary32 (see FP policy).
+            std::vector<std::tuple<idx_t, idx_t, float, bool>> in = {
+                {0, 1, 2.0f, false}, {0, 3, 1.0f, false},
+                {0, 3, 2.0f, true},  {0, 5, 1.5f, false}};
+            M A = build_csr_flags(1, 8, in);
+            CHECK(A.nnz() == 3, "C23: three cells after coalescing");
+            CHECK(A.get(0, 1) == 2.0f, "C23: col 1 untouched");
+            CHECK(A.get(0, 3) == 2.0f,
+                  "C23: is_set replace in arrival order (1 := 2)");
+            CHECK(A.get(0, 5) == 1.5f, "C23: col 5 untouched");
+            CHECK(csr_well_formed(A, &why), "C23: CSR invariants hold");
         }
 
         std::printf("\n%s: %d checks, %d failures\n",

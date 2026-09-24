@@ -12,7 +12,6 @@
 #include <iostream>
 #include <cmath>
 #include <omp.h>
-#include <execution> 
 
 #include "BlockAllocator.hpp" 
 
@@ -28,12 +27,13 @@
 //     are accumulated in stack-local RowTimers and merged once per
 //     parallel region. PHASE_PROFILE_ROW_SAMPLE (default 1) times 1-in-N
 //     rows if rdtsc overhead exceeds ~3%.
-//   * Build sub-phases: B0 temp_triplets_ resize (serial), B1 copy,
-//     B2 sort, B3 histogram+reduction+prefix, B4 values_/col_idx_ resize
-//     (serial), B5 fill. Serial phases record wall ticks + getrusage
-//     deltas (user/sys time, page faults); parallel build regions record
-//     an aggregated rusage delta around the region. The multiply/merge/
-//     combine row loops record ticks + per-thread end stamps only.
+//   * Build sub-phases of the single builder v2 (S2.3 step 2): B3_HIST = V1
+//     per-thread histogram, B3_PREFIX = V2 prefix + cursors, B5_FILL = V3
+//     scatter, V4_ROWSORT = per-row sort + coalesce, V5_COMPACT = serial
+//     compaction. Serial phases record wall ticks + getrusage deltas
+//     (user/sys time, page faults); parallel build regions record an
+//     aggregated rusage delta around the region. The multiply/merge/combine
+//     row loops record ticks + per-thread end stamps only.
 //   * Skew: parallel regions stamp each thread's end time; report()
 //     prints max(end) - mean(end) per phase.
 //   * Memory: VmHWM (/proc/self/status) sampled at build entry/exit and
@@ -72,20 +72,20 @@ enum : int {
     P_F2_PRUNE,        // multiply: per-row nth_element prune + emit
     P_MERGE_LOOP,      // merge(): per-thread row loop
     P_COMBINE_LOOP,    // combine(): per-thread row loop
-    P_B1_COPY,         // build: parallel triplet copy
-    P_B3_HIST,         // build: histogram (parallel region only)
-    P_B5_FILL,         // build: parallel fill of values_/col_idx_
-    P_B0_TEMP_RESIZE,  // build: serial resize of temp_triplets_
-    P_B2_SORT,         // build: global sort (wall; TBB threads inside)
-    P_B4_VALS_RESIZE,  // build: serial resize of values_/col_idx_
+    P_B1_COPY,         // RETIRED (S2.3 p2): legacy builder triplet copy
+    P_B3_HIST,         // v2 V1: per-thread row histogram (parallel)
+    P_B5_FILL,         // v2 V3: parallel scatter into values_/col_idx_
+    P_B0_TEMP_RESIZE,  // RETIRED (S2.3 p2): legacy temp_triplets_ resize
+    P_B2_SORT,         // RETIRED (S2.3 p2): legacy global sort (TBB)
+    P_B4_VALS_RESIZE,  // RETIRED (S2.3 p2): legacy output resize
     P_TRANSPOSE,       // transpose() whole (serial)
     P_MULT_TOTAL,      // multiply_and_prune: per-thread whole-region wall
     // ---- A0: sub-phases (per thread / region) ----
     P_ACC_PREP,        // mult: bound scan + accumulator ctor/reserve
-    P_B3_SETUP,        // build: thread_row_counts + row_counts alloc (serial)
-    P_B3_RED,          // build: parallel reduction of thread histograms
-    P_B3_PREFIX,       // build: serial prefix sum into row_ptr_
-    P_BUILD_FINISH,    // build: release of the shared sorted triplet buffer
+    P_B3_SETUP,        // RETIRED (S2.3 p2): legacy histogram setup
+    P_B3_RED,          // RETIRED (S2.3 p2): legacy histogram reduction
+    P_B3_PREFIX,       // v2 V2: prefix sum + per-thread cursors
+    P_BUILD_FINISH,    // RETIRED (S2.3 p2): legacy temp release
     // ---- A0: call-level walls (serial, whole function) ----
     P_ALLOC_SETUP,     // call-level: PaddedAllocator vector ctor + ranges
     P_ALLOC_TEARDOWN,  // call-level: PaddedAllocator dtor (2 MB block frees)
@@ -98,6 +98,10 @@ enum : int {
     P_V5_COMPACT,      // v2 build: serial in-place compaction move (row shifts)
     P_MAX
 };
+
+// RETIRED ids (B0/B1/B2/B3_SETUP/B3_RED/B4/BUILD_FINISH) keep their slot and
+// their names[] entry on purpose: the PHASEPROFILE ledger stays column-stable
+// against the pre-S2.3p2 captures, where they simply report zero now.
 constexpr int MAX_THREADS = 128;
 
 struct alignas(128) ThreadCtr {
@@ -500,195 +504,20 @@ public:
     CSRMatrix(CSRMatrix&& other) noexcept = default;
     CSRMatrix& operator=(CSRMatrix&& other) noexcept = default;
 
-#ifdef PHASE_PROFILE
-    // S2.3 (PHASE_FRAGAB): bench-side measurement hook for the
-    // fragment-CSR-vs-v2 same-base A/B. The class keeps ONLY a function
-    // pointer (bench/phase_ab.hpp registers it from bench_phase), so Core
-    // has no dependency on bench code. Inert when unset; the whole block
-    // disappears without -DPHASE_PROFILE (suites/production binaries).
-    using ABHook = void (*)(CSRMatrix&,
-                            std::vector<PaddedAllocator>&,
-                            const std::vector<std::pair<size_type, size_type>>&,
-                            double);
-    inline static ABHook ab_hook_ = nullptr;
-    static void ab_set_hook(ABHook h) { ab_hook_ = h; }
-#endif
-
     // =========================================================================
     // OPTIMIZED "ROW-SPLIT" ENGINE
     // =========================================================================
 
     // =========================================================================
-    // FASE 1: Fragmento-CSR por thread (build_from_ordered_fragments)
+    // Builder v2 -- the SINGLE builder (S2.3 step 2 consolidation).
     //
-    // Assumes each thread's PaddedAllocator emits Triplets ordered by
-    // (row, col) within its assigned row range. Eliminates the global
-    // temp_triplets_ buffer, the O(M log M) parallel sort (B2), and the
-    // parallel histogram/reduce (B3). Instead performs a direct sequential
-    // write into the final CSR arrays.
-    //
-    // Caller invariant:
-    //   - thread tid emits rows strictly within row_ranges[tid]
-    //   - within those rows, Triplets are sorted by (row, col) with
-    //     duplicates coalesced (is_set=true replaces, is_set=false sums)
-    //
-    // For the symmetric mainMatrix build in LHRRSparse (which emits
-    // t2->row = neighbor, i.e. rows outside the thread's range), callers
-    // MUST use build_from_partial_results instead.
-    // =========================================================================
-    static void build_from_ordered_fragments(
-        CSRMatrix& C,
-        std::vector<PaddedAllocator>& allocators,
-        const std::vector<std::pair<size_type, size_type>>& row_ranges
-    ) {
-        if (C.finalized_) throw std::logic_error("Matrix finalized");
-
-#ifdef PHASE_PROFILE
-        uint64_t t0_bcall = 0; phprof::RUsageSnap r0_bcall;
-        size_t alloc_bytes = 0;
-        long hwm_b0 = -1;
-        phprof::serial_begin(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
-        for (int i = 0; i < (int)allocators.size(); ++i)
-            alloc_bytes += allocators[i].ptr->capacity_bytes();
-        if (phprof::mem_enabled()) {
-            phprof::hwm_reset();
-            hwm_b0 = phprof::vmhwm_kb();
-            phprof::mem_point("buildFrag_entry");
-        }
-#endif
-#ifdef PHASE_PROFILE
-        auto ab_t0 = std::chrono::steady_clock::now();
-#endif
-
-        int num_threads = allocators.size();
-
-        // 1. Compute per-thread sizes and total
-        std::vector<size_t> thread_sizes(num_threads);
-        size_t total_elements = 0;
-        for (int t = 0; t < num_threads; ++t) {
-            thread_sizes[t] = allocators[t].ptr->size();
-            total_elements += thread_sizes[t];
-        }
-
-        std::cout << "  [BuildFrag] Total triplets: " << total_elements << std::endl;
-
-        // 2. Count rows via single pass per thread (no global sort needed).
-        //    Invariant: in multiply_and_prune/merge/combine, each thread
-        //    emits rows strictly within its range with unique (row, col)
-        //    within a row. No cross-thread duplicates.
-        std::vector<size_type> row_counts(C.rows_, 0);
-
-#ifdef PHASE_PROFILE
-        phprof::RUsageSnap r0_b3 = phprof::rsnap();
-#endif
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            if (tid < num_threads && thread_sizes[tid] > 0) {
-                allocators[tid].ptr->for_each([&](const Triplet& t) {
-                    row_counts[t.row]++;
-                });
-            }
-        }
-#ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B3_HIST, r0_b3);
-        phprof::mem_point("after_B3_frag_count");
-#endif
-
-        // 3. Prefix sum -> row_ptr_
-#ifdef PHASE_PROFILE
-        uint64_t t0_b3p; phprof::RUsageSnap r0_b3p;
-        phprof::serial_begin(phprof::P_B3_PREFIX, t0_b3p, r0_b3p);
-#endif
-        C.row_ptr_[0] = 0;
-        for (size_t i = 0; i < C.rows_; ++i)
-            C.row_ptr_[i+1] = C.row_ptr_[i] + row_counts[i];
-        size_t final_nnz = C.row_ptr_[C.rows_];
-
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B3_PREFIX, t0_b3p, r0_b3p);
-#endif
-
-        // 4. Allocate output arrays (FINAL size -- no temp_triplets_ buffer!)
-#ifdef PHASE_PROFILE
-        uint64_t t0_b4; phprof::RUsageSnap r0_b4;
-        phprof::serial_begin(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
-#endif
-        C.values_.resize(final_nnz);
-        C.col_idx_.resize(final_nnz);
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
-        phprof::mem_point("after_B4_frag_resize");
-#endif
-
-        // 5. Parallel fill: each thread writes its rows directly into output.
-        //    Rows are disjoint per thread and triplet stream is (row, col)
-        //    sorted, so a running write cursor per thread works.
-#ifdef PHASE_PROFILE
-        phprof::RUsageSnap r0_fill = phprof::rsnap();
-#endif
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            if (tid < num_threads && thread_sizes[tid] > 0) {
-                size_t r_start = row_ranges[tid].first;
-                size_t write_pos = C.row_ptr_[r_start];
-
-#ifndef NDEBUG
-                // Order invariant of the fragment path, checked per stream:
-                // rows non-decreasing (the linear write cursor depends on it)
-                // and columns strictly increasing inside a row (get() is
-                // lower_bound; merge() is a two-pointer). Debug builds only.
-                size_t dbg_row = 0;
-                index_type dbg_col = 0;
-                bool dbg_first = true;
-#endif
-                allocators[tid].ptr->for_each([&](const Triplet& t) {
-#ifndef NDEBUG
-                    if (dbg_first) {
-                        dbg_first = false;
-                    } else {
-                        assert(t.row >= dbg_row);
-                        if (t.row == dbg_row) assert(t.col > dbg_col);
-                    }
-                    dbg_row = t.row;
-                    dbg_col = t.col;
-#endif
-                    C.values_[write_pos] = t.value;
-                    C.col_idx_[write_pos] = t.col;
-                    write_pos++;
-                });
-            }
-        }
-#ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B5_FILL, r0_fill);
-        phprof::mem_point("after_B5_frag_fill");
-#endif
-
-        C.finalized_ = true;
-
-#ifdef PHASE_PROFILE
-        {
-            long hwm_a = phprof::vmhwm_kb();
-            if (hwm_a > phprof::g().hwm_after_build_max)
-                phprof::g().hwm_after_build_max = hwm_a;
-            size_t out_bytes = C.values_.size() * sizeof(T) +
-                               C.col_idx_.size() * sizeof(index_type);
-            phprof::mem_build(total_elements, 0, out_bytes, alloc_bytes,
-                              0, hwm_b0, hwm_a);
-            phprof::mem_point("buildFrag_exit");
-            phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
-        }
-        if (ab_hook_)
-            ab_hook_(C, allocators, row_ranges,
-                     std::chrono::duration<double, std::milli>(
-                         std::chrono::steady_clock::now() - ab_t0).count());
-#endif
-    }
-
-
-    // =========================================================================
-    // Builder v2 (S2.1) -- one order-agnostic builder, no global temp buffer.
+    // It replaces both alternatives removed in that step: the legacy
+    // global-sort builder (temp_triplets_ + std::sort(par_unseq), which S2.1
+    // had kept as the A/B reference) and the fragment-CSR builder
+    // (build_from_ordered_fragments), whose emission-order invariant the
+    // callers could not guarantee -- multiply_and_prune's LHRR symmetric case
+    // emits rows outside the emitting thread's range. Every producer in the
+    // engine (multiply_and_prune, merge, combine, the methods) routes here.
     //
     // CONTRACT (what any caller -- present or future method -- may rely on):
     //   * Emission order is FREE: any thread, any row, any column order, and
@@ -698,13 +527,18 @@ public:
     //     each row (get() is a lower_bound, merge() is a two-pointer).
     //   * Duplicate (row,col): is_set == false sums, is_set == true replaces,
     //     processed in record order (thread id ascending, then emission order).
-    //   * Memory: NO copy of the emitted stream. The legacy builder allocated
-    //     16 B per emitted record (921.6 MB on the ALOI position build); v2
-    //     needs T*rows*4 B of cursors plus the CSR output itself.
+    //   * Memory: NO copy of the emitted stream. v2 needs NT*rows*size_type B
+    //     of cursors plus the CSR output itself (the retired legacy builder
+    //     first materialized the whole stream: 16 B per record -- 921.6 MB on
+    //     the ALOI position build).
     //   * Determinism: bit-identical for a fixed thread count. Across thread
-    //     counts the summation order of a cell with >= 3 duplicate records is
-    //     unspecified -- the legacy path was equally unspecified (std::sort is
-    //     unstable and par_unseq is not deterministic).
+    //     counts only the summation order of a cell with >= 3 duplicate
+    //     records is unspecified (last bits of the sum).
+    //
+    // V4 fast path (S2.4/Fase 1): the per-row sort is skipped when the row
+    // already reaches V4 strictly increasing by column -- see
+    // v2_row_is_presorted() for why the criterion is strict and how the skip
+    // stays bit-identical to sorting. No clause above changes.
     //
     // Phases: V1 histogram (P_B3_HIST) -> V2 prefix + per-thread cursors
     // (P_B3_PREFIX) -> V3 scatter (P_B5_FILL) -> V4 per-row sort + coalesce
@@ -729,6 +563,23 @@ public:
 public:
     static void set_v2_row_sort_mode(int m) { v2_row_sort_mode_ = (m == 1) ? 1 : 0; }
     static int v2_row_sort_mode() { return v2_row_sort_mode_; }
+
+    // V4 fast-path predicate (S2.4/Fase 1): build_from_partial_results skips
+    // the per-row sort iff this returns true. STRICT on purpose -- any
+    // adjacent duplicate (cols[i-1] == cols[i]) yields false, so rows that
+    // need coalescing always take the full sort. std::sort is unstable: for
+    // unique columns the sorted array is unique, hence skip and sort produce
+    // the same array BY PROOF, not by convention; with duplicates, skipping
+    // could permute equal keys relative to the pre-fast-path behaviour and
+    // change the is_set resolution order and the float summation order
+    // inside coalesce (addition is not associative). Replacing the criterion
+    // with std::is_sorted (which ACCEPTS duplicates) reopens that gap --
+    // guarded by C23 in Source/tests/test_csr_ops.cpp.
+    static bool v2_row_is_presorted(const index_type* cols, size_t m) {
+        for (size_t i = 1; i < m; ++i)
+            if (!(cols[i - 1] < cols[i])) return false;
+        return true;
+    }
 
 private:
     // Zip random-access iterator over (col_idx_, values_). The reference is a
@@ -790,140 +641,6 @@ private:
     };
     static index_type zcol(const RowZipRef& r) { return *r.c; }
     static index_type zcol(const std::pair<index_type, T>& p) { return p.first; }
-
-    // =========================================================================
-    // LEGACY global-sort builder -- kept ONLY as the A/B reference for the S2
-    // comparison (temp_triplets_ copy + std::sort(par_unseq) + histogram fill).
-    // New code must call build_from_partial_results (the v2 builder below);
-    // this one is removable once the S2 A/B is closed.
-    // =========================================================================
-public:
-    static void build_from_partial_results_legacy(
-        CSRMatrix& C, 
-        std::vector<PaddedAllocator>& allocators,
-        const std::vector<std::pair<size_type, size_type>>& row_ranges
-    ) {
-        if (C.finalized_) throw std::logic_error("Matrix finalized");
-#ifdef PHASE_PROFILE
-        // A0: call-level wall for the whole build + the per-build memory
-        // ledger (allocator bytes, tmp/out/count buffers, HWM delta after a
-        // clear_refs reset taken at entry).
-        uint64_t t0_bcall = 0; phprof::RUsageSnap r0_bcall;
-        size_t alloc_bytes = 0;
-        long hwm_b0 = -1;
-        phprof::serial_begin(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
-        for (int i = 0; i < (int)allocators.size(); ++i)
-            alloc_bytes += allocators[i].ptr->capacity_bytes();
-        {   long h = phprof::vmhwm_kb();
-            if (h > phprof::g().hwm_before_build_max)
-                phprof::g().hwm_before_build_max = h;
-            ++phprof::g().build_calls;
-        }
-        if (phprof::mem_enabled()) {
-            phprof::hwm_reset();               // peak rewind: measure THIS build
-            hwm_b0 = phprof::vmhwm_kb();
-            phprof::mem_point("build_entry");
-        }
-#endif
-
-        int num_threads = allocators.size();
-
-        // 1. Calculate offsets (Sequential - very fast)
-        std::vector<size_t> thread_offsets(num_threads + 1, 0);
-        for (int i = 0; i < num_threads; ++i) {
-            thread_offsets[i+1] = thread_offsets[i] + allocators[i].ptr->size();
-        }
-        size_t total_elements = thread_offsets.back();
-
-        std::cout << "  [Build] Total triplets: " << total_elements << std::endl;
-
-#ifdef PHASE_PROFILE
-        uint64_t t0_b0; phprof::RUsageSnap r0_b0;
-        phprof::serial_begin(phprof::P_B0_TEMP_RESIZE, t0_b0, r0_b0);
-#endif
-        // 2. Allocate destination buffer
-        C.temp_triplets_.resize(total_elements);
-
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B0_TEMP_RESIZE, t0_b0, r0_b0);
-        phprof::mem_point("after_B0_tmp_resize");
-#endif
-        // 3. OPTIMIZED: Parallel copy with prefetching
-#ifdef PHASE_PROFILE
-        phprof::RUsageSnap r0_b1 = phprof::rsnap();
-#endif
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            
-#ifdef PHASE_PROFILE
-            phprof::PhaseMark pm_b1(phprof::P_B1_COPY);
-#endif
-            if (tid < num_threads && allocators[tid].ptr->size() > 0) {
-                auto dest = C.temp_triplets_.begin() + thread_offsets[tid];
-                
-                // Prefetch hint for next thread's data
-                if (tid + 1 < num_threads) {
-                    __builtin_prefetch(allocators[tid + 1].ptr, 0, 3);
-                }
-                
-                allocators[tid].ptr->copy_to(dest);
-            }
-        }
-
-#ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B1_COPY, r0_b1);
-#endif
-        // 4. Parallel sort (Already optimal)
-#ifdef PHASE_PROFILE
-        uint64_t t0_b2; phprof::RUsageSnap r0_b2;
-        phprof::serial_begin(phprof::P_B2_SORT, t0_b2, r0_b2);
-#endif
-        std::sort(std::execution::par_unseq, 
-                  C.temp_triplets_.begin(), C.temp_triplets_.end(),
-                  [](const Triplet& a, const Triplet& b) {
-                      if (a.row != b.row) return a.row < b.row;
-                      return a.col < b.col;
-                  });
-
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B2_SORT, t0_b2, r0_b2);
-        phprof::mem_point("after_B2_sort");
-#endif
-        // 5. OPTIMIZED CSR Construction with NUMA awareness
-        buildCSRParallel(C, total_elements, row_ranges, num_threads);
-        
-#ifdef PHASE_PROFILE
-        {   long h = phprof::vmhwm_kb();
-            if (h > phprof::g().hwm_after_build_max)
-                phprof::g().hwm_after_build_max = h;
-        }
-#endif
-        C.finalized_ = true;
-#ifdef PHASE_PROFILE
-        uint64_t t0_bfin; phprof::RUsageSnap r0_bfin;
-        phprof::serial_begin(phprof::P_BUILD_FINISH, t0_bfin, r0_bfin);
-#endif
-        std::vector<Triplet>().swap(C.temp_triplets_);
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_BUILD_FINISH, t0_bfin, r0_bfin);
-        {
-            // A0/A3 ledger: what this build allocated vs what it produced,
-            // with the HWM delta measured from the reset taken at entry.
-            size_t out_bytes = C.values_.size() * sizeof(T) +
-                               C.col_idx_.size() * sizeof(index_type);
-            size_t tmp_bytes = total_elements * sizeof(Triplet);
-            size_t count_bytes =
-                (size_t)num_threads * C.rows_ * sizeof(size_type) +
-                C.rows_ * sizeof(size_type);
-            long hwm_a = phprof::vmhwm_kb();
-            phprof::mem_point("build_exit");
-            phprof::mem_build(total_elements, tmp_bytes, out_bytes, alloc_bytes,
-                              count_bytes, hwm_b0, hwm_a);
-            phprof::serial_end(phprof::P_BUILD_CALL, t0_bcall, r0_bcall);
-        }
-#endif
-    }
 
 public:
     static void build_from_partial_results(
@@ -1008,7 +725,7 @@ public:
 
         // ---- V3: scatter each thread's own stream into its cursor slots -----
         // Order inside a row = (thread id, emission order): deterministic, and
-        // it is the same summation order the legacy path had before its sort.
+        // it is deterministic for a fixed thread count.
         C.values_.resize(total);
         C.col_idx_.resize(total);
         std::vector<uint8_t> flags;
@@ -1058,7 +775,12 @@ public:
                     if (m == 0) continue;
                     index_type* cols = C.col_idx_.data() + rs;
                     T* vals = C.values_.data() + rs;
-                    if (m > 1) {
+                    // S2.4/Fase 1 fast path: skip only when the row already
+                    // arrives strictly increasing (unique columns => the
+                    // sorted array is unique => skip == sort bit-for-bit);
+                    // rows with adjacent duplicates fall through to the full
+                    // sort, preserving the pre-fast-path behaviour exactly.
+                    if (m > 1 && !v2_row_is_presorted(cols, m)) {
                         if (v2_row_sort_mode_ == 1) {
                             std::sort(RowZipIt{cols, vals},
                                       RowZipIt{cols + m, vals + m},
@@ -1167,164 +889,6 @@ public:
 #endif
     }
 
-private:
-    static void buildCSRParallel(CSRMatrix& C, size_t total_elements, 
-                                 const std::vector<std::pair<size_type, size_type>>& row_ranges,
-                                 int num_threads) {
-        
-        // A. NUMA-aware histogram (each thread on its own memory)
-        std::vector<std::vector<size_type>> thread_row_counts;
-#ifdef PHASE_PROFILE
-        uint64_t t0_bset; phprof::RUsageSnap r0_bset;
-        phprof::serial_begin(phprof::P_B3_SETUP, t0_bset, r0_bset);
-#endif
-        thread_row_counts.resize(num_threads);
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B3_SETUP, t0_bset, r0_bset);
-#endif
-#ifdef PHASE_PROFILE
-        phprof::RUsageSnap r0_hist = phprof::rsnap();
-#endif
-        
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-#ifdef PHASE_PROFILE
-            phprof::PhaseMark pm_hist(phprof::P_B3_HIST);
-#endif
-            thread_row_counts[tid].resize(C.rows_, 0);
-            
-            size_t chunk = (total_elements + num_threads - 1) / num_threads;
-            size_t start = std::min(total_elements, (size_t)tid * chunk);
-            size_t end   = std::min(total_elements, (size_t)(tid + 1) * chunk);
-            
-            // Prefetch hint
-            if (start < end) {
-                __builtin_prefetch(&C.temp_triplets_[start], 0, 3);
-            }
-            
-            for (size_t i = start; i < end; ++i) {
-                // Skip duplicates
-                if (i > 0 && 
-                    C.temp_triplets_[i].row == C.temp_triplets_[i-1].row && 
-                    C.temp_triplets_[i].col == C.temp_triplets_[i-1].col) {
-                    continue;
-                }
-                thread_row_counts[tid][C.temp_triplets_[i].row]++;
-            }
-        }
-
-#ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B3_HIST, r0_hist);
-        phprof::mem_point("after_B3_hist");
-#endif
-        // B. Parallel reduction
-#ifdef PHASE_PROFILE
-        phprof::RUsageSnap r0_red = phprof::rsnap();
-#endif
-        std::vector<size_type> row_counts(C.rows_, 0);
-        
-        #pragma omp parallel for
-        for (size_t r = 0; r < C.rows_; ++r) {
-#ifdef PHASE_PROFILE
-            phprof::PhaseMark pm_red(phprof::P_B3_RED);
-#endif
-            size_type sum = 0;
-            for (int t = 0; t < num_threads; ++t) {
-                sum += thread_row_counts[t][r];
-            }
-            row_counts[r] = sum;
-        }
-
-#ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B3_RED, r0_red);
-#endif
-        // C. Prefix sum (Sequential but fast)
-#ifdef PHASE_PROFILE
-        uint64_t t0_pre; phprof::RUsageSnap r0_pre;
-        phprof::serial_begin(phprof::P_B3_PREFIX, t0_pre, r0_pre);
-#endif
-        C.row_ptr_[0] = 0;
-        for (size_t i = 0; i < C.rows_; ++i) {
-            C.row_ptr_[i+1] = C.row_ptr_[i] + row_counts[i];
-        }
-        
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B3_PREFIX, t0_pre, r0_pre);
-#endif
-        size_t final_nnz = C.row_ptr_[C.rows_];
-#ifdef PHASE_PROFILE
-        uint64_t t0_b4; phprof::RUsageSnap r0_b4;
-        phprof::serial_begin(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
-#endif
-        C.values_.resize(final_nnz);
-        C.col_idx_.resize(final_nnz);
-#ifdef PHASE_PROFILE
-        phprof::serial_end(phprof::P_B4_VALS_RESIZE, t0_b4, r0_b4);
-        phprof::mem_point("after_B4_out_resize");
-#endif
-
-        // D. Parallel fill with cache-aware iteration
-#ifdef PHASE_PROFILE
-        phprof::RUsageSnap r0_fill = phprof::rsnap();
-#endif
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            
-#ifdef PHASE_PROFILE
-            phprof::PhaseMark pm_fill(phprof::P_B5_FILL);
-#endif
-            if (tid < (int)row_ranges.size()) {
-                size_t r_start = row_ranges[tid].first;
-                size_t r_end   = row_ranges[tid].second;
-
-                // Binary search for range
-                auto it_start = std::lower_bound(
-                    C.temp_triplets_.begin(), C.temp_triplets_.end(), r_start,
-                    [](const Triplet& t, size_t val) { return t.row < val; }
-                );
-                
-                auto it_end = std::lower_bound(
-                    C.temp_triplets_.begin(), C.temp_triplets_.end(), r_end,
-                    [](const Triplet& t, size_t val) { return t.row < val; }
-                );
-
-                size_t vec_start = std::distance(C.temp_triplets_.begin(), it_start);
-                size_t vec_end   = std::distance(C.temp_triplets_.begin(), it_end);
-                size_t write_pos = C.row_ptr_[r_start];
-
-                // Prefetch destination
-                if (write_pos < final_nnz) {
-                    __builtin_prefetch(&C.values_[write_pos], 1, 3);
-                    __builtin_prefetch(&C.col_idx_[write_pos], 1, 3);
-                }
-                
-                for (size_t i = vec_start; i < vec_end; ++i) {
-                    if (i > vec_start && 
-                        C.temp_triplets_[i].row == C.temp_triplets_[i-1].row &&
-                        C.temp_triplets_[i].col == C.temp_triplets_[i-1].col) 
-                    {
-                        // Duplicate: accumulate or set
-                        if (C.temp_triplets_[i].is_set) {
-                            C.values_[write_pos-1] = C.temp_triplets_[i].value;
-                        } else {
-                            C.values_[write_pos-1] += C.temp_triplets_[i].value;
-                        }
-                    } else {
-                        // New entry
-                        C.values_[write_pos] = C.temp_triplets_[i].value;
-                        C.col_idx_[write_pos] = C.temp_triplets_[i].col;
-                        write_pos++;
-                    }
-                }
-            }
-        }
-#ifdef PHASE_PROFILE
-        phprof::ru_end(phprof::P_B5_FILL, r0_fill);
-        phprof::mem_point("after_B5_fill");
-#endif
-    }
 private:
     // =========================================================================
     // Row accumulators for multiply_and_prune
@@ -1468,13 +1032,13 @@ private:
             emit_count = limit;  // do NOT used.resize(...) -- see note above
         }
 
-        // FASE 1 (corrected): sort columns within this row so the fragment-CSR
-        // builder receives (row, col) ordered streams. nth_element reorders by
-        // |v|, not by col -- and even the un-pruned order is the accumulator's
-        // FIRST-TOUCH order, which is not ascending whenever row i of A has
-        // more than one k and the k-th rows of B overlap out of column order.
-        // Both branches must sort: get() is lower_bound and merge() is a
-        // two-pointer, so an unsorted row silently corrupts every consumer.
+        // Sort columns within this row: nth_element reorders by |v|, not by
+        // col, and even the un-pruned order is the accumulator's FIRST-TOUCH
+        // order, which is not ascending whenever row i of A has more than one
+        // k and the k-th rows of B overlap out of column order. v2 tolerates
+        // any order, but the emitted order has to stay deterministic (the
+        // per-row coalesce sums duplicate records in emission order) and the
+        // consumers binary-search, so both branches sort.
         if constexpr (std::is_same_v<Acc, DenseRowAccumulator>) {
             // col_of(slot) == slot: ordering the slots ascending IS ordering
             // the columns. Plain integer sort -- no indirect comparator.
@@ -1486,8 +1050,8 @@ private:
                 });
         }
 #ifndef NDEBUG
-        // Order invariant of the emitted stream (debug builds only): the
-        // fragment-CSR builder and every consumer depend on it.
+        // Emitted-order invariant (debug builds only): every consumer
+        // binary-searches the row, so this must hold.
         for (size_t idx = 1; idx < emit_count; ++idx)
             assert(acc.col_of(used[idx - 1]) < acc.col_of(used[idx]));
 #endif
@@ -1657,7 +1221,7 @@ public:
 #endif
         }
         
-        build_from_ordered_fragments(C, allocators, ranges);
+        build_from_partial_results(C, allocators, ranges);
 #ifdef PHASE_PROFILE
         phprof::mem_point("mult_exit");
         phprof::serial_end(phprof::P_MP_CALL, t0_mp, r0_mp);
@@ -1765,7 +1329,7 @@ public:
             }
         }
         
-        build_from_ordered_fragments(C, allocators, ranges);
+        build_from_partial_results(C, allocators, ranges);
 #ifdef PHASE_PROFILE
         phprof::mem_point("merge_exit");
         phprof::serial_end(phprof::P_MERGE_CALL, t0_mc, r0_mc);
@@ -1845,7 +1409,7 @@ public:
             }
         }
         
-        build_from_ordered_fragments(C, allocators, ranges);
+        build_from_partial_results(C, allocators, ranges);
 #ifdef PHASE_PROFILE
         phprof::mem_point("combine_exit");
         phprof::serial_end(phprof::P_COMBINE_CALL, t0_cb, r0_cb);
@@ -1938,7 +1502,6 @@ private:
     bool finalized_;
     std::vector<T> values_;
     std::vector<index_type> col_idx_, row_ptr_;
-    std::vector<Triplet> temp_triplets_;
 };
 
 #endif // SPARSE_MATRIX_HPP

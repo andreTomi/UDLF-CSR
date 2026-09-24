@@ -1,4 +1,8 @@
 #!/bin/bash
+# HISTORICO (S2.3 passo 2): o builder fragment-CSR e o hook ab_set_hook foram
+# removidos. O driver atual ignora PHASE_BUILDER/PHASE_FRAGAB (com aviso no
+# stderr) e nao emite FRAG*; para reexecutar esta campanha use o driver do
+# commit 1f56845 ou anterior (build_s23 pre-passo-2).
 # s23_run.sh -- S2.3 step 1: fragment-CSR vs v2, SAME emitted base, per matrix.
 # This is the entry gate the S2 plan (doc 13) sets for S2.3: MEASURE the
 # fragment-CSR-vs-v2 decision on the same emitted base, per matrix (duplicate

@@ -3,7 +3,9 @@
 Gate de entrada do S2.3 (doc 13): **medir** a decisao fragment-CSR-vs-v2 na
 mesma base emitida, por matriz, ANTES de qualquer remocao de codigo
 (`temp_triplets_` / `buildCSRParallel` / `<execution>`). Nenhuma remocao
-aconteceu neste passo; a decisao arquitetonica fica para revisao.
+aconteceu neste passo; a decisao arquitetonica fica para revisao (revisada e
+EXECUTADA no S2.3 passo 2 -- ver a ultima secao deste arquivo, com os numeros
+reais que corrigem a estimativa de partida).
 
 - Driver unico `/home/andre/udlf_bin/bp_s23` (s22b + hook de medicao S2.3;
   build: `Source/bench/build_s23.sh` = linha do s22b README:118-119 +
@@ -329,3 +331,37 @@ cobrado por rep e so entra no tot/v2 agregado). Toda linha abaixo vem de
 - `prep` e serial (bucket+sort single-thread): e o custo tal como cobrado
   HOJE; uma norma paralela mudaria os numeros de MM/H (nao medido aqui).
 - Ledger PHASEPROFILE contaminado enquanto o knob ligado (se acima).
+
+## S2.3 passo 2 -- decisao (A) EXECUTADA (remocao): numeros reais
+
+A revisao humana aprovou a decisao (A) (remocao dos construtores legado +
+fragment-CSR; builder unico v2, order-agnostic) e ela foi executada no
+S2.3 p2. Os numeros medidos posteriores REFUTAM a estimativa usada para
+justificar a decisao:
+
+| cenario | estimativa (justificativa da decisao) | medido |
+|---|---|---|
+| T=1 LHRR end-to-end | 1-1,5% | **+8,6%** |
+| T=12 LHRR end-to-end | 1-1,5% | **+1,3-3,0%** |
+| CPRR end-to-end (T=12) | 1-1,5% | **+21,9%** |
+
+- **Procedencia da estimativa**: a faixa "1-1,5%" foi produzida durante a
+  revisao humana da decisao (A), fora do repositorio versionado (a partir
+  das tabelas de pares do S2.3 passo 1, T=12); ela nao existe em nenhum
+  arquivo do repo. Este paragrafo e o registro canonico que a corrige com
+  os numeros medidos.
+- **Fontes**: T=1 `../s23p2/ab_T1.txt` (ratio=1.086, n=12/braco,
+  ABBA-rt); T=12 `../s23p2/ab_T12.txt` (ratio=1.030, n=6/braco, p=0.002)
+  + `../s24/agg/agg_ab12.txt` (mediana +1.3% sobre 80 reps/braco; o ABBA
+  com pares fixos deu +5.4%, indicativo); CPRR `../s24/agg/agg_abcprr.txt`
+  (ratio=1.219, n=24/braco).
+- **Qualidade da evidencia**: o CPRR (abcprr) e o UNICO cenario com
+  `GATE deriva canary PASS`; os numeros LHRR sao INDICATIVOS (canario
+  FAIL em todas as sessoes LHRR brutas, drift 20-142% -- H3 em
+  `../s24/README.md`; a causa foi o canario `mult w1` herdado do template,
+  corrigido para `mult w3` no harness).
+- **Mecanismo** (H1 CONFIRMADA, fase diagnostico S2.4): o delta
+  concentra-se em `BUILD_CALL`; a troca Frag->V2 roteou
+  mult/combine/merge pelo builder v2, que roda `V4_ROWSORT`
+  incondicionalmente sobre uma base que ja chega ordenada. Contas e
+  decomposicao em `../s24/README.md`.

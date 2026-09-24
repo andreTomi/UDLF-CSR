@@ -42,16 +42,16 @@
 //                  MB=mult(A,WT,limit); C=merge(MA,MB,plus) }  (CPRR iteration)
 //   real/lhrr: position matrix + T=1 iteration (H build, transpose, 2x mult,
 //              2x combine), exactly as LHRRSparse does for the first pass.
-// Threads: OMP_NUM_THREADS / PHASE_THREADS for OpenMP; the same count is also
-// applied to TBB (tbb::global_control) because std::execution::par_unseq in
-// the build sort ignores OMP_NUM_THREADS. The effective affinity mask and the
-// TBB max_concurrency are printed on the TSET line.
+// Threads: OMP_NUM_THREADS / PHASE_THREADS. S2.3 step 2 removed the
+// std::execution::par_unseq build sort, so OpenMP is the only thread source
+// and no TBB arena is created or configured. The effective affinity mask is
+// printed on the TSET line.
 // Memory sampling: PHASE_MEM=1 enables the per-phase RSS/HWM points and the
 // per-build ledger (with /proc/self/clear_refs reset before each build).
 //
 // Build (WSL, from repo root):
 //   g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/bench/bench_phase.cpp \
-//       -o /tmp/bench_phase -ltbb
+//       -o /tmp/bench_phase
 //   add -DPHASE_PROFILE for the per-phase report.
 
 #include "Core/hpp/SparseMatrix.hpp"
@@ -73,19 +73,12 @@
 #include <unistd.h>
 #include <vector>
 
-#include <tbb/global_control.h>
-#include <tbb/task_arena.h>
-
-#ifdef PHASE_PROFILE
-#include "phase_ab.hpp"   // S2.3: fragment-CSR vs v2, same emitted base
-#endif
-
 using M = CSRMatrix<float>;
 using idx_t = M::size_type;
 using Triplet = M::Triplet;
 
 // ---------------------------------------------------------------------------
-// A0 helpers: wall clock, per-statement ledger, affinity/TBB reporting.
+// A0 helpers: wall clock, per-statement ledger, affinity reporting.
 // ---------------------------------------------------------------------------
 static double now_ms() {
     using clk = std::chrono::steady_clock;
@@ -144,13 +137,17 @@ static std::string env_or(const char* key, const char* dflt) {
 }
 
 static void print_tset(int omp_threads) {
-    std::printf("TSET,omp_threads=%d,tbb_max=%d,affinity_omp=%s,"
+    // tbb_max is gone (S2.3 p2: the builder no longer sorts through
+    // std::execution/par_unseq). The field is kept as an explicit "none" so an
+    // older parser fails loudly on the value instead of reading a stale
+    // number; max_concurrency now reports the OpenMP pool.
+    std::printf("TSET,omp_threads=%d,tbb_max=none,affinity_omp=%s,"
                 "affinity_at_entry=%s,req_mask=%s,"
                 "cpus=%ld,max_concurrency=%zu,pid=%d\n",
-                omp_threads, omp_get_max_threads(), affinity_mask().c_str(),
+                omp_threads, affinity_mask().c_str(),
                 g_affinity_at_entry.c_str(), env_or("PHASE_MASK", "unset").c_str(),
                 sysconf(_SC_NPROCESSORS_ONLN),
-                (size_t)tbb::this_task_arena::max_concurrency(), (int)getpid());
+                (size_t)omp_get_max_threads(), (int)getpid());
 }
 
 struct Workload {
@@ -279,8 +276,12 @@ static void validate_wf(const M& m, const char* what) {
 }
 
 // ---------------------------------------------------------------------------
-// S2.1 A/B knobs and the canonical dump.
-//   PHASE_BUILDER=legacy|v2   builder used by every driver-side build
+// Driver knobs and the canonical dump.
+//   PHASE_BUILDER, PHASE_FRAGAB   GONE (S2.3 step 2): the legacy and
+//                             fragment-CSR builders were removed, so every
+//                             driver-side build is v2. Setting either prints a
+//                             warning and is otherwise ignored -- a stale
+//                             harness must not silently get the wrong arm.
 //   PHASE_ROWSORT=idx|zip     v2 per-row sort strategy
 //   PHASE_DUMP_DIR=<dir>      write canonical dumps of every driver-side build
 //                             (rep 0 only)
@@ -293,7 +294,6 @@ static void validate_wf(const M& m, const char* what) {
 // swap). The canonical dump is row-major with the raw value bits, so md5sum
 // over it is the strong equivalence check the S2 gate requires.
 // ---------------------------------------------------------------------------
-static int g_use_legacy = 0;
 static std::string g_dump_dir;
 static int g_dump_now = 0;
 static std::string g_rk_out;   // PHASE_RK_OUT: final rk lists (raw u32) sink
@@ -339,29 +339,14 @@ static void dump_matrix(const M& m, const char* tag) {
 
 // Single entry point for the driver's own builds, so neither the A/B switch nor
 // the dump can be forgotten at a call site.
-// S2.3 (PHASE_FRAGAB): under the knob, the natural v2 build is timed and handed
-// to phaseab together with the LIVE base -- it runs the per-matrix
-// fragment-vs-v2 interleave (contract probe / charged normalization /
-// 3+3 samples / structure+value check). The one-shot synthetic "ab" tag and
-// CPRR's "W" are out of scope: the six real matrices are MM, H, S, Srev, Stot,
-// result (LHRR rep order, seq 1..6).
+// S2.3 step 2: the driver-side builder is the single v2 path
+// (build_from_partial_results). PHASE_BUILDER/PHASE_FRAGAB and the
+// phase_ab.hpp interleave were removed with the legacy and fragment-CSR
+// builders; the canonical dump below is unchanged.
 static void build_into(M& m, std::vector<M::PaddedAllocator>& allocators,
                        std::vector<std::pair<idx_t, idx_t>>& ranges,
                        const char* tag) {
-    if (g_use_legacy) {
-        M::build_from_partial_results_legacy(m, allocators, ranges);
-    } else {
-#ifdef PHASE_PROFILE
-        double ab_t = now_ms();
-        M::build_from_partial_results(m, allocators, ranges);
-        if (phaseab::on && std::string(tag) != "W" &&
-            std::string(tag) != "ab")
-            phaseab::after_partial(m, allocators, ranges, tag,
-                                   now_ms() - ab_t);
-#else
-        M::build_from_partial_results(m, allocators, ranges);
-#endif
-    }
+    M::build_from_partial_results(m, allocators, ranges);
     dump_matrix(m, tag);
 }
 
@@ -619,7 +604,6 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
     for (int rep = 0; rep < reps; ++rep) {
 #ifdef PHASE_PROFILE
         phprof::reset();
-        phaseab::new_rep();   // S2.3: seq 1..6 restarts each rep
 #endif
         g_dump_now = (rep == 0 && !g_dump_dir.empty()) ? 1 : 0;
         double tr = now_ms();
@@ -752,28 +736,26 @@ static int run_real(const char* dataset, const char* bin, size_t N, size_t L,
 int main(int argc, char** argv) {
     g_affinity_at_entry = affinity_mask();
     g_validate = (env_or("PHASE_VALIDATE", "0") == std::string("1")) ? 1 : 0;
-    // S2.1 A/B knobs (see the dump_matrix comment block).
-    g_use_legacy = (env_or("PHASE_BUILDER", "v2") == std::string("legacy")) ? 1 : 0;
+    // S2.3 step 2: PHASE_BUILDER/PHASE_FRAGAB were removed together with the
+    // builders they selected (see the dump_matrix comment block). A stale
+    // harness that still exports them gets a loud warning instead of the
+    // wrong arm.
+    if (const char* b = std::getenv("PHASE_BUILDER"))
+        std::fprintf(stderr, "warning: PHASE_BUILDER=%s ignored (S2.3 p2: "
+                     "builder is v2 only)\n", b);
+    if (const char* b = std::getenv("PHASE_FRAGAB"))
+        std::fprintf(stderr, "warning: PHASE_FRAGAB=%s ignored (S2.3 p2: the "
+                     "fragment-CSR builder was removed)\n", b);
     {
         std::string rs = env_or("PHASE_ROWSORT", "idx");
         M::set_v2_row_sort_mode(rs == std::string("zip") ? 1 : 0);
     }
     g_dump_dir = env_or("PHASE_DUMP_DIR", "");
     g_rk_out = env_or("PHASE_RK_OUT", "");
-    int g_ab = 0;  // PHASE_FRAGAB=1: S2.3 fragment-CSR-vs-v2 A/B active
-#ifdef PHASE_PROFILE
-    if (env_or("PHASE_FRAGAB", "0") == std::string("1")) {
-        g_ab = 1;
-        phaseab::enable();
-        M::ab_set_hook(&phaseab::after_frag<M>);
-    }
-#endif
-    std::printf("ABKNOBS,builder=%s,rowsort=%s,dumpdir=%s,rkout=%s,validate=%d,fragab=%d\n",
-                g_use_legacy ? "legacy" : "v2",
+    std::printf("ABKNOBS,builder=v2,rowsort=%s,dumpdir=%s,rkout=%s,validate=%d\n",
                 M::v2_row_sort_mode() ? "zip" : "idx",
                 g_dump_dir.empty() ? "(none)" : g_dump_dir.c_str(),
-                g_rk_out.empty() ? "(none)" : g_rk_out.c_str(), g_validate,
-                g_ab);
+                g_rk_out.empty() ? "(none)" : g_rk_out.c_str(), g_validate);
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: %s <mult|pipe> <w1|w2|w3> [reps=7]\n"
@@ -786,18 +768,15 @@ int main(int argc, char** argv) {
     std::string mode = argv[1];
     std::string wl = argv[2];
 
-    // Thread control: OpenMP from PHASE_THREADS/OMP_NUM_THREADS, and the SAME
-    // count on TBB, because the build sort (std::execution::par_unseq) runs on
-    // the TBB arena and ignores OMP_NUM_THREADS.
+    // Thread control: OpenMP from PHASE_THREADS/OMP_NUM_THREADS. S2.3 step 2
+    // removed the std::execution::par_unseq build sort, so this is the only
+    // thread source (no TBB arena is created or configured).
     int omp_threads = omp_get_max_threads();
     if (const char* e = std::getenv("PHASE_THREADS")) {
         int n = std::atoi(e);
         if (n > 0) omp_threads = n;
     }
     omp_set_num_threads(omp_threads);
-    std::unique_ptr<tbb::global_control> tbb_gc =
-        std::make_unique<tbb::global_control>(
-            tbb::global_control::max_allowed_parallelism, (size_t)omp_threads);
 
     bool pp_flag =
 #if defined(PHASE_PROFILE)

@@ -4,7 +4,9 @@
 # Usage (WSL, from repo root):
 #   bash Source/tests/run_all.sh
 #
-# Requires: g++, libtbb  (Debian: apt install g++ libtbb-dev)
+# Requires: g++ with OpenMP (libgomp) -- nothing else. S2.3 step 2
+# removed the builder's std::execution/par_unseq sort and the TBB arena,
+# so these binaries link no TBB.
 #
 # Stages:
 #   1. Build unit suite + e2e bench + instantiation (compile-time) check.
@@ -17,8 +19,8 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cd /mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR || exit 1
 
 echo "=== Building..."
-g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_multiply_and_prune.cpp -o /tmp/test_map -ltbb || exit 1
-g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/bench/bench_e2e.cpp -o /tmp/bench_e2e -ltbb || exit 1
+g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_multiply_and_prune.cpp -o /tmp/test_map || exit 1
+g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/bench/bench_e2e.cpp -o /tmp/bench_e2e || exit 1
 g++ -std=gnu++2b -fsyntax-only -fopenmp -I Source/src Source/tests/check_instantiations.cpp || exit 1
 echo "=== Instantiation check: OK"
 
@@ -26,7 +28,7 @@ echo "=== Unit suite: adaptive multiply_and_prune ==="
 /tmp/test_map | tail -n +2 | grep -v Build
 
 echo "=== Characterization suite: build/merge/combine/transpose ==="
-g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_csr_ops.cpp -o /tmp/test_csr_ops -ltbb || exit 1
+g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_csr_ops.cpp -o /tmp/test_csr_ops || exit 1
 /tmp/test_csr_ops | tail -n +2 | grep -v Build
 
 echo "=== C-thread determinism: characterization suite at 1/2/4/8/12 threads ==="

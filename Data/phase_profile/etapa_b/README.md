@@ -128,3 +128,10 @@ materialização, `nth_element` indireto como na Fase 1. Reverificação no esta
 - **Workloads sintéticos têm colunas uniformes** (não-kNN); w4 foi desenhado para o
   regime de tabela Hash que estoura a L1d, mas partição real de kNN pode alterar o
   balanço cache/gather.
+
+## S2 (encerramento)
+
+Arco completo do contrato de construção (**S2.1 → S2.4**): a decisão (A) e sua
+execução, o mecanismo da regressão pós-remoção (H1) e a correção (fast path
+estrito do `V4_ROWSORT`), o contrato final do builder único e as lições
+metodológicas — em `Data/phase_profile/etapa_b/s2_close/README.md`.

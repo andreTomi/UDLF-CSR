@@ -20,3 +20,6 @@ __pycache__/
 # Scratch/diagnostic output from the phase-profiling runs
 Data/phase_profile/etapa_a/_diag*.txt
 
+# Stray nohup captures from background campaign runs
+nohup.out
+

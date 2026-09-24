@@ -1,0 +1,43 @@
+=== RKOUT dumps (REPS=1) ===
+/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Data/phase_profile/etapa_b/s23p2/rkcmp_cprr12_new.log:RKOUT,/home/andre/udlf_cache/p2_rk/cprr12_new.rk,bytes=115200000
+/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Data/phase_profile/etapa_b/s23p2/rkcmp_cprr12_pre.log:RKOUT,/home/andre/udlf_cache/p2_rk/cprr12_pre.rk,bytes=115200000
+/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Data/phase_profile/etapa_b/s23p2/rkcmp_lhrr12_new.log:RKOUT,/home/andre/udlf_cache/p2_rk/lhrr12_new.rk,bytes=115200000
+/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Data/phase_profile/etapa_b/s23p2/rkcmp_lhrr12_pre.log:RKOUT,/home/andre/udlf_cache/p2_rk/lhrr12_pre.rk,bytes=115200000
+/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Data/phase_profile/etapa_b/s23p2/rkcmp_lhrr1_new.log:RKOUT,/home/andre/udlf_cache/p2_rk/lhrr1_new.rk,bytes=115200000
+/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Data/phase_profile/etapa_b/s23p2/rkcmp_lhrr1_pre.log:RKOUT,/home/andre/udlf_cache/p2_rk/lhrr1_pre.rk,bytes=115200000
+
+=== size gate (must be N*L*4=115200000) ===
+all sizes OK
+
+=== md5 ===
+ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/p2_rk/cprr12_new.rk
+ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/p2_rk/cprr12_pre.rk
+68ba20662614f4b7c8b88dddd1867009  /home/andre/udlf_cache/p2_rk/lhrr12_new.rk
+68ba20662614f4b7c8b88dddd1867009  /home/andre/udlf_cache/p2_rk/lhrr12_pre.rk
+68ba20662614f4b7c8b88dddd1867009  /home/andre/udlf_cache/p2_rk/lhrr1_new.rk
+68ba20662614f4b7c8b88dddd1867009  /home/andre/udlf_cache/p2_rk/lhrr1_pre.rk
+
+=== pairwise cmp, pre vs new (gate) ===
+IDENTICAL lhrr12
+IDENTICAL lhrr1
+IDENTICAL cprr12
+
+=== info: cross-T / cross-pipe (not gated) ===
+IDENTICAL lhrr12_new == lhrr1_new
+IDENTICAL lhrr12_pre == lhrr1_pre
+
+=== rk_cmp.py per gated pair ===
+-- lhrr12 --
+== /home/andre/udlf_cache/p2_rk/lhrr12_pre.rk vs /home/andre/udlf_cache/p2_rk/lhrr12_new.rk ==
+   rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
+   RESULT: IDENTICAL
+-- lhrr1 --
+== /home/andre/udlf_cache/p2_rk/lhrr1_pre.rk vs /home/andre/udlf_cache/p2_rk/lhrr1_new.rk ==
+   rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
+   RESULT: IDENTICAL
+-- cprr12 --
+== /home/andre/udlf_cache/p2_rk/cprr12_pre.rk vs /home/andre/udlf_cache/p2_rk/cprr12_new.rk ==
+   rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
+   RESULT: IDENTICAL
+
+GATE rkcmp: PASS (all pre==new bit-equal)

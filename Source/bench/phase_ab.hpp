@@ -1,5 +1,11 @@
 // phase_ab.hpp -- S2.3 step 1: same-emitted-base A/B (fragment-CSR vs v2).
 //
+// HISTORICAL (S2.3 step 2): NOT included by any build anymore. The
+// fragment-CSR builder it drives (CSRMatrix::build_from_ordered_fragments) and
+// the bench hook (CSRMatrix::ab_set_hook) were removed in step 2, so this
+// header only compiles against commit 1f56845 or earlier -- re-running the
+// step-1 campaign means checking that revision out together with its driver.
+//
 // Included ONLY by bench_phase.cpp under #ifdef PHASE_PROFILE (self-guarded
 // here as well): the test suites and production binaries never see this file.
 // Enabled at runtime with PHASE_FRAGAB=1; inert otherwise.

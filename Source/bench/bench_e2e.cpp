@@ -1,7 +1,7 @@
 // bench_e2e.cpp
 //
 // End-to-end benchmark of the REAL CSRMatrix::multiply_and_prune pipeline
-// (accumulator + BlockAllocator + parallel sort + CSR build) against a
+// (accumulator + BlockAllocator + the v2 CSR build) against a
 // faithful replica of the original dense-only kernel, over the same
 // production merge path (build_from_partial_results).
 //
@@ -11,7 +11,7 @@
 //
 // Build (WSL, from repo root):
 //   g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/bench/bench_e2e.cpp \
-//       -o /tmp/bench_e2e -ltbb
+//       -o /tmp/bench_e2e
 
 #include "Core/hpp/SparseMatrix.hpp"
 

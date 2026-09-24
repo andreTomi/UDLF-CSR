@@ -5,7 +5,7 @@
 //
 // Build (WSL, from repo root):
 //   g++ -std=gnu++2b -O2 -fopenmp -I Source/src \
-//       Source/tests/test_multiply_and_prune.cpp -o /tmp/test_map -ltbb
+//       Source/tests/test_multiply_and_prune.cpp -o /tmp/test_map
 //
 // Exit code 0 = all tests passed.
 

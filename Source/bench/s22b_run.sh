@@ -1,4 +1,7 @@
 #!/bin/bash
+# HISTORICO (S2.3 passo 2): o braco legacy nao existe mais -- PHASE_BUILDER e
+# ignorado pelo driver atual (aviso no stderr) e todo build e v2. Reexecutar
+# este A/B exige o driver do commit 1f56845 ou anterior.
 # s22b_run.sh -- S2.2b same-session interleaved A/B (legacy vs v2) for the
 # REAL pipeline (LHRR at T in {1,2,12}, CPRR spot-check layer-0 at T=12).
 #

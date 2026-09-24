@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """S2.3 step-1 aggregator: fragment-CSR vs v2 on the SAME emitted base.
 
+HISTORICO (S2.3 passo 2): esta campanha exige o driver ANTERIOR a remocao
+(commit <= 1f56845). O builder fragment-CSR e o hook PHASE_FRAGAB nao existem
+mais, e o driver atual nao emite ABKNOBS fragab nem linhas FRAG* -- o gate
+abaixo (builder=v2 + fragab=1) nao teria como passar.
+
 Reads Data/phase_profile/etapa_b/s23/t{1,12}/raw/{m1,canary_0,canary_1}.txt
 and writes Data/phase_profile/etapa_b/s23/aggregate.txt.
 

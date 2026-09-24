@@ -1,0 +1,23 @@
+arms: {'pre': ['r1_pre', 'r2_pre'], 'new': ['r1_new', 'r2_new']}
+=== abcprr: medians per run (REP cols: all / rep>0 discarded), DONE hwm ===
+r1_pre   REP med=  89.790 (discard0=  84.376)  hwm=388408
+r2_pre   REP med=  94.684 (discard0=  87.141)  hwm=396428
+r1_new   REP med= 128.484 (discard0= 119.354)  hwm=400492
+r2_new   REP med= 101.762 (discard0= 101.263)  hwm=400492
+
+label                         pre(ms)    new(ms)  new/pre
+restore_rk_state                8.086      8.758   1.083
+w_build                        11.096     11.669   1.052
+w_transpose                     2.517      3.019   1.199
+mult_A                         22.886     27.657   1.208
+mult_B                         25.793     31.651   1.227
+merge                          20.719     30.918   1.492
+update_ranked_lists             7.223      7.293   1.010
+iter_free                       1.530      2.675   1.748
+
+REP total (rep0 discarded, 6 values/arm): pre med=84.7  new med=106.0  ratio=1.251
+checksums pre: ['458820174.000000']
+checksums new: ['458820174.000000']
+GATE checksum pre==new (1 distinct value): PASS
+hwm set pre: ['388408', '396428']
+hwm set new: ['400492']
