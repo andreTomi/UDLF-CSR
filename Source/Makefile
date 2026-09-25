@@ -175,14 +175,24 @@ perf-test: udlf
 	@echo "Note: This requires perf tool to be installed"
 	perf stat -e cycles,instructions,cache-references,cache-misses,branches,branch-misses ./$(BUILD_DIR)/udlf || echo "perf not available or insufficient permissions"
 
-# RDPAC port: phase parity gate + corner cases (strict IEEE, no -ffast-math;
-# the core must match the frozen verbatim reference bit-for-bit).
+# RDPAC port: phase parity gate + corner cases + thread determinism + bench.
+# Strict IEEE (no -ffast-math): the core must match the frozen verbatim
+# reference bit-for-bit, and serial/parallel must agree exactly.
+# The determinism cmp aborts make on any md5 drift across thread counts.
+# The bench runs under OMP_WAIT_POLICY=PASSIVE: libgomp's default ACTIVE
+# spin-wait starves SMT siblings on 6-core/12-thread hosts (0.45x on the
+# small case); PASSIVE keeps results bit-exact and reports real speedups.
 # Run from Source/: make test-rdpac
 test-rdpac:
 	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_rdpac_parity.cpp -o /tmp/test_rdpac_parity
 	/tmp/test_rdpac_parity
 	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_rdpac_corner.cpp -o /tmp/test_rdpac_corner
 	/tmp/test_rdpac_corner
+	OMP_NUM_THREADS=1 /tmp/test_rdpac_parity > /tmp/rdpac_t1.out
+	OMP_NUM_THREADS=12 /tmp/test_rdpac_parity > /tmp/rdpac_t12.out
+	cmp /tmp/rdpac_t1.out /tmp/rdpac_t12.out
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp bench/bench_rdpac.cpp -o /tmp/bench_rdpac
+	OMP_WAIT_POLICY=PASSIVE /tmp/bench_rdpac 2000 64 8 42
 
 # Help target
 help:
