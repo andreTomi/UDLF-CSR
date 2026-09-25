@@ -54,3 +54,13 @@ echo "=== E2E sweep: original dense kernel vs adaptive (per-process RSS) ==="
 /tmp/bench_e2e adaptive 10000000
 /tmp/bench_e2e dense 50000000
 /tmp/bench_e2e adaptive 50000000
+
+echo "=== RDPAC port: TU check (factory registration, header-only method) ==="
+g++ -std=gnu++23 -fsyntax-only -fopenmp -I Source/src -I Source/src/Config/hpp -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp Source/tests/check_rdpac_tu.cpp || exit 1
+echo "=== RDPAC port: S1-S5 phase parity gate (core vs frozen verbatim reference) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp Source/tests/test_rdpac_parity.cpp -o /tmp/test_rdpac_parity || exit 1
+/tmp/test_rdpac_parity || exit 1
+echo "=== RDPAC port: corner cases (multi-seed, 2L==N, ties, pin, contracts, p=0) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp Source/tests/test_rdpac_corner.cpp -o /tmp/test_rdpac_corner || exit 1
+/tmp/test_rdpac_corner || exit 1
+echo "=== RDPAC gates: OK ==="

@@ -58,7 +58,7 @@ OBJ_FILES  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_FILES))
 OBJ_FILES_SWAP := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_SWAP)/%.o, $(SRC_FILES))
 
 # Build targets
-.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap
+.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap test-rdpac
 
 # Default target - optimized builds for both versions
 all: udlf swap
@@ -175,6 +175,15 @@ perf-test: udlf
 	@echo "Note: This requires perf tool to be installed"
 	perf stat -e cycles,instructions,cache-references,cache-misses,branches,branch-misses ./$(BUILD_DIR)/udlf || echo "perf not available or insufficient permissions"
 
+# RDPAC port: phase parity gate + corner cases (strict IEEE, no -ffast-math;
+# the core must match the frozen verbatim reference bit-for-bit).
+# Run from Source/: make test-rdpac
+test-rdpac:
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_rdpac_parity.cpp -o /tmp/test_rdpac_parity
+	/tmp/test_rdpac_parity
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_rdpac_corner.cpp -o /tmp/test_rdpac_corner
+	/tmp/test_rdpac_corner
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -189,4 +198,5 @@ help:
 	@echo "  check-vectorization - Check CPU and compiler vectorization support"
 	@echo "  show-flags         - Show compilation flags"
 	@echo "  perf-test          - Run performance analysis (requires perf)"
+	@echo "  test-rdpac         - Build+run the RDPAC parity gate and corner cases"
 	@echo "  help               - Show this help message"

@@ -27,9 +27,12 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "Method.hpp"
 #include "MethodFactory.hpp"
+#include "RDPACSparseCore.hpp"
 
 class RDPAC : public Method {
  public:
@@ -63,9 +66,36 @@ class RDPAC : public Method {
   }
 
   void execute() override {
-    // Etapa 4 of the reformulation plan: kernels land after the reference
-    // harness (Etapa 2) and the per-stage bit-exact gates (Etapa 3).
-    logMessage("[RDPAC] execute(): not yet implemented (scaffold, Etapa 1)");
+    // Sparse pipeline: copy the framework's VirtualArray ranked lists into
+    // the core's positional vector, run the parity-validated serial kernel,
+    // and copy back. The copy (N*listWidth ints, 115 MB on ALOI) is dwarfed
+    // by the N^2 dense matrices the legacy code required (41.5 GB).
+    const size_t stride = static_cast<size_t>(listWidth);
+    const size_t total = static_cast<size_t>(n) * stride;
+    if (static_cast<size_t>(rkLists->size()) != total) {
+      // Line-aware loader read fewer columns than L_MULT*L: the tail would
+      // hold zeros (duplicates), violating the unique-row contract.
+      throw std::runtime_error(
+          "RDPAC: rkLists width (" + std::to_string(rkLists->size() / n) +
+          ") != PARAM_RDPAC_L_MULT * PARAM_RDPAC_L (" +
+          std::to_string(stride) + "); check the input file width");
+    }
+
+    std::vector<int> rk(total);
+    for (size_t i = 0; i < total; ++i) {
+      rk[i] = static_cast<int>((*rkLists)[i]);
+    }
+
+    RDPACSparseCore core(rk, static_cast<size_t>(n), static_cast<size_t>(l),
+                         stride, p, pl, kStart, kInc, kEnd);
+    core.run();
+
+    for (size_t i = 0; i < total; ++i) {
+      (*rkLists)[i] = static_cast<uint32_t>(rk[i]);
+    }
+    logMessage("[RDPAC] Sparse pipeline finished (fill nnz=" +
+               std::to_string(core.fill_nnz()) +
+               ", nonzero=" + std::to_string(core.nonzero_count()) + ")");
   }
 
   void postprocess() override {}

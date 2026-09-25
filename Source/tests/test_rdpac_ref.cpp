@@ -25,6 +25,9 @@
 // Run: /tmp/test_rdpac_ref <n> <l> <k_start> <k_end> <seed> <outdir> [--verbose]
 // Float cells print with %.9g (round-trips IEEE-754 binary32 exactly).
 
+#ifndef TEST_RDPAC_REF_HPP
+#define TEST_RDPAC_REF_HPP
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -425,11 +428,8 @@ void init_synthetic_rkLists(int seed = 42) {
     std::shuffle(pool.begin(), pool.end(), rng);
 
     setRKElem(i, 0, i);
-    for (int pos = 1; pos < L; pos++) {
+    for (int pos = 1; pos < L_MULT * L; pos++) {
       setRKElem(i, pos, pool[pos - 1]);
-    }
-    for (int pos = L; pos < L_MULT * L; pos++) {
-      setRKElem(i, pos, 0);
     }
   }
 }
@@ -437,6 +437,7 @@ void init_synthetic_rkLists(int seed = 42) {
 } // namespace rdpac_ref
 
 
+#ifndef RDPAC_REF_AS_HEADER
 int main() {
   rdpac_ref::allocate_structures();
   rdpac_ref::init_synthetic_rkLists(42);
@@ -486,4 +487,8 @@ int main() {
   rdpac_ref::free_structures();
   return 0;
 }
+#endif
+
+
+#endif // TEST_RDPAC_REF_HPP
 
