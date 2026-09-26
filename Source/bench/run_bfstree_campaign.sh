@@ -31,7 +31,13 @@ run ref 0 "$N" "$REF"
 run A   0 "$N" "$REF"
 for B in 256 1024 4096; do
   run A2 "$B" "$N" "$REF"
+  # A3 = production candidate: A2 + bit-exact parallel colsum, F6 division
+  #      FUSED into F7 reads (no N^2 division pass). Must match A2 CK_FINAL.
+  run A3 "$B" "$N" "$REF"
 done
+run A3a 256 "$N" "$REF"   # research knob: algebraic O(N k^2) colsum (fp-order
+                          # noise only, F6a-gated; NOT bit-exact)
+run F6a 0 0               # validation gate: alg colsum vs legacy (BEYOND==0)
 for lim in "$N" "$((8*L))" "$((2*L))" "$L" "$K"; do
   run E 0 "$lim" "$REF"
 done
