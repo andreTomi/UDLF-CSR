@@ -435,6 +435,9 @@ static CmpOut compare_final(const std::vector<int>& ref) {
 static uint64_t run_E(size_t limit, PhaseTimes* t, long* nnz_w_out);
 static uint64_t run_A2(long B, PhaseTimes* t, long* nnz_w_out,
                        uint64_t* ck_w_out);
+static uint64_t run_A3(bool alg, long B, PhaseTimes* t, long* nnz_w_out,
+                       uint64_t* ck_w_out);
+static int run_f6a();
 static int run_eattr(size_t limit);
 static void print_common(const char* mode, int N, int L, int k, int seed,
                          long B, size_t limit, const PhaseTimes& t,
@@ -549,6 +552,27 @@ int main(int argc, char** argv) {
         leg::computeRankNormalization(2);
         leg::computeRankCorrelation();
         return run_eattr(limit);
+    }
+    if (mode == "F6a") return run_f6a();
+    if (mode == "A3" || mode == "A3a") {
+        ck_final = run_A3(mode == "A3a", B, &t, &nnz_w, &ck_w);
+        print_common(mode.c_str(), N, L, k, seed, B, limit, t, ck_w, nnz_w,
+                     ck_final);
+        if (!refpath.empty()) {
+            std::vector<int> ref;
+            if (read_ref(refpath, &ref)) {
+                CmpOut c = compare_final(ref);
+                std::printf("BITFINAL=%s POS_EQUAL=%.6f P1=%.6f P5=%.6f "
+                            "P10=%.6f P20=%.6f\n",
+                            c.bit ? "YES" : "NO",
+                            c.total_cells ? (double)c.equal_cells /
+                                            c.total_cells : 0.0,
+                            c.p1, c.p5, c.p10, c.p20);
+            } else {
+                std::printf("BITFINAL=SKIP\n");
+            }
+        }
+        return 0;
     }
     std::fprintf(stderr, "mode %s not implemented yet\n", mode.c_str());
     return 2;
@@ -940,6 +964,195 @@ static uint64_t run_A2(long B, PhaseTimes* t, long* nnz_w_out,
     t->total = ms_since(t_all);
     return fnv_rk();
 }
+// ===========================================================================
+// A3: A2 with F6 eliminated.
+// Legacy F6 (normalizeWProb): per column i, acum = 1.0 (DOUBLE) + sum_j
+// matrix[j][i] (j ascending), then matrix[j][i] = float((double)w / acum).
+// A3 keeps the raw W produced by the blocked F5 and:
+//  - exact mode : recomputes the IDENTICAL double colsum (per-column work,
+//    same ascending-j addition order => bit-exact) -- the O(N^2) division
+//    pass disappears entirely;
+//  - alg mode   : colsum via sparse vector-matrix products on CW/TP,
+//    colsum(W)[i] = 1 + sum_q CW[q][i]*rCW[q] + TP[q][i]*(rCW[q]+rTP[q]),
+//    rCW = CW*ones, rTP = TP*ones  (from W = CW^T.CW + CW^T.TP + TP^T.TP)
+//    -- O(nnz) = O(N k^2), never touches N^2; differs from legacy colsum
+//    only by fp summation order (validated cell-by-cell in mode F6a).
+// The division is FUSED into F7 reads as float((double)raw/acum), the exact
+// narrowing the legacy stored, so A3-exact stays bit-exact end to end.
+// ===========================================================================
+static std::vector<double> colsum_legacy_exact() {
+    const int n = (int)leg::n;
+    std::vector<double> acum((size_t)n, 1.0);
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < n; i++) {
+        double a = 1.0;
+        for (int j = 0; j < n; j++)
+            a += (double)leg::matrix[(size_t)j * (size_t)n + (size_t)i];
+        acum[(size_t)i] = a;
+    }
+    return acum;
+}
+
+static std::vector<double> colsum_alg(const M& CW, const M& TP) {
+    const int n = (int)leg::n;
+    std::vector<double> rCW((size_t)n, 0.0), rTP((size_t)n, 0.0);
+    #pragma omp parallel for schedule(static)
+    for (int q = 0; q < n; q++) {
+        double s1 = 0.0, s2 = 0.0;
+        CW.for_each_in_row((idx_t)q,
+                           [&](idx_t, float v) { s1 += (double)v; });
+        TP.for_each_in_row((idx_t)q,
+                           [&](idx_t, float v) { s2 += (double)v; });
+        rCW[(size_t)q] = s1;
+        rTP[(size_t)q] = s2;
+    }
+    // q-ascending accumulation (deterministic; O(nnz), not O(N^2))
+    std::vector<double> acum((size_t)n, 1.0);
+    for (int q = 0; q < n; q++) {
+        const double c1 = rCW[(size_t)q];
+        const double c2 = rCW[(size_t)q] + rTP[(size_t)q];
+        CW.for_each_in_row((idx_t)q,
+                           [&](idx_t i, float v) { acum[i] += (double)v * c1; });
+        TP.for_each_in_row((idx_t)q,
+                           [&](idx_t i, float v) { acum[i] += (double)v * c2; });
+    }
+    return acum;
+}
+
+// F7 fused with the F6 division (bit-identical narrowing float(double/acum)).
+static M compute_w_diffusion_a3(long B, const std::vector<double>& ac) {
+    const int n = (int)leg::n, l = leg::l;
+    if (B < 1) B = 1;
+    if (B > n) B = n;
+    std::vector<std::tuple<idx_t, idx_t, float>> trips;
+    trips.reserve((size_t)n * (size_t)l);
+    std::vector<float> batch((size_t)B * (size_t)n, 0.0f);
+    for (long r0 = 0; r0 < n; r0 += B) {
+        const long r1 = std::min<long>(n, r0 + B);
+        #pragma omp parallel
+        {
+            std::vector<std::tuple<idx_t, idx_t, float>> local;
+            #pragma omp for schedule(static)
+            for (long imgI = r0; imgI < r1; imgI++) {
+                float* rbuf = &batch[(size_t)(imgI - r0) * (size_t)n];
+                std::fill(rbuf, rbuf + n, 0.0f);
+                for (int posJ = 0; posJ < l; posJ++) {
+                    int imgJ = leg::getRKElem(imgI, posJ);
+                    float acc = 0.0f;
+                    for (int posM = 0; posM < l; posM++) {
+                        int imgM = leg::getRKElem(imgI, posM);
+                        const double am = ac[(size_t)imgM];
+                        float wi = (float)((double)
+                            leg::matrix[(size_t)imgI * n + imgM] / am);
+                        float wj = (float)((double)
+                            leg::matrix[(size_t)imgJ * n + imgM] / am);
+                        acc += wi * wj;
+                    }
+                    rbuf[imgJ] = acc;
+                }
+                for (int posJ = 0; posJ < l; posJ++) {
+                    int imgJ = leg::getRKElem(imgI, posJ);
+                    local.emplace_back((idx_t)imgI, (idx_t)imgJ, rbuf[imgJ]);
+                }
+            }
+            #pragma omp critical
+            {
+                trips.insert(trips.end(), local.begin(), local.end());
+            }
+        }
+    }
+    return build_csr((idx_t)n, (idx_t)n, trips);
+}
+static uint64_t run_A3(bool alg, long B, PhaseTimes* t, long* nnz_w_out,
+                       uint64_t* ck_w_out) {
+    const auto t_all = Clock::now();
+    auto t0 = Clock::now();
+    leg::zero_matrix();
+    leg::computeRankNormalization(1);
+    leg::computeRankNormalization(2);
+    t->f1f2 = ms_since(t0);
+
+    t0 = Clock::now();
+    leg::computeRankCorrelation();
+    t->f3 = ms_since(t0);
+
+    t0 = Clock::now();
+    leg::zero_matrix();   // F4
+    build_inv();
+    acum_bfstree_a2(B);   // F5 blocked exact -> RAW W in leg::matrix
+    t->f5 = ms_since(t0);
+    std::printf("T_INV_MS=%.2f\n", g_t_inv_ms);
+    long nnz = 0;
+    count_density(leg::matrix, &nnz);
+    if (nnz_w_out) *nnz_w_out = nnz;
+    if (ck_w_out) *ck_w_out = fnv_w(leg::matrix);
+    if (std::getenv("BFSTREE_STOP_F5")) {   // scale memprobe: stop after F5
+        std::printf("MEMPROBE=afterF5 N=%d RSS_KB=%ld\n", leg::n, rss_kb());
+        std::exit(0);
+    }
+
+    t0 = Clock::now();
+    std::vector<double> acum;
+    if (alg) {
+        M CW = build_CW();
+        M TP = build_TP_path();
+        acum = colsum_alg(CW, TP);
+    } else {
+        acum = colsum_legacy_exact();
+    }
+    t->f6 = ms_since(t0);   // colsum only -- the division pass no longer exists
+
+    t0 = Clock::now();
+    M rc = compute_w_diffusion_a3(B, acum);   // F7 with fused division
+    t->f7 = ms_since(t0);
+
+    t0 = Clock::now();
+    M rc8 = normalize_w_prob_sparse(rc);      // F8 on CSR rc
+    t->f8 = ms_since(t0);
+
+    t0 = Clock::now();
+    for (int i = 0; i < leg::n; i++)          // F9 sparse getter
+        kernelSortRankedLists_sparse(i, rc8);
+    t->f9 = ms_since(t0);
+
+    t->total = ms_since(t_all);
+    return fnv_rk();
+}
+
+// F6a: cell-by-cell validation of the algebraic colsum vs the legacy double
+// colsum (same rigor as the TP formula check): bit-equality, inherited gates
+// rel<=5.0e-6 / abs<=4.2e-4, extremes. Exit 0 iff BEYOND==0.
+static int run_f6a() {
+    leg::zero_matrix();
+    leg::computeRankNormalization(1);
+    leg::computeRankNormalization(2);
+    leg::computeRankCorrelation();
+    leg::zero_matrix();
+    leg::acumBFSTree();
+    std::vector<double> leg_ac = colsum_legacy_exact();
+    M CW = build_CW();
+    M TP = build_TP_path();
+    std::vector<double> alg_ac = colsum_alg(CW, TP);
+    const int n = (int)leg::n;
+    long bit = 0, ok = 0, beyond = 0;
+    double max_rel = 0, max_abs = 0;
+    for (int i = 0; i < n; i++) {
+        uint64_t a, b;
+        double x = leg_ac[i], y = alg_ac[i];
+        std::memcpy(&a, &x, 8);
+        std::memcpy(&b, &y, 8);
+        if (a == b) { ++bit; continue; }
+        double rel = std::fabs(x - y) / (std::fabs(x) + 1e-30);
+        double ad = std::fabs(x - y);
+        if (rel > max_rel) max_rel = rel;
+        if (ad > max_abs) max_abs = ad;
+        if (rel <= 5.0e-6 || ad <= 4.2e-4) ++ok; else ++beyond;
+    }
+    std::printf("F6A_N=%d BIT=%ld GATE_OK=%ld BEYOND=%ld MAXREL=%.3g "
+                "MAXABS=%.3g\n", n, bit, ok, beyond, max_rel, max_abs);
+    return beyond == 0 ? 0 : 1;
+}
+// A3/A3a/F6a dispatch is wired in main.
 // ===========================================================================
 // Eattr: W-level attribution of E vs A (three error sources, inherited gates)
 //   float_ok     : differs but within inherited gate (rel<=5.0e-6 or
