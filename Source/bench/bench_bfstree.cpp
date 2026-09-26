@@ -435,8 +435,10 @@ static CmpOut compare_final(const std::vector<int>& ref) {
 static uint64_t run_E(size_t limit, PhaseTimes* t, long* nnz_w_out);
 static uint64_t run_A2(long B, PhaseTimes* t, long* nnz_w_out,
                        uint64_t* ck_w_out);
-static uint64_t run_A3(bool alg, long B, PhaseTimes* t, long* nnz_w_out,
-                       uint64_t* ck_w_out);
+static uint64_t run_A3(bool alg, int kern, long B, PhaseTimes* t,
+                       long* nnz_w_out, uint64_t* ck_w_out);
+template <bool NODIV>
+static M compute_w_diffusion_a4(long B, const std::vector<double>& ac);
 static int run_f6a();
 static int run_eattr(size_t limit);
 static void print_common(const char* mode, int N, int L, int k, int seed,
@@ -554,8 +556,10 @@ int main(int argc, char** argv) {
         return run_eattr(limit);
     }
     if (mode == "F6a") return run_f6a();
-    if (mode == "A3" || mode == "A3a") {
-        ck_final = run_A3(mode == "A3a", B, &t, &nnz_w, &ck_w);
+    if (mode == "A3" || mode == "A3a" || mode == "A4" || mode == "A4b") {
+        ck_final = run_A3(mode == "A3a",
+                          mode == "A4" ? 1 : mode == "A4b" ? 2 : 0, B, &t,
+                          &nnz_w, &ck_w);
         print_common(mode.c_str(), N, L, k, seed, B, limit, t, ck_w, nnz_w,
                      ck_final);
         if (!refpath.empty()) {
@@ -1063,8 +1067,8 @@ static M compute_w_diffusion_a3(long B, const std::vector<double>& ac) {
     }
     return build_csr((idx_t)n, (idx_t)n, trips);
 }
-static uint64_t run_A3(bool alg, long B, PhaseTimes* t, long* nnz_w_out,
-                       uint64_t* ck_w_out) {
+static uint64_t run_A3(bool alg, int kern, long B, PhaseTimes* t,
+                       long* nnz_w_out, uint64_t* ck_w_out) {
     const auto t_all = Clock::now();
     auto t0 = Clock::now();
     leg::zero_matrix();
@@ -1102,8 +1106,21 @@ static uint64_t run_A3(bool alg, long B, PhaseTimes* t, long* nnz_w_out,
     }
     t->f6 = ms_since(t0);   // colsum only -- the division pass no longer exists
 
+    if (kern == 2) {   // A4b: restore the division pass, parallel & in-place
+        const int n = (int)leg::n;
+        auto tn = Clock::now();
+        #pragma omp parallel for schedule(static)
+        for (int j2 = 0; j2 < n; j2++) {
+            float* row = &leg::matrix[(size_t)j2 * (size_t)n];
+            for (int i2 = 0; i2 < n; i2++)
+                row[i2] = (float)((double)row[i2] / acum[(size_t)i2]);
+        }
+        t->f6 += ms_since(tn);   // reported as part of F6 (it IS F6's division)
+    }
     t0 = Clock::now();
-    M rc = compute_w_diffusion_a3(B, acum);   // F7 with fused division
+    M rc = kern == 1 ? compute_w_diffusion_a4<false>(B, acum)
+         : kern == 2 ? compute_w_diffusion_a4<true>(B, acum)
+                     : compute_w_diffusion_a3(B, acum);   // F7 kernels
     t->f7 = ms_since(t0);
 
     t0 = Clock::now();
@@ -1152,7 +1169,75 @@ static int run_f6a() {
                 "MAXABS=%.3g\n", n, bit, ok, beyond, max_rel, max_abs);
     return beyond == 0 ? 0 : 1;
 }
-// A3/A3a/F6a dispatch is wired in main.
+// F7-A4: bandwidth-oriented rewrite of the fused kernel, BIT-EXACT.
+// Two changes, neither touches the arithmetic order:
+//  1. row-i hoist: wi[m] = float(W[i][rk_i[m]]/acum[rk_i[m]]) depends only on
+//     (i, posM), not on posJ -> computed once per row instead of L times;
+//  2. sorted gather: row j is read at columns rk_i[] in ASCENDING column order
+//     (rising addresses => HW prefetch/TLB friendliness), results scattered
+//     into a position-ordered buffer; the dot accumulates over posM ascending
+//     exactly like the legacy, so every rc cell is bit-identical.
+template <bool NODIV>
+static M compute_w_diffusion_a4(long B, const std::vector<double>& ac) {
+    const int n = (int)leg::n, l = leg::l;
+    if (B < 1) B = 1;
+    if (B > n) B = n;
+    std::vector<std::tuple<idx_t, idx_t, float>> trips;
+    trips.reserve((size_t)n * (size_t)l);
+    std::vector<float> batch((size_t)B * (size_t)n, 0.0f);
+    for (long r0 = 0; r0 < n; r0 += B) {
+        const long r1 = std::min<long>(n, r0 + B);
+        #pragma omp parallel
+        {
+            std::vector<std::tuple<idx_t, idx_t, float>> local;
+            std::vector<float> vi((size_t)l), buf((size_t)l);
+            std::vector<int> ord((size_t)l);
+            #pragma omp for schedule(static)
+            for (long imgI = r0; imgI < r1; imgI++) {
+                float* rbuf = &batch[(size_t)(imgI - r0) * (size_t)n];
+                std::fill(rbuf, rbuf + n, 0.0f);
+                const int* rki = &leg::rkLists[(size_t)imgI * (size_t)l];
+                // 1. hoisted row-i values (original posM order)
+                for (int p = 0; p < l; p++) {
+                    const int c = rki[p];
+                    vi[(size_t)p] = NODIV
+                        ? leg::matrix[(size_t)imgI * n + (size_t)c]
+                        : (float)((double)
+                              leg::matrix[(size_t)imgI * n + (size_t)c] /
+                              ac[(size_t)c]);
+                }
+                // 2. ascending-column gather order for this row's column set
+                for (int p = 0; p < l; p++) ord[(size_t)p] = p;
+                std::sort(ord.begin(), ord.end(), [&](int a, int b) {
+                    return rki[a] < rki[b]; });
+                for (int posJ = 0; posJ < l; posJ++) {
+                    const int imgJ = rki[posJ];
+                    const float* wj = &leg::matrix[(size_t)imgJ * (size_t)n];
+                    for (int t = 0; t < l; t++) {
+                        const int p = ord[(size_t)t];
+                        const int c = rki[p];
+                        buf[(size_t)p] = NODIV
+                            ? wj[c]
+                            : (float)((double)wj[c] / ac[(size_t)c]);
+                    }
+                    float acc = 0.0f;
+                    for (int p = 0; p < l; p++) acc += vi[(size_t)p] * buf[(size_t)p];
+                    rbuf[imgJ] = acc;
+                }
+                for (int posJ = 0; posJ < l; posJ++)
+                    local.emplace_back((idx_t)imgI, (idx_t)rki[posJ],
+                                       rbuf[rki[posJ]]);
+            }
+            #pragma omp critical
+            {
+                trips.insert(trips.end(), local.begin(), local.end());
+            }
+        }
+    }
+    return build_csr((idx_t)n, (size_t)n ? (idx_t)n : 1, trips);
+}
+// A4 dispatch wired in main.
+// NEXT_A4
 // ===========================================================================
 // Eattr: W-level attribution of E vs A (three error sources, inherited gates)
 //   float_ok     : differs but within inherited gate (rel<=5.0e-6 or

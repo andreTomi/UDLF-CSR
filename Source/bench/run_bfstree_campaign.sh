@@ -34,6 +34,9 @@ for B in 256 1024 4096; do
   # A3 = production candidate: A2 + bit-exact parallel colsum, F6 division
   #      FUSED into F7 reads (no N^2 division pass). Must match A2 CK_FINAL.
   run A3 "$B" "$N" "$REF"
+  # A4 = A3 + bit-exact F7 locality rewrite (row-i hoist + ascending-column
+  # gather): ~-20% F7 at L=1400. Best production stack. CK must equal A3's.
+  run A4 "$B" "$N" "$REF"
 done
 run A3a 256 "$N" "$REF"   # research knob: algebraic O(N k^2) colsum (fp-order
                           # noise only, F6a-gated; NOT bit-exact)
