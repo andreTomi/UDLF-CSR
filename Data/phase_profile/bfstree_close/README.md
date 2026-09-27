@@ -1,4 +1,4 @@
-# BFSTree — encerramento do port (Etapas 1→4): W esparso, F6 morto, F7 reescrito
+# BFSTree — encerramento do port (Etapas 1→5): W esparso, F6 morto, F7 reescrito
 
 Consolidação do port do método BFSTree (difusão com matriz de similaridade `W`)
 para o motor CSR do repositório. A restrição que organizou tudo foi **bit-exatidão
@@ -98,9 +98,12 @@ para explorar **dentro de `W`** — o ganho do port vem do **caminho de acesso**
 | Knob `limit` | só `E` (pesquisa); `limit=N` dá `W` fiel com arredondamento dentro dos portões |
 | Reproduzir | `g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src Source/bench/bench_bfstree.cpp -o /tmp/bench_bfstree`; `bash Source/bench/run_bfstree_campaign.sh <0..3>`; `python3 Source/bench/bfstree_agg.py` |
 
-`-ffp-contract=off` **não é opcional**: sem ele o GCC forma FMA no dot do F7, a
-ordem de arredondamento muda e `BITFINAL` falha — a mesma armadilha registrada no
-port do RDPAC.
+`-ffp-contract=off` está nos builds por **postura**, não porque sustente a
+identidade: medido em §7.2, em `-O2` o `CK_FINAL` é idêntico com e sem a flag
+(N=800 e N=4000). O que quebra o bit-a-bit é o conjunto de flags do build do
+produto (`-O3 -march=native -mfma -ffast-math`) — a mesma família de armadilha
+registrada no port do RDPAC, mas o gatilho aqui é `-O3`/`-ffast-math`, não a
+formação de FMA em `-O2`.
 
 ## 4. Escala: a refutação do −42% foi **re-refutada** — o erro era a ρ sintética
 
@@ -278,13 +281,131 @@ que é exato — a verificar por `CK_FINAL` contra o `A4`.
    ponto pede as duas densas do legado (~4,8 GB), que este host de 8 GB não dá sem
    swap. Levar o `real_bitex` a uma máquina de 32 GB+ fecha os dois de uma vez.
 3. **Integração no produto**: os portadores `A2/A3/A4` vivem só no
-   `bench_bfstree.cpp`; `BFSTree.cpp` ainda é o legado. Migrar exige o knob de
-   `B` por regime de `L` e o `-ffp-contract=off` no alvo de build correspondente.
+   `bench_bfstree.cpp`; `BFSTree.cpp` ainda é o legado. Migrar exige (i) o knob de
+   `B` por regime de `L` (débito 4), (ii) **a decisão de arredondamento do §7.4** —
+   medido aqui, o `-ffp-contract=off` não é o que sustenta o `BITFINAL`; o que o
+   rompe são as flags do build do produto, `-O3 -ffast-math` (§7.2) — e (iii) os
+   gates do padrão RDPAC (`check_bfstree_tu`, `test_bfstree_ref/parity/corner`).
+   Nada disso foi feito neste encerramento: os gates ligados hoje
+   (`gate_bfstree.sh`, `make test-bfstree`) validam o **port dentro do bench**, não
+   um método registrado na fábrica.
 4. **Heurística de `B`**: `B ≈ alvo_de_scratch / (N·4)`, com alvo ~LLC/2 — hoje é
    tabela manual (`256` para `L=1400`, `1024` para `L=100`).
 5. `A3a` e `E` permanecem no binário como knobs de pesquisa, com aviso de que
    **não** são bit-exatos (`A3a` por coincidência passa em P2 — não contar com
    isso).
+
+## 7. Encerramento: o que "incluir o método no framework" quer dizer aqui
+
+A régua não está escrita em documento nenhum — está na malha que o arco do RDPAC
+deixou. Um método está *incluído* quando tem registro na fábrica
+(`Method.cpp` + `MethodRegister<>`), TU check de registro, suite de paridade e de
+casos-limite no `Source/tests/run_all.sh`, alvo `make test-<método>`, bench com
+tempos por fase e dossiê. Contra essa régua, o BFSTree estava **medido, mas não
+incluído**: nada do que a campanha provou era verificável por outra pessoa, porque
+nenhum alvo de build construía `test_bfstree_hyp.cpp` (`grep bfstree` em
+`Source/Makefile` e `Source/tests/run_all.sh` devolvia vazio até este encerramento).
+
+| critério (legado do arco RDPAC) | BFSTree |
+|---|---|
+| golden verbatim disponível | ✅ embutido no `bench_bfstree.cpp` (modo `ref`); original congelado na raiz, md5 em §Arquivos |
+| bench com fases + driver com knobs + agregador | ✅ §3 e §4 |
+| gate de hipótese na malha | ✅ agora, `gate_bfstree.sh [1/3]` |
+| gate de contrato de entrada na malha | ✅ agora, `[2/3]` |
+| bit-exactness com `CK_FINAL` pinado na malha | ✅ agora, `[3/3]` |
+| `make test-<método>` | ✅ agora, `make test-bfstree` |
+| método registrado na fábrica + `Validator` + config | ❌ débito 6.3, condicionado a §7.4 |
+
+### 7.1 O que este encerramento ligou
+
+`Source/tests/gate_bfstree.sh`, chamado por `Source/tests/run_all.sh` e por
+`make test-bfstree`. **13 s no total, os dois builds dominam; não toca
+`Source/src`** — é o fechamento da medição, não a migração.
+
+| gate | asserção | custo medido |
+|---|---|---|
+| `[1/3]` hipótese F5 = SpGEMM | `RESULT: 45 checks, 0 failures`; md5 da saída (menos a linha 1, que imprime a contagem de threads) idêntico em **1/4/12 threads** | ≈ 5 s (build + 3 execuções) |
+| `[2/3]` contrato de entrada do carregador real | `rc=0` em lista válida; **`rc=5`** em linha com `< L` sobreviventes; **`rc=4`** em linha sem `self` — nos modos `A` **e** `A4`, com fixtures de 60 linhas gerados no próprio script e auto-validados | < 1 s de execução |
+| `[3/3]` bit-exactness vs golden do legado | `N=800 L=300 k=8 seed=42 B=256 limit=800`: `CK_FINAL=0x7b70dfb313c2b151` e `NNZ_W=553578` idênticos em `ref/A/A2/A4`, `BITFINAL=YES POS_EQUAL=1,000000`; md5 de `CK_W`+`BITFINAL` invariante em **1/2/12 threads** | < 1 s de execução |
+
+Dois desses gates não existiam como asserção antes:
+
+- **`[2/3]` transforma o "contrato de entrada" da §5 em teste.** A recusa `rc=5`
+  foi o que impediu oito runs em N=13k/18k reais de rodarem sobre linha curta
+  preenchida com lixo; sem as listas do ALOI no host, ela agora é provada com
+  fixtures sintéticos de 60 linhas.
+- **`[3/3]` é o gate de arredondamento mais barato que existe**: 0,14 s por modo,
+  e qualquer mudança no kernel CSR, na ordem de emissão dos tripletes ou no
+  arredondamento do dot move o `CK_FINAL` pinado.
+
+O RSS **não** é pinado no gate: em N=800 o path CSR gasta **mais** que o legado
+(42 MB vs 10 MB), porque o crossover de pico é `N* ≈ 12·L` (§4) — RSS é
+propriedade de campanha (`bfstree_step1/aggregate.md`), não de gate. O gate também
+não é vacuo: medido fora dele, o build com as flags do produto produz outro
+`CK_FINAL` (§7.2), ou seja, o pin reage.
+
+### 7.2 A numérica: o obstáculo à inclusão é o build, não o port
+
+Mesmo fonte (`bench_bfstree.cpp`), quatro builds, duas escalas:
+
+| build | golden (`ref`) | `A4` | veredito |
+|---|---|---|---|
+| `-O2 -ffp-contract=off` (postura da campanha) | `0x7b70dfb313c2b151` | idêntico | `BITFINAL=YES` |
+| `-O2` **sem** a flag | `0x7b70dfb313c2b151` | idêntico | `BITFINAL=YES` |
+| produto (`-O3 -march=native -mavx2 -mfma -ffast-math`, `Source/Makefile:5,7,19`), N=800 | `0x7b70dfb313c2b151` | **`0x0423b12779c26d3d`** | **`BITFINAL=NO`, `POS_EQUAL=0,999983`** |
+| produto, N=4000 | **`0xa299c0fa9515e5de`** | **`0xed6d982a1d98511e`** | **`BITFINAL=NO`, `POS_EQUAL=0,999695`** |
+
+1. **Em `-O2`, `-ffp-contract=off` é inerte nestes dados** — idêntico com e sem
+   ela nas duas escalas. A correção da §3 está feita: a flag continua nos builds
+   por postura idêntica ao RDPAC e como proteção contra o GCC formar FMA no dot do
+   F7 em outra versão/tuning, mas não é ela que sustenta o `BITFINAL=YES`.
+2. **Sob as flags do produto, quem quebra é o port**: em N=800 o golden denso do
+   legado **não se move**, mas o `A4` CSR muda (`BITFINAL=NO`, 1,7×10⁻⁵ das
+   células). Em N=4000 o `-O3 -ffast-math` já move o golden também, e os dois
+   divergem entre si (3,05×10⁻⁴ das células).
+3. Consequência direta para o débito 6.3: levar o `A4` para `Source/src` sem
+   mexer no build do produto significa **shippar um método que não reproduz o
+   `CK_FINAL`** contra o qual a campanha inteira foi jurada. Não é defeito do
+   port — é incompatibilidade de contrato de arredondamento com `-ffast-math`.
+
+### 7.3 O que fica bloqueado neste host (fronteira, não falha)
+
+- **Golden em N=24k real**: os portadores batem `CK_FINAL` entre si, mas o golden
+  do legado pede as duas densas `N²` (~4,8 GB) — este host de 8 GB não dá sem
+  swap. Uma máquina de **32 GB+** fecha isto e a medição em N=72k de uma vez
+  (`A4` cabe em ~32 GB, `A5` projetado em ~3 GB).
+- **`L=1400` em dados reais**: o censo (§5) mostra que o `L` de produção não é
+  atingível em N=18k (mínimo de sobreviventes 1171 < 1400) — por isso o
+  `real_bitex` fechou em `L=1150`. `L=1400` real só fecha em N ≳ 24k, ou seja,
+  depende do item acima.
+- **`A5` (`W` por valor)**: gate pronto (`CK_FINAL` do `A4`), falta a prova de que
+  pular termos ausentes é bit-exato.
+
+### 7.4 A decisão de inclusão, quando ela for tomada
+
+Pré-condição (a única de verdade): escolher o regime de arredondamento do produto.
+
+1. **Alvo próprio** — compilar o método com `-ffp-contract=off -fno-fast-math`
+   num alvo de build dedicado, e registrar a divergência medida. Preserva o
+   contrato de identidade, mas o binário do produto deixa de ser bit-a-bit com o
+   atual (os 99 checks históricos do `run_all.sh` são do regime atual).
+2. **Contrato de tolerância** — o produto mantém `-ffast-math` e o `BFSTree`
+   declara tolerância (com os números da tabela acima como testemunha); o
+   `BITFINAL` passa a ser propriedade do regime de teste.
+
+Recomendação: **(1)**, porque `-ffast-math` já torna duvidoso um contrato herdado
+do RDPAC ("`0/0` sem guarda = NaN verbatim", Etapa 3) por causa de
+`-ffinite-math-only` — o problema é pré-existente, e o BFSTree só o torna visível.
+
+Depois disso, o caminho é o do RDPAC, item por item: `Source/src/Methods/hpp/BFSTree.hpp`
+header-only + `MethodRegister<BFSTree> signInMethod("BFSTree")` (padrão
+`Method.cpp:11,23`) + `Validator`/config para o knob `B` (débito 6.4) +
+`check_bfstree_tu.cpp` + `test_bfstree_ref/parity/corner` (golden verbatim no
+padrão `test_rdpac_ref.cpp`, cobrindo o que o censo mapeou: `self` na posição 0 em
+só 71.448/72k linhas, recorte `id<N`, recusa de linha curta, ties, `pin`, `k=1`,
+`L ≥ 2N`) + md5 estrito 1/2/4/8/12 sem tocar os md5 históricos + ASan/UBSan +
+bench sob `OMP_WAIT_POLICY=PASSIVE` (a causa diagnosticada no RDPAC vale igual
+para o F7 em batch).
 
 ## Arquivos
 
@@ -300,6 +421,19 @@ que é exato — a verificar por `CK_FINAL` contra o `A4`.
   `raw/campaign_all.out`; tabelas consolidadas: `raw/aggregate.md`.
 - Legado referenciado: `BFSTree.cpp` / `BFSTree.hpp`; API de acesso por linha:
   `Source/src/Core/hpp/SparseMatrix.hpp` (`for_each_in_row`).
+- **Procedência do golden** (medida em 27/09/2026). Os `.cpp/.hpp` da raiz estão
+  **fora** do versionamento; o que está no repositório são as cópias *verbatim*
+  embutidas em `bench_bfstree.cpp` e `test_bfstree_hyp.cpp`, e estes md5 são o laço
+  verificável com o upstream: `BFSTree.cpp` `66ca00e255143101408fc3dc25d36742`
+  (912 linhas), `BFSTree.hpp` `914f456f591780158eda51702767c240` (100),
+  `RDPAC.cpp` `6f6ea70ffe180c2ea5f1f2d297aafe0e` (499), `RDPAC.hpp`
+  `ade9d201eab922cf7351cc754b1bff03` (107). Commitar esses arquivos (ex.:
+  `reference/legacy/`) é o passo que falta para a campanha ser reproduzível a
+  partir do clone — registrado aqui, não feito, porque a política de onde o legado
+  mora é do arcabouço, não desta campanha.
+- Gates deste encerramento: `Source/tests/gate_bfstree.sh` (chamado por
+  `Source/tests/run_all.sh` e por `make test-bfstree`); protocolo reutilizável do
+  arco: `Source/bench/README.md`.
 - Commits do arco: `aac7448` (Etapa 2), `314c194` (Etapa 3: `A3`/`F6a`/
   memprobe), `462c207` (driver), `d9bbeef` (Etapa 4: `A4`/`A4b`).
 

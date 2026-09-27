@@ -96,3 +96,13 @@ g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core
 OMP_WAIT_POLICY=PASSIVE /tmp/bench_rdpac 2000 64 8 42 || exit 1
 OMP_WAIT_POLICY=PASSIVE /tmp/bench_rdpac 10000 100 15 42 || exit 1
 echo "=== RDPAC gates: OK ==="
+
+# BFSTree port (path CSR A2/A4). Tres gates em ~13 s: a hipotese F5=SpGEMM
+# (45 checks, T1/T3 bit-exatos celula a celula), o contrato de entrada do
+# carregador de listas reais (recusa rc=5 linha com < L sobreviventes e rc=4
+# linha sem self -- foi o rc=5 que impediu oito runs em N=13k/18k reais de
+# rodarem sobre lixo) e a bit-exactness de A/A2/A4 contra o golden que o proprio
+# legado grava, com o CK_FINAL pinado. O gate resolve o root do repo sozinho.
+echo "=== BFSTree port: hypothesis + input contract + bit-exactness vs golden ==="
+bash Source/tests/gate_bfstree.sh || exit 1
+echo "=== BFSTree gates: OK ==="

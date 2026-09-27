@@ -1,5 +1,24 @@
 # Phase 0 — Instrumentação por fase (`-DPHASE_PROFILE`)
 
+## Dossiês de método neste diretório
+
+O documento de fechamento de um método é o que diz **o que foi provado, com que
+build, e o que não é claim**. A régua não está escrita em documento nenhum: está
+na malha que o arco do RDPAC deixou (`Source/tests/run_all.sh`, `Source/Makefile`,
+`Source/src/Methods/`).
+
+| dossiê | conteúdo | estado |
+|---|---|---|
+| `bfstree_close/README.md` | encerramento do port BFSTree (Etapas 1→5): portador `A4`, gates, escala, débitos, e §7 sobre inclusão no framework | **fechado** (medição); inclusão no produto = débito 6.3 |
+| `bfstree_step1/` | brutos e `aggregate.md` do passo 1: censo estrutural `ρ(W)` em dados reais, crossover de pico, `real_bitex` em N=18k | dados |
+| `etapa_a/`, `etapa_b/` | arcos das fases 1–2 do kernel CSR (`multiply_and_prune`), com os scripts `_p2_*`/`_p3_*`/`_fase1_*` da raiz referenciados por `etapa_b/s24/README.md` | histórico |
+| RDPAC | **sem dossiê próprio** — a evidência está nos commits `f69e28d`, `79df4b4`, `ca52571`, `b7a8cf7` e nos gates `make test-rdpac` / `run_all.sh` | fechado |
+
+O texto abaixo deste arquivo é o relatório da **Fase 0** (instrumentação por
+fase), não um dossiê de método.
+
+## Protocolo e resultados
+
 Protocolo: ≥5 repetições válidas (7 executadas), mediana, primeira descartada,
 execuções sequenciais (um processo por vez). Timers = `rdtsc` (contadores por
 thread em slots alinhados a 128 B). WSL2 ⇒ sem `perf` de hardware; wall por

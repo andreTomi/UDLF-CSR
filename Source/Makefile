@@ -58,7 +58,7 @@ OBJ_FILES  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_FILES))
 OBJ_FILES_SWAP := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_SWAP)/%.o, $(SRC_FILES))
 
 # Build targets
-.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap test-rdpac
+.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap test-rdpac test-bfstree
 
 # Default target - optimized builds for both versions
 all: udlf swap
@@ -194,6 +194,21 @@ test-rdpac:
 	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp bench/bench_rdpac.cpp -o /tmp/bench_rdpac
 	OMP_WAIT_POLICY=PASSIVE /tmp/bench_rdpac 2000 64 8 42
 
+# BFSTree port (path CSR A2/A4): hypothesis gate F5=SpGEMM (45 checks), real-list
+# input contract (rc=5 row with < L survivors, rc=4 row without self) and bit-exact
+# agreement of A/A2/A4 with the golden the legacy itself writes at N=800 L=300.
+# Same strict-IEEE -O2 posture as test-rdpac, and the CK_FINAL it pins is an -O2
+# contract. Measured here: at -O2 the pin is insensitive to -ffp-contract=off
+# (identical with and without, N=800 and N=4000), but the product flag set
+# (-O3 -march=native -mfma -ffast-math) breaks the port's identity -- at N=800 the
+# legacy golden stays 0x7b70dfb313c2b151 while A4 becomes 0x0423b12779c26d3d
+# (BITFINAL=NO, POS_EQUAL 0.999983), and at N=4000 even the golden moves
+# (0xa299c0fa9515e5de). Shipping BFSTree therefore needs that numerics decision
+# first (dossiê 7.4); the gate itself costs ~13 s and touches nothing in src/.
+# Run from Source/: make test-bfstree
+test-bfstree:
+	bash tests/gate_bfstree.sh
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -209,4 +224,5 @@ help:
 	@echo "  show-flags         - Show compilation flags"
 	@echo "  perf-test          - Run performance analysis (requires perf)"
 	@echo "  test-rdpac         - Build+run the RDPAC parity gate and corner cases"
+	@echo "  test-bfstree       - Build+run the BFSTree hypothesis, input-contract and bit-exactness gates"
 	@echo "  help               - Show this help message"
