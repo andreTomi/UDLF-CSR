@@ -1,0 +1,60 @@
+tag=touch_p0_synth mode=TOUCH N=5000 L=100 k=10 seed=42 B=0 lim=0 data=synth start=2026-09-26T19:58:55-03:00
+tag=touch_p0_synth rc=0 end=2026-09-26T19:58:55-03:00
+tag=touchraw_p0_synth mode=TOUCHRAW N=5000 L=100 k=10 seed=42 B=0 lim=0 data=synth start=2026-09-26T19:58:55-03:00
+tag=touchraw_p0_synth rc=0 end=2026-09-26T19:58:56-03:00
+tag=touch_p1_synth mode=TOUCH N=10000 L=100 k=12 seed=42 B=0 lim=0 data=synth start=2026-09-26T19:58:56-03:00
+tag=touch_p1_synth rc=0 end=2026-09-26T19:58:57-03:00
+tag=touchraw_p1_synth mode=TOUCHRAW N=10000 L=100 k=12 seed=42 B=0 lim=0 data=synth start=2026-09-26T19:58:57-03:00
+tag=touchraw_p1_synth rc=0 end=2026-09-26T19:58:58-03:00
+tag=touch_p2_synth mode=TOUCH N=5000 L=100 k=10 seed=7 B=0 lim=0 data=synth start=2026-09-26T19:58:58-03:00
+tag=touch_p2_synth rc=0 end=2026-09-26T19:58:58-03:00
+tag=touchraw_p2_synth mode=TOUCHRAW N=5000 L=100 k=10 seed=7 B=0 lim=0 data=synth start=2026-09-26T19:58:58-03:00
+tag=touchraw_p2_synth rc=0 end=2026-09-26T19:58:58-03:00
+tag=touch_p3_synth mode=TOUCH N=13000 L=1400 k=20 seed=42 B=0 lim=0 data=synth start=2026-09-26T19:58:58-03:00
+tag=touch_p3_synth rc=0 end=2026-09-26T19:59:04-03:00
+tag=touchraw_p3_synth mode=TOUCHRAW N=13000 L=1400 k=20 seed=42 B=0 lim=0 data=synth start=2026-09-26T19:59:04-03:00
+tag=touchraw_p3_synth rc=0 end=2026-09-26T19:59:06-03:00
+tag=touchraw_p4_real_72k mode=TOUCHRAW N=72000 L=1400 k=20 seed=0 B=0 lim=0 data=real:Datasets/aloi/rkLists.txt start=2026-09-26T20:08:12-03:00
+tag=touchraw_p4_real_72k rc=0 end=2026-09-26T20:21:59-03:00
+tag=touchraw_p5_real_24k mode=TOUCHRAW N=24000 L=1400 k=20 seed=0 B=0 lim=0 data=real:Datasets/aloi/rkLists.txt start=2026-09-26T20:21:59-03:00
+tag=touchraw_p5_real_24k rc=0 end=2026-09-26T20:26:45-03:00
+tag=touch_p5_real_24k mode=TOUCH N=24000 L=1400 k=20 seed=0 B=0 lim=0 data=real:Datasets/aloi/rkLists.txt start=2026-09-26T20:26:45-03:00
+tag=touch_p5_real_24k rc=0 end=2026-09-26T20:31:29-03:00
+tag=a4_p5_real_24k mode=A4 N=24000 L=1400 k=20 seed=0 B=256 lim=24000 ref=- data=real:Datasets/aloi/rkLists.txt start=2026-09-26T20:58:41-03:00
+tag=a4_p5_real_24k rc=0 end=2026-09-26T21:04:12-03:00
+tag=ref_p8_real_13k mode=ref N=13000 L=1400 k=20 seed=0 B=0 lim=13000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_13k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T21:56:25-03:00
+tag=ref_p8_real_13k rc=5 end=2026-09-26T22:00:37-03:00
+tag=a_leg_p8_real_13k mode=A N=13000 L=1400 k=20 seed=0 B=0 lim=13000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_13k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:00:37-03:00
+tag=a_leg_p8_real_13k rc=5 end=2026-09-26T22:04:28-03:00
+tag=a4_p8_real_13k mode=A4 N=13000 L=1400 k=20 seed=0 B=256 lim=13000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_13k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:04:28-03:00
+tag=a4_p8_real_13k rc=5 end=2026-09-26T22:08:20-03:00
+tag=a2_p8_real_13k mode=A2 N=13000 L=1400 k=20 seed=0 B=256 lim=13000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_13k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:08:20-03:00
+tag=a2_p8_real_13k rc=5 end=2026-09-26T22:11:56-03:00
+tag=a3_p5_real_24k mode=A3 N=24000 L=1400 k=20 seed=0 B=256 lim=24000 ref=- data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:11:56-03:00
+tag=a3_p5_real_24k rc=0 end=2026-09-26T22:19:00-03:00
+tag=a2_p5_real_24k mode=A2 N=24000 L=1400 k=20 seed=0 B=256 lim=24000 ref=- data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:19:00-03:00
+tag=a2_p5_real_24k rc=0 end=2026-09-26T22:24:40-03:00
+tag=a2_p5_real_24k mode=A2 N=24000 L=1400 k=20 seed=0 B=256 lim=24000 ref=- data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:24:40-03:00
+tag=a2_p5_real_24k rc=0 end=2026-09-26T22:31:08-03:00
+tag=a_leg_p6_synth mode=A N=18000 L=1400 k=20 seed=42 B=256 lim=18000 ref=- data=synth start=2026-09-26T22:51:12-03:00
+tag=a_leg_p6_synth rc=0 end=2026-09-26T22:54:54-03:00
+tag=a4_p6_synth mode=A4 N=18000 L=1400 k=20 seed=42 B=256 lim=18000 ref=- data=synth start=2026-09-26T22:54:54-03:00
+tag=a4_p6_synth rc=0 end=2026-09-26T22:56:16-03:00
+tag=a4_p7_synth mode=A4 N=24000 L=1400 k=20 seed=42 B=256 lim=24000 ref=- data=synth start=2026-09-26T22:56:16-03:00
+tag=a4_p7_synth rc=0 end=2026-09-26T22:58:18-03:00
+tag=ref_p8_real_18k mode=ref N=18000 L=1400 k=20 seed=0 B=0 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T22:58:18-03:00
+tag=ref_p8_real_18k rc=5 end=2026-09-26T23:01:50-03:00
+tag=a_leg_p8_real_18k mode=A N=18000 L=1400 k=20 seed=0 B=0 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T23:01:50-03:00
+tag=a_leg_p8_real_18k rc=5 end=2026-09-26T23:05:11-03:00
+tag=a4_p8_real_18k mode=A4 N=18000 L=1400 k=20 seed=0 B=256 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T23:05:11-03:00
+tag=a4_p8_real_18k rc=5 end=2026-09-26T23:08:36-03:00
+tag=a2_p8_real_18k mode=A2 N=18000 L=1400 k=20 seed=0 B=256 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-26T23:08:36-03:00
+tag=a2_p8_real_18k rc=5 end=2026-09-26T23:11:44-03:00
+tag=ref_p8_real_18k mode=ref N=18000 L=1150 k=20 seed=0 B=0 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k_l1150.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-27T01:43:59-03:00
+tag=ref_p8_real_18k rc=0 end=2026-09-27T01:49:17-03:00
+tag=a_leg_p8_real_18k mode=A N=18000 L=1150 k=20 seed=0 B=0 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k_l1150.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-27T01:49:17-03:00
+tag=a_leg_p8_real_18k rc=0 end=2026-09-27T01:54:37-03:00
+tag=a4_p8_real_18k mode=A4 N=18000 L=1150 k=20 seed=0 B=256 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k_l1150.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-27T01:54:37-03:00
+tag=a4_p8_real_18k rc=0 end=2026-09-27T01:58:26-03:00
+tag=a2_p8_real_18k mode=A2 N=18000 L=1150 k=20 seed=0 B=256 lim=18000 ref=Data/phase_profile/bfstree_step1/ref_p8_real_18k_l1150.bin data=real:Datasets/aloi/rkLists.txt start=2026-09-27T01:58:26-03:00
+tag=a2_p8_real_18k rc=0 end=2026-09-27T02:02:02-03:00

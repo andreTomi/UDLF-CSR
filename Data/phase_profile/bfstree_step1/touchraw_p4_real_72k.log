@@ -1,0 +1,4 @@
+DATA=REAL path=real:Datasets/aloi/rkLists.txt N=72000 L=1400 rows_read=72000 rows_short=0 self_missing=0 self_at0=71448 min_survivors=7200 mean_survivors=7200.0
+IMG_KEYS=NA (front not run)
+INV_TOTAL=5258600 INV_MIN=1 INV_MAX=362 INV_MEAN=73.036
+TOUCH_N2=5184000000 TOUCH_SUPPORT=53472548 TOUCH_RHO=0.010315 TOUCH_MS=861.97 RSS_KB=558976

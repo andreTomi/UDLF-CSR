@@ -59,6 +59,20 @@ static long rss_kb() {
     getrusage(RUSAGE_SELF, &ru);
     return ru.ru_maxrss;  // KB on Linux
 }
+// Peak-RSS checkpoint. ru_maxrss is a HIGH-WATER MARK (never decreases), so a
+// trace of checkpoints is non-decreasing and each JUMP attributes the peak to
+// the structure that was live when it happened. This is how the scale model
+// gets measured instead of being inferred from a single end-of-run RSS.
+static bool memtrace_on() {
+    static const bool on = std::getenv("BFSTREE_MEMTRACE") != nullptr;
+    return on;
+}
+static void memprobe(const char* tag) {
+    if (!memtrace_on()) return;
+    std::fflush(stdout);
+    std::printf("MEMPROBE=%s RSS_KB=%ld\n", tag, rss_kb());
+    std::fflush(stdout);
+}
 static uint64_t fnv_bytes(const void* p, size_t nbytes) {
     const uint8_t* b = static_cast<const uint8_t*>(p);
     uint64_t h = 14695981039346656037ULL;
@@ -308,6 +322,84 @@ static void gen_rklists(int seed, int N, int L) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Real-structure loader.
+//
+// Why: every rho/density number in Etapas 2-4 came from gen_rklists(), i.e.
+// from RANDOM rank lists. Whether the W density of the production config
+// (L=1400, k=20) holds on ALOI's real rank correlation is a separate fact, and
+// the model must not be allowed to silently inherit the synthetic structure.
+//
+// Sub-corpus semantics: real rkLists.txt rows are rank lists over the whole
+// corpus (72000 ids, 7200 tokens/row measured). For a run with N < 72000 we
+// keep only ids < N (dropping the rest, preserving order) and take the first L
+// survivors -- exactly the rank lists a real BFSTree run on that N-subset
+// would see. With 7200 tokens/row and N=24000 of 72000 kept, ~2400 survivors
+// per row >= L=1400; the loader verifies it per row and reports the census.
+// No pinning and no shuffling: whatever order the real data has is used.
+// ---------------------------------------------------------------------------
+struct RealLoadStats {
+    long rows_read = 0;      // rows consumed from the file
+    long rows_short = 0;     // rows with < L survivors after subsetting
+    long self_missing = 0;   // rows without the query itself (contract break)
+    long self_at0 = 0;       // rows with self at position 0 (production form)
+    long min_survivors = 0;  // min survivors over rows
+    double mean_survivors = 0;
+};
+
+static bool load_real_rk(const std::string& path, int N, int L, bool want_matrix,
+                         RealLoadStats* st) {
+    FILE* f = std::fopen(path.c_str(), "r");
+    if (!f) return false;
+    leg::n = N;
+    leg::l = L;
+    leg::rkLists.assign((size_t)N * L, 0);
+    if (want_matrix)
+        leg::matrix.assign((size_t)N * (size_t)N, 0.0f);  // F1/F2 scratch, as in A
+    char* line = nullptr;
+    size_t cap = 0;
+    long kept_total = 0, min_surv = (long)1 << 30;
+    for (int i = 0; i < N; ++i) {
+        ssize_t len = getline(&line, &cap, f);
+        if (len < 0) { std::fclose(f); free(line); return false; }
+        st->rows_read++;
+        const char* p = line;
+        const char* end = line + len;
+        int* dst = &leg::rkLists[(size_t)i * L];
+        long kept = 0, surv = 0;
+        while (p < end && kept < L) {
+            while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' ||
+                               *p == '\r')) ++p;
+            if (p >= end || *p < '0' || *p > '9') break;
+            long id = std::strtol(p, (char**)&p, 10);
+            if (id < N) {                 // subset-keeping, order preserved
+                ++surv;
+                dst[kept++] = (int)id;
+            }
+        }
+        // drain the rest of the row to count total survivors in the subset
+        while (p < end) {
+            while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' ||
+                               *p == '\r')) ++p;
+            if (p >= end || *p < '0' || *p > '9') break;
+            long id = std::strtol(p, (char**)&p, 10);
+            if (id < N) ++surv;
+        }
+        if (kept < L) st->rows_short++;
+        if (surv < min_surv) min_surv = surv;
+        kept_total += surv;
+        bool has_self = false;
+        for (long q = 0; q < kept; ++q) if (dst[q] == i) { has_self = true; break; }
+        if (!has_self) st->self_missing++;
+        else if (dst[0] == i) st->self_at0++;
+    }
+    free(line);
+    std::fclose(f);
+    st->min_survivors = min_surv;
+    st->mean_survivors = (double)kept_total / (double)std::max(1L, st->rows_read);
+    return true;
+}
+
 // F1..F4 (correlation) shared by every variant.
 static void pipeline_front() {
     leg::zero_matrix();
@@ -354,14 +446,16 @@ static uint64_t run_A(PhaseTimes* t, uint64_t* ck_w_out, long* nnz_out) {
     count_density(leg::matrix, &nnz);
     if (nnz_out) *nnz_out = nnz;
     if (ck_w_out) *ck_w_out = fnv_w(leg::matrix);
+    memprobe("A_afterF5");           // W dense live; rc not yet allocated
 
     t0 = Clock::now();
     leg::normalizeWProb();  // F6
     t->f6 = ms_since(t0);
 
     t0 = Clock::now();
-    leg::computeWDiffusion();  // F7
+    leg::computeWDiffusion();  // F7  <-- allocates the SECOND dense n*n (rc)
     t->f7 = ms_since(t0);
+    memprobe("A_afterF7");           // peak of the legacy two-dense-array form
 
     t0 = Clock::now();
     leg::normalizeWProb();  // F8
@@ -370,6 +464,7 @@ static uint64_t run_A(PhaseTimes* t, uint64_t* ck_w_out, long* nnz_out) {
     t0 = Clock::now();
     leg::execSortRankedLists();  // F9
     t->f9 = ms_since(t0);
+    memprobe("A_end");
 
     t->total = ms_since(t_all);
     return fnv_rk();
@@ -441,6 +536,8 @@ template <bool NODIV>
 static M compute_w_diffusion_a4(long B, const std::vector<double>& ac);
 static int run_f6a();
 static int run_eattr(size_t limit);
+static int run_touch();
+
 static void print_common(const char* mode, int N, int L, int k, int seed,
                          long B, size_t limit, const PhaseTimes& t,
                          uint64_t ck_w, long nnz_w, uint64_t ck_final) {
@@ -470,12 +567,42 @@ int main(int argc, char** argv) {
     long B = std::atol(argv[6]);
     size_t limit = (size_t)std::strtoull(argv[7], nullptr, 10);
     std::string refpath = (argc > 8) ? argv[8] : "";
+    std::string dataspec = (argc > 9) ? argv[9] : "";   // "real:<rkLists.txt>"
     if (L < k || N < L) {
         std::fprintf(stderr, "need N >= L >= k\n");
         return 2;
     }
 
-    gen_rklists(seed, N, L);
+    if (dataspec.rfind("real:", 0) == 0) {
+        RealLoadStats st;
+        if (!load_real_rk(dataspec.substr(5), N, L, mode != "TOUCHRAW", &st)) {
+            std::fprintf(stderr, "cannot load real rank lists: %s\n",
+                         dataspec.c_str());
+            return 3;
+        }
+        std::printf("DATA=REAL path=%s N=%d L=%d rows_read=%ld rows_short=%ld "
+                    "self_missing=%ld self_at0=%ld min_survivors=%ld "
+                    "mean_survivors=%.1f\n",
+                    dataspec.c_str(), N, L, st.rows_read, st.rows_short,
+                    st.self_missing, st.self_at0, st.min_survivors,
+                    st.mean_survivors);
+        if (st.self_missing > 0) {
+            std::fprintf(stderr,
+                         "contract break: %ld rows without self (production "
+                         "guarantees self in the list); refusing to continue\n",
+                         st.self_missing);
+            return 4;
+        }
+        if (st.rows_short > 0) {
+            std::fprintf(stderr,
+                         "contract break: %ld rows with < L survivors; "
+                         "refusing to continue\n", st.rows_short);
+            return 5;
+        }
+    } else {
+        gen_rklists(seed, N, L);
+        std::printf("DATA=SYNTH seed=%d\n", seed);
+    }
     leg::topK = k;
 
     PhaseTimes t;
@@ -556,6 +683,10 @@ int main(int argc, char** argv) {
         return run_eattr(limit);
     }
     if (mode == "F6a") return run_f6a();
+    if (mode == "TOUCH" || mode == "TOUCHRAW") {
+        if (mode == "TOUCH") leg::zero_matrix(), pipeline_front();
+        return run_touch();
+    }
     if (mode == "A3" || mode == "A3a" || mode == "A4" || mode == "A4b") {
         ck_final = run_A3(mode == "A3a",
                           mode == "A4" ? 1 : mode == "A4b" ? 2 : 0, B, &t,
@@ -1094,6 +1225,7 @@ static uint64_t run_A3(bool alg, int kern, long B, PhaseTimes* t,
         std::printf("MEMPROBE=afterF5 N=%d RSS_KB=%ld\n", leg::n, rss_kb());
         std::exit(0);
     }
+    memprobe("A3_afterF5");
 
     t0 = Clock::now();
     std::vector<double> acum;
@@ -1105,6 +1237,7 @@ static uint64_t run_A3(bool alg, int kern, long B, PhaseTimes* t,
         acum = colsum_legacy_exact();
     }
     t->f6 = ms_since(t0);   // colsum only -- the division pass no longer exists
+    memprobe("A3_afterF6");
 
     if (kern == 2) {   // A4b: restore the division pass, parallel & in-place
         const int n = (int)leg::n;
@@ -1122,6 +1255,7 @@ static uint64_t run_A3(bool alg, int kern, long B, PhaseTimes* t,
          : kern == 2 ? compute_w_diffusion_a4<true>(B, acum)
                      : compute_w_diffusion_a3(B, acum);   // F7 kernels
     t->f7 = ms_since(t0);
+    memprobe("A3_afterF7");
 
     t0 = Clock::now();
     M rc8 = normalize_w_prob_sparse(rc);      // F8 on CSR rc
@@ -1234,7 +1368,21 @@ static M compute_w_diffusion_a4(long B, const std::vector<double>& ac) {
             }
         }
     }
-    return build_csr((idx_t)n, (size_t)n ? (idx_t)n : 1, trips);
+    // Byte accounting of the emission transient: this is the part of the A4
+    // footprint that is NOT a dense n*n array, and the only part a smarter
+    // emitter could remove. Printed always (not only under MEMTRACE) because
+    // the scale model in the close README is being re-derived from these.
+    std::printf("A4_TRIPS=%zu A4_TRIP_BYTES=%zu A4_TRIP_CAP_BYTES=%zu\n",
+                trips.size(), trips.size() * sizeof(trips[0]),
+                trips.capacity() * sizeof(trips[0]));
+    memprobe("A4_trips_full");
+    M rc = build_csr((idx_t)n, (size_t)n ? (idx_t)n : 1, trips);
+    std::printf("A4_CSR_NNZ=%llu A4_CSR_BYTES=%llu\n",
+                (unsigned long long)rc.nnz(),
+                (unsigned long long)(rc.nnz() * (sizeof(idx_t) + sizeof(float)) +
+                                     ((size_t)n + 1) * sizeof(idx_t)));
+    memprobe("A4_csr_built");
+    return rc;
 }
 // A4 dispatch wired in main.
 // NEXT_A4
@@ -1310,6 +1458,97 @@ static int run_eattr(size_t limit) {
     std::printf("CK_W_A=0x%016llx NNZ_W_A=%ld NNZ_W_E=%llu\n",
                 (unsigned long long)ck_w, nnz_w,
                 (unsigned long long)we.nnz());
+    return 0;
+}
+// ===========================================================================
+// TOUCH: structural support census of W (F5) + row-cardinality census of
+// imgCor (F3). No arithmetic, no W materialized.
+//
+// Why this exists: rho(W) is the single number that decides whether a sparse W
+// representation can ever beat a dense one, and every rho measured in Etapas
+// 2-4 came from gen_rklists(), i.e. from RANDOM rank lists. The support is a
+// pure function of the rank lists and topK -- the correlation VALUES only scale
+// the increments -- so rho can be measured on REAL ALOI structure without
+// running F5's arithmetic or materializing W.
+//
+// W >= 0 with no exceptions: rbo() returns (1-p)*sum p^(k-1)*(inter/k) >= 0 and
+// imgCor[q][q] = 1, so every increment in computeIncTree is a product of
+// non-negative correlations. No cancellation is possible, hence
+//   structural support == non-zero support
+// and any gap between TOUCH_SUPPORT and a measured NNZ_W at the same point is
+// exact-zero-by-underflow -- the number A5's zero policy needs, measured rather
+// than assumed.
+//
+// TOUCH runs after the F1/F2 re-sort (the order F5 actually sees). TOUCHRAW
+// runs on the raw loaded lists and allocates NO n*n array, so it answers the
+// rho question at production N even where a dense scratch array cannot fit.
+// Comparing the two at the points where both run is what licenses (or refutes)
+// the use of TOUCHRAW at that N.
+// ===========================================================================
+static int run_touch() {
+    const int n = (int)leg::n;
+    const int k = leg::topK;
+    const long n2 = (long)n * (long)n;
+    build_inv();
+
+    // imgCor (F3) row-cardinality census -- NA for TOUCHRAW (front not run).
+    if (!leg::imgCor.empty() && !leg::imgCor[0].empty()) {
+        long cmin = (long)1 << 30, cmax = 0, csum = 0;
+        for (int q = 0; q < n; q++) {
+            long c = (long)leg::imgCor[q].size();
+            cmin = std::min(cmin, c); cmax = std::max(cmax, c); csum += c;
+        }
+        std::printf("IMG_KEYS_TOTAL=%ld IMG_KEYS_MIN=%ld IMG_KEYS_MAX=%ld "
+                    "IMG_KEYS_MEAN=%.3f IMG_RHO=%.6f\n",
+                    csum, cmin, cmax, (double)csum / n, (double)csum / n / n);
+    } else {
+        std::printf("IMG_KEYS=NA (front not run)\n");
+    }
+    long imin = (long)1 << 30, imax = 0, isum = 0;
+    for (int a = 0; a < n; a++) {
+        long c = (long)g_inv[a].size();
+        imin = std::min(imin, c); imax = std::max(imax, c); isum += c;
+    }
+    std::printf("INV_TOTAL=%ld INV_MIN=%ld INV_MAX=%ld INV_MEAN=%.3f\n",
+                isum, imin, imax, (double)isum / n);
+
+    const auto t0 = Clock::now();
+    long support = 0;
+    #pragma omp parallel for schedule(dynamic, 1) reduction(+:support)
+    for (int a = 0; a < n; a++) {
+        static thread_local std::vector<uint64_t> bits;
+        static thread_local std::vector<int> l1, l2;
+        bits.assign(((size_t)n + 63) >> 6, 0ULL);
+        for (uint32_t q : g_inv[a]) {
+            // Same l1/l2 construction as computeIncTree / replay_q_into_row.
+            l1.clear(); l2.clear();
+            l1.push_back((int)q);
+            for (int i = 1; i < k; i++) {
+                int imgI = leg::getRKElem(q, i);
+                l1.push_back(imgI);
+                for (int j = 1; j < k; j++)
+                    l2.push_back(leg::getRKElem(imgI, j));
+            }
+            // Row a is written by q through three blocks:
+            //   l1 x l1  -> a in l1            marks columns l1
+            //   l2 x l2  -> a in l2            marks columns l2
+            //   l1 x l2  -> a in l1            marks columns l2
+            bool in_l1 = false, in_l2 = false;
+            for (int x : l1) if (x == a) { in_l1 = true; break; }
+            for (int x : l2) if (x == a) { in_l2 = true; break; }
+            if (in_l1)
+                for (int x : l1) bits[(size_t)x >> 6] |= 1ULL << (x & 63);
+            if (in_l1 || in_l2)
+                for (int x : l2) bits[(size_t)x >> 6] |= 1ULL << (x & 63);
+        }
+        long c = 0;
+        for (uint64_t w : bits) c += __builtin_popcountll(w);
+        support += c;
+    }
+    std::printf("TOUCH_N2=%ld TOUCH_SUPPORT=%ld TOUCH_RHO=%.6f "
+                "TOUCH_MS=%.2f RSS_KB=%ld\n",
+                n2, support, (double)support / (double)n2, ms_since(t0),
+                rss_kb());
     return 0;
 }
 // NEXT_BLOCK

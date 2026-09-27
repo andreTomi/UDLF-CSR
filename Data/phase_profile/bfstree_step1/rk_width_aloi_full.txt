@@ -1,0 +1,2 @@
+RKWIDTH,file=Datasets/aloi/rkLists.txt,rows=72000,min=7200,max=7200,mean=7200.0,rows_ge_400=72000,rows_ge_1400=72000
+  width   7200 :    72000 rows

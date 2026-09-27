@@ -23,3 +23,7 @@ Data/phase_profile/etapa_a/_diag*.txt
 # Stray nohup captures from background campaign runs
 nohup.out
 
+# Binary ranked-list references written by the step-1 bit-exactness gate
+# (~100 MB each; the .log checksums are the durable artifact)
+Data/phase_profile/bfstree_step1/*.bin
+

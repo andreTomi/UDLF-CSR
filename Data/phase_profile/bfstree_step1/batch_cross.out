@@ -1,0 +1,9 @@
+tag=a_leg_p6_synth rc=0 end=2026-09-26T22:54:54-03:00
+tag=a4_p6_synth rc=0 end=2026-09-26T22:56:16-03:00
+tag=a4_p7_synth rc=0 end=2026-09-26T22:58:18-03:00
+STEP1_STAGE_cross_DONE
+tag=ref_p8_real_18k rc=5 end=2026-09-26T23:01:50-03:00
+tag=a_leg_p8_real_18k rc=5 end=2026-09-26T23:05:11-03:00
+tag=a4_p8_real_18k rc=5 end=2026-09-26T23:08:36-03:00
+tag=a2_p8_real_18k rc=5 end=2026-09-26T23:11:44-03:00
+STEP1_STAGE_real_bitex_DONE
