@@ -1,0 +1,2 @@
+contract break: 1 rows with < L survivors; refusing to continue
+DATA=REAL path=real:Datasets/cifar10/cifar10_resnet152.txt N=13000 L=130 rows_read=13000 rows_short=1 self_missing=0 self_at0=13000 min_survivors=127 mean_survivors=282.6

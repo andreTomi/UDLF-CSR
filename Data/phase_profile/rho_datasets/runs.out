@@ -32,3 +32,55 @@ tag=aloi_24k_1400_raw ds=aloi mode=TOUCHRAW N=24000 L=1400 k=20 B=256 role=scale
 tag=aloi_24k_1400_raw rc=0 end=2026-09-28T16:03:50-03:00
 tag=aloi_72k_1400_raw ds=aloi mode=TOUCHRAW N=72000 L=1400 k=20 B=256 role=scale file=Datasets/aloi/rkLists.txt start=2026-09-28T16:03:50-03:00
 tag=aloi_72k_1400_raw rc=0 end=2026-09-28T16:16:40-03:00
+tag=veg_160k_1400_raw ds=vegfru mode=TOUCHRAW N=160731 L=1400 k=20 B=256 role=general:fullN file=Datasets/vegfru/rkLists.txt start=2026-09-28T17:14:34-03:00
+tag=veg_160k_1400_raw rc=0 end=2026-09-28T17:22:44-03:00
+tag=sun_108k_1400_raw ds=sun397 mode=TOUCHRAW N=108754 L=1400 k=20 B=256 role=general:fullN file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T17:22:44-03:00
+tag=sun_108k_1400_raw rc=0 end=2026-09-28T17:27:59-03:00
+tag=cif_60k_1400_raw ds=cifar10 mode=TOUCHRAW N=60000 L=1400 k=20 B=256 role=general:census file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T17:27:59-03:00
+tag=cif_60k_1400_raw rc=5 end=2026-09-28T17:29:22-03:00
+tag=cif_60k_1000_raw ds=cifar10 mode=TOUCHRAW N=60000 L=1000 k=20 B=256 role=general:fullN file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T17:29:22-03:00
+tag=cif_60k_1000_raw rc=0 end=2026-09-28T17:30:49-03:00
+tag=veg_13k_touch ds=vegfru mode=TOUCH N=13000 L=80 k=20 B=256 role=gate13 file=Datasets/vegfru/rkLists.txt start=2026-09-28T17:31:25-03:00
+tag=veg_13k_touch rc=5 end=2026-09-28T17:32:03-03:00
+tag=sun_13k_touch ds=sun397 mode=TOUCH N=13000 L=150 k=20 B=256 role=gate13 file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T17:32:03-03:00
+tag=sun_13k_touch rc=5 end=2026-09-28T17:32:40-03:00
+tag=cif_13k_touch ds=cifar10 mode=TOUCH N=13000 L=130 k=20 B=256 role=gate13 file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T17:32:40-03:00
+tag=cif_13k_touch rc=5 end=2026-09-28T17:32:58-03:00
+tag=veg_24k_touch ds=vegfru mode=TOUCH N=24000 L=60 k=20 B=256 role=gate24 file=Datasets/vegfru/rkLists.txt start=2026-09-28T19:55:41-03:00
+tag=veg_24k_touch rc=5 end=2026-09-28T19:56:57-03:00
+tag=sun_24k_touch ds=sun397 mode=TOUCH N=24000 L=25 k=20 B=256 role=gate24 file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T19:56:57-03:00
+tag=sun_24k_touch rc=0 end=2026-09-28T19:58:10-03:00
+tag=cif_24k_touch ds=cifar10 mode=TOUCH N=24000 L=180 k=20 B=256 role=gate24 file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T19:58:10-03:00
+tag=cif_24k_touch rc=5 end=2026-09-28T19:58:44-03:00
+tag=veg_24k_touch2 ds=vegfru mode=TOUCH N=24000 L=40 k=20 B=256 role=gate24 file=Datasets/vegfru/rkLists.txt start=2026-09-28T19:59:13-03:00
+tag=veg_24k_touch2 rc=0 end=2026-09-28T20:00:30-03:00
+tag=cif_24k_touch2 ds=cifar10 mode=TOUCH N=24000 L=120 k=20 B=256 role=gate24 file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T20:00:30-03:00
+tag=cif_24k_touch2 rc=0 end=2026-09-28T20:01:08-03:00
+tag=veg_24k_A ds=vegfru mode=A N=24000 L=40 k=20 B=256 role=gate24 file=Datasets/vegfru/rkLists.txt start=2026-09-28T20:01:13-03:00
+tag=veg_24k_A rc=0 end=2026-09-28T20:03:22-03:00
+tag=veg_24k_raw ds=vegfru mode=TOUCHRAW N=24000 L=40 k=20 B=256 role=gate24 file=Datasets/vegfru/rkLists.txt start=2026-09-28T20:03:22-03:00
+tag=veg_24k_raw rc=0 end=2026-09-28T20:04:33-03:00
+tag=sun_24k_A ds=sun397 mode=A N=24000 L=25 k=20 B=256 role=gate24 file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T20:04:33-03:00
+tag=sun_24k_A rc=0 end=2026-09-28T20:06:49-03:00
+tag=sun_24k_raw ds=sun397 mode=TOUCHRAW N=24000 L=25 k=20 B=256 role=gate24 file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T20:06:49-03:00
+tag=sun_24k_raw rc=0 end=2026-09-28T20:07:58-03:00
+tag=cif_24k_A ds=cifar10 mode=A N=24000 L=120 k=20 B=256 role=gate24 file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T20:07:58-03:00
+tag=cif_24k_A rc=0 end=2026-09-28T20:09:41-03:00
+tag=cif_24k_raw ds=cifar10 mode=TOUCHRAW N=24000 L=120 k=20 B=256 role=gate24 file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T20:09:41-03:00
+tag=cif_24k_raw rc=0 end=2026-09-28T20:10:15-03:00
+tag=veg_13k_touch2 ds=vegfru mode=TOUCH N=13000 L=40 k=20 B=256 role=scale13 file=Datasets/vegfru/rkLists.txt start=2026-09-28T20:10:32-03:00
+tag=veg_13k_touch2 rc=0 end=2026-09-28T20:11:12-03:00
+tag=cif_13k_touch2 ds=cifar10 mode=TOUCH N=13000 L=100 k=20 B=256 role=scale13 file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T20:11:12-03:00
+tag=cif_13k_touch2 rc=0 end=2026-09-28T20:11:32-03:00
+tag=veg_30k_touch ds=vegfru mode=TOUCH N=30000 L=40 k=20 B=256 role=scale30k file=Datasets/vegfru/rkLists.txt start=2026-09-28T20:11:32-03:00
+tag=veg_30k_touch rc=0 end=2026-09-28T20:13:07-03:00
+tag=sun_30k_touch ds=sun397 mode=TOUCH N=30000 L=25 k=20 B=256 role=scale30k file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T20:13:07-03:00
+tag=sun_30k_touch rc=0 end=2026-09-28T20:14:39-03:00
+tag=cif_30k_touch ds=cifar10 mode=TOUCH N=30000 L=120 k=20 B=256 role=scale30k file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T20:14:39-03:00
+tag=cif_30k_touch rc=0 end=2026-09-28T20:15:27-03:00
+tag=veg_30k_raw ds=vegfru mode=TOUCHRAW N=30000 L=40 k=20 B=256 role=delta30k file=Datasets/vegfru/rkLists.txt start=2026-09-28T20:15:27-03:00
+tag=veg_30k_raw rc=0 end=2026-09-28T20:16:56-03:00
+tag=sun_30k_raw ds=sun397 mode=TOUCHRAW N=30000 L=25 k=20 B=256 role=delta30k file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T20:16:56-03:00
+tag=sun_30k_raw rc=0 end=2026-09-28T20:18:22-03:00
+tag=cif_30k_raw ds=cifar10 mode=TOUCHRAW N=30000 L=120 k=20 B=256 role=delta30k file=Datasets/cifar10/cifar10_resnet152.txt start=2026-09-28T20:18:22-03:00
+tag=cif_30k_raw rc=0 end=2026-09-28T20:19:04-03:00

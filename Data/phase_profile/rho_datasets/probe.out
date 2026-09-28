@@ -7,3 +7,21 @@ ds=linnaeus max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por cons
 ds=aloi file=Datasets/aloi/rkLists.txt N=72000 bytes=3033576582
 ds=aloi probe_lines=4760 width=7200 linhas_de_largura_diferente=1 primeiro_token_diferente_do_id=147
 ds=aloi max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao
+ds=corel5k file=Datasets/corel5k/ACC.txt N=5000 bytes=119450000
+ds=corel5k probe_lines=5000 width=5000 linhas_de_largura_diferente=0 primeiro_token_diferente_do_id=0
+ds=corel5k max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao
+ds=linnaeus file=Datasets/linnaeus/linnaeus5_resnet50.txt N=8000 bytes=155210852
+ds=linnaeus probe_lines=8000 width=4000 linhas_de_largura_diferente=0 primeiro_token_diferente_do_id=5
+ds=linnaeus max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao
+ds=aloi file=Datasets/aloi/rkLists.txt N=72000 bytes=3033576582
+ds=aloi probe_lines=4760 width=7200 linhas_de_largura_diferente=1 primeiro_token_diferente_do_id=147
+ds=aloi max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao
+ds=vegfru file=Datasets/vegfru/rkLists.txt N=160731 bytes=2027880017
+ds=vegfru probe_lines=16365 width=2000 linhas_de_largura_diferente=1 primeiro_token_diferente_do_id=3
+ds=vegfru max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao
+ds=sun397 file=Datasets/sun397/sun397_resnet152.txt N=108754 bytes=1298870797
+ds=sun397 probe_lines=16879 width=2000 linhas_de_largura_diferente=1 primeiro_token_diferente_do_id=0
+ds=sun397 max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao
+ds=cifar10 file=Datasets/cifar10/cifar10_resnet152.txt N=60000 bytes=348889227
+ds=cifar10 probe_lines=34447 width=1000 linhas_de_largura_diferente=1 primeiro_token_diferente_do_id=0
+ds=cifar10 max_L_sem_truncar=<width acima>  # L<=width => rows_short=0 por construcao

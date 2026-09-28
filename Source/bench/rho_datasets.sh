@@ -38,8 +38,11 @@
 # censo nesses datasets vale, ou se so mede o subconjunto que passa.
 #
 # Uso: bash Source/bench/rho_datasets.sh [estagio]
-#   probe | build | aloi_small | aloi_big | pair | newds | big | all
-# Variaveis: BIN, OUT, LGRID, THREADS, RK, C5K, LIN, K
+#   probe | build | aloi_small | aloi_big | pair | newds | big
+#   bigds_full | bigds_gate | bigds_touch24 | bigds_touch24b | bigds_gate2
+#   bigds_touch13 | bigds_30k | summary | all
+# Variaveis: BIN, OUT, LGRID, THREADS, RK, C5K, LIN, VEG, SUN, CIF, K
+#            e os L de gate/escala LVEG13..LCIF13 LVEG24..LCIF24 LVEG30..LCIF30
 set -u
 set -o pipefail
 
@@ -54,6 +57,33 @@ K=${K:-20}
 RK=${RK:-Datasets/aloi/rkLists.txt}
 C5K=${C5K:-Datasets/corel5k/ACC.txt}
 LIN=${LIN:-Datasets/linnaeus/linnaeus5_resnet50.txt}
+VEG=${VEG:-Datasets/vegfru/rkLists.txt}
+SUN=${SUN:-Datasets/sun397/sun397_resnet152.txt}
+CIF=${CIF:-Datasets/cifar10/cifar10_resnet152.txt}
+# L dos novos pontos GRANDES. A hipergeometrica fechada (comentar acima) FALHOU
+# por completo nos dados reais e os candidatos passam a vir da medicao direta:
+# em N=13000 os mins medidos foram 46 (vegfru) / 17 (sun397) / 127 (cifar10),
+# muito ABAIXO do previsto (109/176/160) e com medias ACIMA (555/396/283 vs
+# 162/239/217) -- rank list de ANN nao e amostra uniforme, a cauda e pesada nos
+# DOIS lados. Regra usada daqui em diante: min(N_sub) escala ~ linearmente com
+# p=N_sub/N_total, candidato = min_medido*p*(13000/N_sub) com folga, e o rc
+# confirma (DATA= sai mesmo em rc=5, entao e so rebaixar e repetir o lote).
+#   medido @13k: vegfru min=46 | sun397 min=17 (<k=20 => SEM L valido em 13k,
+#   gate de sun muda para N=24000, precedente a2_p5_real_24k) | cifar10 min=127
+#   estimado @24k: vegfru ~85 -> 60 | sun397 ~31 -> 25 | cifar10 ~234 -> 180
+#   medido @24k: vegfru min=46 (NAO escalou do 13k!) -> L=40 | sun397 min=105
+#   -> L=25 confirmado | cifar10 min=129 -> L=120 (tags _touch2 = retry medido)
+#   Curva rho(N) com L CONSTANTE por dataset (metodo): vegfru/cifar10 L=40/120
+#   em 13k/24k/30k; sun397 L=25 em 24k/30k (13k sem L valido).
+LVEG13=${LVEG13:-40}
+LSUN13=${LSUN13:-150}   # so documenta a tentativa; 13k de sun nao tem L valido
+LCIF13=${LCIF13:-100}
+LVEG24=${LVEG24:-40}
+LSUN24=${LSUN24:-25}
+LCIF24=${LCIF24:-120}
+LVEG30=${LVEG30:-40}
+LSUN30=${LSUN30:-25}
+LCIF30=${LCIF30:-120}
 STAGE=${1:-all}
 
 fail() { echo "RHO FAILED: $*" >&2; exit 1; }
@@ -137,6 +167,72 @@ stage_newds() {
     run lin_8k_4000_A     linnaeus "$LIN" A        8000 4000 gate_nnz
 }
 
+stage_bigds_full() {
+    # Censo L=1400 em N PLENTO -- so TOUCHRAW cabe aqui (a matriz densa N2 dos
+    # modos TOUCH/A pesa 103/47/14 GB nestes N, ver README 160k/108k/60k^2*4).
+    # O rc/min_survivors e do CARREGADOR, identico em qualquer modo: e esta a
+    # resposta medida para "L=1400 e atingivel?". vegfru/sun esperam rc=0
+    # (sobreviventes = largura = 2000 >= 1400); cifar10 espera rc=5
+    # (largura 1000 < 1400) -- e o run de L=1000 em seguida da o rho_raw dele.
+    run veg_160k_1400_raw vegfru  "$VEG" TOUCHRAW 160731 1400 general:fullN
+    run sun_108k_1400_raw sun397  "$SUN" TOUCHRAW 108754 1400 general:fullN
+    run cif_60k_1400_raw  cifar10 "$CIF" TOUCHRAW  60000 1400 general:census
+    run cif_60k_1000_raw  cifar10 "$CIF" TOUCHRAW  60000 1000 general:fullN
+}
+
+stage_bigds_touch24() {
+    # Sondagem + rho pos-F1-F3 (TOUCH) em N=24000: ponto do gate
+    # TOUCH == NNZ_W (precedente: a2_p5_real_24k da Etapa 1; densa N^2 = 2,3 GB,
+    # RSS estimado ~3 GB -- dentro das 8 GB). L's vindos da medicao @13k escalada
+    # (ver vars); rc=5 => rebaixar via variavel e repetir.
+    run veg_24k_touch  vegfru  "$VEG" TOUCH 24000 "$LVEG24" gate24
+    run sun_24k_touch  sun397  "$SUN" TOUCH 24000 "$LSUN24" gate24
+    run cif_24k_touch  cifar10 "$CIF" TOUCH 24000 "$LCIF24" gate24
+}
+
+stage_bigds_touch24b() {
+    # Retry do ponto de gate @24k com L rebaixado pelo min MEDIDO (vegfru 46,
+    # cifar10 129); sun397 ja passou no primeiro passo. Tags _touch2 para o
+    # runs.out nao confundir tentativa com medida.
+    run veg_24k_touch2 vegfru  "$VEG" TOUCH 24000 "$LVEG24" gate24
+    run cif_24k_touch2 cifar10 "$CIF" TOUCH 24000 "$LCIF24" gate24
+}
+
+stage_bigds_gate2() {
+    # NNZ_W medido (legado denso A, mesma densa 2,3 GB) + TOUCHRAW no MESMO
+    # ponto -> delta RAW-TOUCH medido = barra de erro do rho_raw de N pleno
+    # (o metodo do passo 1 generalizado; nao e extrapolacao, e o mesmo (N,L)).
+    run veg_24k_A     vegfru  "$VEG" A         24000 "$LVEG24" gate24
+    run veg_24k_raw   vegfru  "$VEG" TOUCHRAW  24000 "$LVEG24" gate24
+    run sun_24k_A     sun397  "$SUN" A         24000 "$LSUN24" gate24
+    run sun_24k_raw   sun397  "$SUN" TOUCHRAW  24000 "$LSUN24" gate24
+    run cif_24k_A     cifar10 "$CIF" A         24000 "$LCIF24" gate24
+    run cif_24k_raw   cifar10 "$CIF" TOUCHRAW  24000 "$LCIF24" gate24
+}
+
+stage_bigds_touch13() {
+    # Ponto extra da curva rho(N) em N=13000, onde o contrato passa com folga
+    # (mins medidos 46/127). So vegfru e cifar10: sun397 tem min=17 < k=20,
+    # ou seja, NENHUM L valido existe em 13k -- registrado como impossibilidade
+    # medida, nao como omissao.
+    run veg_13k_touch2 vegfru "$VEG" TOUCH 13000 "$LVEG13" scale13
+    run cif_13k_touch2 cifar10 "$CIF" TOUCH 13000 "$LCIF13" scale13
+}
+
+stage_bigds_30k() {
+    # Terceiro ponto da curva rho(N) com TOUCH pos-front: N=30000 (densa
+    # 3,6 GB + listas ~ cabem nas 8 GB), L CONSTANTE por dataset (mesmo do
+    # gate). TOUCHRAW tambem aqui: segundo ponto do delta RAW-TOUCH -> mostra
+    # se a barra de erro do rho_raw de N pleno e estavel em N (o que licencia
+    # usa-la como barra). Sem A: a densa do legado so cabe com folga ate ~24k.
+    run veg_30k_touch vegfru  "$VEG" TOUCH 30000 "$LVEG30" scale30k
+    run sun_30k_touch sun397  "$SUN" TOUCH 30000 "$LSUN30" scale30k
+    run cif_30k_touch cifar10 "$CIF" TOUCH 30000 "$LCIF30" scale30k
+    run veg_30k_raw   vegfru  "$VEG" TOUCHRAW 30000 "$LVEG30" delta30k
+    run sun_30k_raw   sun397  "$SUN" TOUCHRAW 30000 "$LSUN30" delta30k
+    run cif_30k_raw   cifar10 "$CIF" TOUCHRAW 30000 "$LCIF30" delta30k
+}
+
 stage_all() {
     probe corel5k "$C5K"; probe linnaeus "$LIN"; probe aloi "$RK"
     build
@@ -174,13 +270,21 @@ summary() {
 }
 
 case "$STAGE" in
-    probe)  probe corel5k "$C5K"; probe linnaeus "$LIN"; probe aloi "$RK" ;;
+    probe)  probe corel5k "$C5K"; probe linnaeus "$LIN"; probe aloi "$RK"
+            probe vegfru "$VEG"; probe sun397 "$SUN"; probe cifar10 "$CIF" ;;
     build)  build ;;
     pair)   stage_newds ;;
     aloi_small) stage_aloi_small ;;
     aloi_big)   stage_aloi_big ;;
     newds)  stage_newds ;;
     big)    stage_aloi_big ;;
+    bigds_full)  stage_bigds_full ;;
+    bigds_gate)  stage_bigds_gate ;;
+    bigds_touch24) stage_bigds_touch24 ;;
+    bigds_touch24b) stage_bigds_touch24b ;;
+    bigds_gate2) stage_bigds_gate2 ;;
+    bigds_touch13) stage_bigds_touch13 ;;
+    bigds_30k)   stage_bigds_30k ;;
     summary) summary ;;
     all)    stage_all; summary ;;
     *) echo "estagio desconhecido: $STAGE"; exit 2 ;;

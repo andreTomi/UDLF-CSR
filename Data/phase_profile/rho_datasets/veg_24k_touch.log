@@ -1,0 +1,2 @@
+contract break: 1 rows with < L survivors; refusing to continue
+DATA=REAL path=real:Datasets/vegfru/rkLists.txt N=24000 L=60 rows_read=24000 rows_short=1 self_missing=0 self_at0=23995 min_survivors=46 mean_survivors=616.4

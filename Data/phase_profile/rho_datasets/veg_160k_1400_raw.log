@@ -1,0 +1,4 @@
+DATA=REAL path=real:Datasets/vegfru/rkLists.txt N=160731 L=1400 rows_read=160731 rows_short=0 self_missing=0 self_at0=160688 min_survivors=2000 mean_survivors=2000.0
+IMG_KEYS=NA (front not run)
+INV_TOTAL=21737794 INV_MIN=1 INV_MAX=1706 INV_MEAN=135.243
+TOUCH_N2=25834454361 TOUCH_SUPPORT=529537840 TOUCH_RHO=0.020497 TOUCH_MS=3205.14 RSS_KB=1230464

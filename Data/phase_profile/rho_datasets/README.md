@@ -98,6 +98,88 @@ L=400 (0,329) é **maior** que em L=4000 (0,304) — não monotônico em `L`,
 consistente com o `top-k` de expansão mudar de membro após o re-sort da
 truncagem; investigar antes de usar ρ(L) como curva.
 
+## Generalização: vegfru / sun397 / cifar10 (rank list de ANN em escala)
+
+Os dois datasets que a tese citava como **"onde o GraphBLAS estourava memória e
+o motor original não"** (sun397, vegfru) mais o cifar10, submetidos à mesma
+grade. Limite de máquina medido antes de desenhar a grade: os modos com front
+(`TOUCH`, `A`) alocam a densa `N²` de `leg::matrix` — 103 / 47 / 14 GB nos N
+plenos —, então **em N pleno só `TOUCHRAW` cabe**; o censo de contrato
+(rc/min_survivors) é do carregador e sai em qualquer modo. Grade executada:
+full-N L=1400 (`TOUCHRAW`), N=24000 `TOUCH`+`A`+`TOUCHRAW` no mesmo (N,L)
+(gate + delta medido), N=13000 e N=30000 `TOUCH` (curva ρ(N), L constante por
+dataset) + `TOUCHRAW` no 30k (2º ponto do delta). 26 runs nesta campanha,
+sequenciais.
+
+### Censo L=1400 em N pleno (o carregador responde)
+
+| ds | N | largura | rc L=1400 | min_survivors | rows_short | self fora pos0 | ρ_raw | suporte |
+|---|---|---|---|---|---|---|---|---|
+| **vegfru** | 160731 | 2000 | **0** | **2000** | 0 | 43 | **0,020497** | 529537840 |
+| **sun397** | 108754 | 2000 | **0** | **2000** | 0 | 0 | **0,053097** | 627999265 |
+| **cifar10** | 60000 | 1000 | **5** | **1000** | 60000 | 0 | — | — |
+| cifar10 (L=1000) | 60000 | 1000 | 0 | 1000 | 0 | 0 | 0,098992 | 356371324 |
+
+**L=1400 é atingível em vegfru e sun397** (sobreviventes = largura = 2000; ids
+todos < N, sem filtro) e **não é em cifar10** — 60000/60000 linhas curtas,
+recusa `rc=5` registrada em vez de preenchimento com lixo (o mesmo contrato que
+salvou oito runs na Etapa 1). `self_missing=0` nos três; vegfru repete o padrão
+do linnaeus com 43 linhas de self fora da posição 0 (medido também pelo awk
+independente: 43).
+
+### Gate `TOUCH == NNZ_W` em N=24000 (todos rc=0)
+
+| ds | L | min_surv | `TOUCH_SUPPORT` | `A: NNZ_W` | gap |
+|---|---|---|---|---|---|
+| vegfru | 40 | 46 | 44818581 | **44818581** | **0** |
+| sun397 | 25 | 105 | 79229497 | **79229497** | **0** |
+| cifar10 | 120 | 129 | 153850577 | **153850577** | **0** |
+
+Igual aos pares-gate de corel5k/linnaeus e da Etapa 1: suporte estrutural ==
+suporte não-zero **exato** em mais três coleções. RSS medido: `A`@24k =
+**4,53 GB** (3 runs, ±0,01) ⇒ `A`@30k pediria ~7,1 GB (escala N²) e **não foi
+rodado** — limite medido, não estimado; `TOUCH`@30k mediu 3,62 GB.
+Os candidatos iniciais de L por fórmula fechada erraram (mins medidos 46/17/127
+contra 109/176/160 previstos; médias 555/396/283 contra 162/239/217) — rank
+list de ANN não é amostra uniforme e a cauda é pesada dos dois lados; o L final
+de cada ponto veio do `min_survivors` medido (registrado no cabeçalho do
+script). Em sun397 N=13000 **nenhum L ≥ k existe** (min=17) — impossibilidade
+medida, não omissão.
+
+### Curva ρ(N) e o delta RAW−TOUCH (a barra de erro do N pleno)
+
+| ds | L | ρ 13k | ρ 24k | ρ 30k | ρ_raw full-N | δ@24k | δ@30k |
+|---|---|---|---|---|---|---|---|
+| vegfru | 40 | 0,110692 | 0,077810 | 0,063967 | 0,020497 | −8,70% | −8,49% |
+| sun397 | 25 | — (sem L válido) | 0,137551 | 0,119292 | 0,053097 | −5,05% | −4,86% |
+| cifar10 | 120 | 0,359718 | 0,267102 | 0,245363 | 0,098992 | −35,29% | −37,49% |
+
+(ρ das colunas 13k/24k/30k é TOUCH pós-F1–F3, L constante por dataset; o do
+full-N é `TOUCHRAW` com L=1400/1000 — a única leitura possível lá.) O delta
+`RAW/TOUCH−1` é **estável em N** (<1 pp em vegfru/sun397,
+~2 pp em cifar10) ⇒ licencia derivar o ρ pós-front em N pleno de primeira
+ordem: **ρ ≈ raw/(1−δ̄)** ⇒ vegfru **0,0224** (+9,4%), sun397 **0,0559**
+(+5,2%), cifar10 **0,1556** (+57,2% sobre o raw). Ressalvas declaradas: δ foi
+medido com L pequeno (40/25/120) e o L do full-N é 1400/1000; a correção é
+estimativa de 1ª ordem com dois pontos medidos, não uma medição — o número
+medido em N pleno continua sendo o raw, e o pós-front em N pleno é débito.
+
+### Leitura (A5 e a conexão com a tese)
+
+- **A premissa do A5 não generaliza**: em N pleno, ρ_raw é 2,0× (vegfru), 5,1×
+  (sun397) e 9,6× (cifar10) o do ALOI 72k/L=1400 (0,010315) — e os valores
+  pós-front estimados em N pleno são maiores ainda. O ALOI era o extremo
+  esparso, não o caso típico.
+- **A conexão da tese fica quantificada**: sun397/vegfru (e cifar10) têm ρ(W)
+  de produção muito acima do ALOI — é exatamente o regime em que uma
+  representação densa `N²` (o caminho que estourava no GraphBLAS) é inviável
+  por construção (47–103 GB só para a matriz), enquanto o custo do port CSR é
+  proporcional ao suporte (ρ·N²), que é o número medido aqui. Densidade alta
+  explica a pressão de memória; não a cria por si só — mas é o dado que faltava
+  para a frase deixar de ser anedota.
+- **cifar10 é o caso extremo**: ρ_touch 0,245–0,360 nos pontos medidos (W
+  quase 1/3 preenchida em 13k) e o maior viés do proxy raw (−35/−37%).
+
 ## Débitos
 
 1. **Pares casados com ALOI**: repetir com `L` que o sub-corpus sustenta
@@ -107,6 +189,14 @@ truncagem; investigar antes de usar ρ(L) como curva.
    datasets, medir o delta `TOUCHRAW` vs `TOUCH` no maior N em que os dois
    cabem — não herdar a licença do ALOI.
 3. Anomalia ρ(L) não monotônico em linnaeus (item acima).
+4. **ρ pós-F1–F3 em N pleno** (vegfru/sun/cifar): exige a densa N² (47–103 GB)
+   — host de 128 GB fecha em 1 run por dataset; enquanto isso a estimativa
+   derivada (raw corrigido pelo δ de 2 pontos) é o que existe, com as ressalvas.
+5. **`NNZ_W` acima de N=24k**: `A`@24k mediu 4,53 GB; escala N² ⇒ 30k pediria
+   ~7,1 GB e 60k+ passa de 14 GB. Gate fora do 24k exige mais RAM.
+6. **δ medido com L do gate** (40/25/120), não com L=1400/1000: subir o L do
+   delta exigiria sub-corpus maior, que por sua vez não sustenta L=1400 (o
+   triângulo N² × sobreviventes × 8 GB, medido).
 
 ## Arquivos
 

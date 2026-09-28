@@ -12,7 +12,7 @@ na malha que o arco do RDPAC deixou (`Source/tests/run_all.sh`, `Source/Makefile
 | `bfstree_close/README.md` | encerramento do port BFSTree (Etapas 1→5): portador `A4`, gates, escala, débitos, e §7 sobre inclusão no framework | **fechado** (medição); inclusão no produto = débito 6.3 |
 | `bfstree_step1/` | brutos e `aggregate.md` do passo 1: censo estrutural `ρ(W)` em dados reais, crossover de pico, `real_bitex` em N=18k | dados |
 | `numerics_prod/` | auditoria da numérica do build do produto em 4 regimes (PROD/PRODC/NFM/BENCH): suites, valores (nnz/checksum), pin bit-a-bit do port em N=800/4000 + gate, custo de tempo — matéria-prima da §7.2–§7.4 de `bfstree_close` | **fechado** |
-| `rho_datasets/` | censo de `ρ(W)` em corel5k/linnaeus/aloi, grade com pares casados, contrato do carregador medido (rc=5 no ALOI N pequeno; rc=4 nunca) e gate `TOUCH == NNZ_W` | dados |
+| `rho_datasets/` | censo de `ρ(W)` em corel5k/linnaeus/aloi, grade com pares casados, contrato do carregador medido (rc=5 no ALOI N pequeno; rc=4 nunca) e gate `TOUCH == NNZ_W`; **generalização em escala** (vegfru 160k / sun397 108k / cifar10 60k): censo L=1400, gate exato em N=24k e curva `ρ(N)` com barra de erro medida | dados |
 | `etapa_a/`, `etapa_b/` | arcos das fases 1–2 do kernel CSR (`multiply_and_prune`), com os scripts `_p2_*`/`_p3_*`/`_fase1_*` da raiz referenciados por `etapa_b/s24/README.md` | histórico |
 | RDPAC | **sem dossiê próprio** — a evidência está nos commits `f69e28d`, `79df4b4`, `ca52571`, `b7a8cf7` e nos gates `make test-rdpac` / `run_all.sh` | fechado |
 

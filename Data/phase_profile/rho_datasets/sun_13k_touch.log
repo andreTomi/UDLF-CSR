@@ -1,0 +1,2 @@
+contract break: 524 rows with < L survivors; refusing to continue
+DATA=REAL path=real:Datasets/sun397/sun397_resnet152.txt N=13000 L=150 rows_read=13000 rows_short=524 self_missing=0 self_at0=13000 min_survivors=17 mean_survivors=396.3
