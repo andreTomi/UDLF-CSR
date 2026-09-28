@@ -1,0 +1,25 @@
+# extraido em 2026-09-28T13:47:58-03:00 por Source/bench/prod_numerics.sh
+host=Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
+compiler=g++ (Debian 14.2.0-19) 14.2.0
+cpu_model=Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz
+
+== bruto: make -C Source -s show-flags ==
+Compiler: g++
+Optimization flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32
+Linker flags: -L/usr/lib/x86_64-linux-gnu -lm -lpthread -ltbb -ljemalloc -lgraphblas -L/opt/intel/oneapi/mkl/latest/lib/intel64 -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lmkl_rt
+Include flags: -I./src -I/usr/include/eigen3 -I/usr/include/suitesparse -I/opt/intel/oneapi/mkl/latest/include -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp
+
+== regime PROD ==
+flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32
+== regime PRODC ==
+flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off
+== regime NFM ==
+flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off
+== regime BENCH ==
+flags: -std=gnu++2b -O2 -fopenmp
+
+== guardas ==
+PROD contem -ffast-math: sim (sem isso o script teria abortado)
+PROD contem -DNDEBUG: sim  # as assert exatas do codigo moram aqui
+NFM sem as tres flags de fast-math: verificado no preambulo
+BENCH = flags de Source/tests/run_all.sh: '-std=gnu++2b -O2 -fopenmp'

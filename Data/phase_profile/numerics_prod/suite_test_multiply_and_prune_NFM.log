@@ -1,0 +1,71 @@
+Test suite: adaptive multiply_and_prune (threads=12)
+  [BuildV2] Total triplets: 3
+  [BuildV2] Total triplets: 5
+  [BuildV2] Total triplets: 5
+== A1 hand-checked (dense branch)
+  [BuildV2] Total triplets: 2400
+  [BuildV2] Total triplets: 4500
+== A2 random dense-branch vs reference (expect hash branch: no)
+  [BuildV2] Total triplets: 4000
+  [BuildV2] Total triplets: 4000
+  [BuildV2] Total triplets: 7500
+  [BuildV2] Total triplets: 6000
+== A3 random hash-branch vs reference (expect hash branch: yes)
+  [BuildV2] Total triplets: 15000
+  [BuildV2] Total triplets: 15000
+== A5 prune ties
+  [BuildV2] Total triplets: 2
+  [BuildV2] Total triplets: 4
+  [BuildV2] Total triplets: 2
+== A6 edge cases
+  [BuildV2] Total triplets: 30
+  [BuildV2] Total triplets: 30
+  [BuildV2] Total triplets: 0
+  [BuildV2] Total triplets: 30
+  [BuildV2] Total triplets: 60
+== A6 limit>touched (expect hash branch: no)
+  [BuildV2] Total triplets: 83
+  [BuildV2] Total triplets: 83
+  [BuildV2] Total triplets: 1
+  [BuildV2] Total triplets: 1
+  [BuildV2] Total triplets: 0
+  [BuildV2] Total triplets: 1
+  [BuildV2] Total triplets: 1
+  [BuildV2] Total triplets: 1
+  [BuildV2] Total triplets: 40
+  [BuildV2] Total triplets: 60
+  [BuildV2] Total triplets: 40
+  [BuildV2] Total triplets: 40
+  [BuildV2] Total triplets: 185
+  [BuildV2] Total triplets: 200
+== A6 non-divisible rows, hash branch (expect hash branch: yes)
+  [BuildV2] Total triplets: 296
+  [BuildV2] Total triplets: 296
+== A7 saturation stress
+  [BuildV2] Total triplets: 15
+  [BuildV2] Total triplets: 15
+  [BuildV2] Total triplets: 15
+  [BuildV2] Total triplets: 16
+  [BuildV2] Total triplets: 16
+  [BuildV2] Total triplets: 16
+  [BuildV2] Total triplets: 17
+  [BuildV2] Total triplets: 17
+  [BuildV2] Total triplets: 17
+  [BuildV2] Total triplets: 255
+  [BuildV2] Total triplets: 255
+  [BuildV2] Total triplets: 255
+  [BuildV2] Total triplets: 256
+  [BuildV2] Total triplets: 256
+  [BuildV2] Total triplets: 256
+  [BuildV2] Total triplets: 257
+  [BuildV2] Total triplets: 257
+  [BuildV2] Total triplets: 257
+  [BuildV2] Total triplets: 1024
+  [BuildV2] Total triplets: 40000
+  [BuildV2] Total triplets: 10000
+== A8 double instantiation
+  [BuildV2] Total triplets: 320
+  [BuildV2] Total triplets: 480
+  [BuildV2] Total triplets: 240
+
+ALL TESTS PASSED

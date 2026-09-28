@@ -1,0 +1,31 @@
+# numerica do motor sob as flags do produto -- 2026-09-28T15:34:57-03:00
+# gerado por Source/bench/prod_numerics.sh; cada linha e um sed/awk no
+# artefato bruto do mesmo diretorio (suites.out, values_cmp.txt,
+# golden.out, timing.summary).
+
+## Q1 -- os valores do motor mudam?
+ENGINE_SUITE_test_csr_ops_MD5_DISTINTOS=1  # 1 = nenhuma flag mudou a saida
+ENGINE_SUITE_test_csr_ops_CONFERE_REGISTRO_BENCH=IGUAL  # IGUAL = bate com o md5 gravado em s2_close
+ENGINE_SUITE_test_multiply_and_prune_MD5_DISTINTOS=1  # 1 = nenhuma flag mudou a saida
+ENGINE_SUITE_test_multiply_and_prune_CONFERE_REGISTRO_BENCH=IGUAL  # IGUAL = bate com o md5 gravado em s2_close
+ENGINE_VALORES_DISTINTOS_MAX_NNZ=1 CHECKSUM=2
+ENGINE_VALUES_NNZ_IGUAL_EM_TODOS_REGIMES=SIM
+ENGINE_VALUES_CHECKSUM_IGUAL_EM_TODOS_REGIMES=NAO
+
+## Q2 -- o pin bit-a-bit do port sobrevive? (golden gravado pelo proprio legado)
+GOLDEN_PROD: BITFINAL_A4=NO POS_EQUAL=0.999983 PIN800_O2=IGUAL HIST_A4_800_PROD=IGUAL HIST_REF4000_PROD=IGUAL gate_rc=1 A4_repeticao_md5=1
+GOLDEN_PRODC: BITFINAL_A4=NO POS_EQUAL=0.999975 PIN800_O2=IGUAL HIST_A4_800_PROD=DIFERENTE HIST_REF4000_PROD=DIFERENTE gate_rc=1 A4_repeticao_md5=1
+GOLDEN_NFM: BITFINAL_A4=YES POS_EQUAL=1.000000 PIN800_O2=IGUAL HIST_A4_800_PROD=DIFERENTE HIST_REF4000_PROD=DIFERENTE gate_rc=0 A4_repeticao_md5=1
+GOLDEN_BENCH: BITFINAL_A4=YES POS_EQUAL=1.000000 PIN800_O2=IGUAL HIST_A4_800_PROD=DIFERENTE HIST_REF4000_PROD=DIFERENTE gate_rc=0 A4_repeticao_md5=1
+
+## Q3 -- quanto custa o regime que preserva bits
+[caso synth] PROD n=3 mediana=46807.34 min=46011.62 max=48742.58
+[caso synth] NFM n=3 mediana=46695.63 min=43732.06 max=58886.29
+[caso synth] BENCH n=3 mediana=46048.42 min=45809.64 max=46859.92
+[caso real] PROD n=2 mediana=42189.38 min=40344.68 max=44034.07
+[caso real] NFM n=2 mediana=35320.05 min=30074.88 max=40565.22
+[caso real] BENCH n=2 mediana=36834.26 min=30152.30 max=43516.23
+synth NFM_vs_PROD=-0.2%
+synth BENCH_vs_PROD=-1.6%
+real NFM_vs_PROD=-16.3%
+real BENCH_vs_PROD=-12.7%

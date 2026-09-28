@@ -203,8 +203,17 @@ test-rdpac:
 # (-O3 -march=native -mfma -ffast-math) breaks the port's identity -- at N=800 the
 # legacy golden stays 0x7b70dfb313c2b151 while A4 becomes 0x0423b12779c26d3d
 # (BITFINAL=NO, POS_EQUAL 0.999983), and at N=4000 even the golden moves
-# (0xa299c0fa9515e5de). Shipping BFSTree therefore needs that numerics decision
-# first (dossiê 7.4); the gate itself costs ~13 s and touches nothing in src/.
+# (0xa299c0fa9515e5de). Re-measured 2026-09-28 with the real Makefile flag
+# string (make show-flags) over BOTH fixtures -- N=800 L=300 k=8 s42 and
+# N=4000 L=1400 k=20 s42, B=256 limit=N, see Source/bench/prod_numerics.sh:
+# PROD fails this gate (hyp 6/45); PRODC (product + -ffp-contract=off) still
+# fails the bit-pin (POS_EQUAL 0.999975 -> FMA contraction is not the cause);
+# NFM (product minus -ffast-math/-funsafe-math-optimizations/-ffinite-math-only,
+# plus -ffp-contract=off) and BENCH (-O2) both print BFSTREE GATES: OK and are
+# bit-exact at N=800 AND N=4000. Shipping BFSTree therefore needs that numerics
+# decision first (dossiê 7.4, with the measured cost: NFM = -0.2% on synth);
+# the gate itself costs ~13 s and touches nothing in src/.
+# Full audit: Data/phase_profile/numerics_prod/README.md
 # Run from Source/: make test-bfstree
 test-bfstree:
 	bash tests/gate_bfstree.sh

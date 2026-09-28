@@ -355,6 +355,28 @@ Mesmo fonte (`bench_bfstree.cpp`), quatro builds, duas escalas:
 | produto (`-O3 -march=native -mavx2 -mfma -ffast-math`, `Source/Makefile:5,7,19`), N=800 | `0x7b70dfb313c2b151` | **`0x0423b12779c26d3d`** | **`BITFINAL=NO`, `POS_EQUAL=0,999983`** |
 | produto, N=4000 | **`0xa299c0fa9515e5de`** | **`0xed6d982a1d98511e`** | **`BITFINAL=NO`, `POS_EQUAL=0,999695`** |
 
+**Parâmetros dos dois fixtures** (recuperados por medicao — antes só existiam
+na prosa; agora gravados em `Data/phase_profile/numerics_prod/golden.out`):
+**N=800 L=300 k=8 seed=42** e **N=4000 L=1400 k=20 seed=42**, `B=256 limit=N`.
+
+A auditoria da numérica do produto (`Data/phase_profile/numerics_prod/README.md`;
+string real do Makefile extraída por `make -C Source -s show-flags`, quatro
+regimes, mesma fixture e mesmo gate) adiciona **atribuição de causa** à mesma
+tabela:
+
+| regime (gate `gate_bfstree.sh` com as flags do regime) | `A4` N=800 | gate |
+|---|---|---|
+| PROD (produto completo) | `0x0423b12779c26d3d` (NO, 0,999983) | **falha já na hipótese** (`45 checks, 6 failures`) |
+| PRODC (produto **+ `-ffp-contract=off`**) | `0x7829b615b6824fb1` (NO, 0,999975) | **falha** no bit-pin — a contração de FMA **não resolve** |
+| NFM (produto **−** as 3 flags de fast-math, **+ `-ffp-contract=off`**) | `0x7b70dfb313c2b151` = golden (**YES, 1,000000**) | **`BFSTREE GATES: OK`**, bit-exato também em N=4000 |
+| BENCH (`run_all.sh`, `-O2`) | idêntico ao golden | **`BFSTREE GATES: OK`** |
+
+Marcador `hist_*`: **esperado `IGUAL` só no regime PROD**. Os pins históricos
+(`0x0423b127…`, `0xa299c0fa…`) foram medidos com a string do produto
+*paraphraseada*; o PROD — string real — os reproduz, o que retrovalida aquela
+medição. Em NFM/BENCH o `DIFERENTE` do pin de produto é o valor correto (golden
+`-O2`), não uma falha.
+
 1. **Em `-O2`, `-ffp-contract=off` é inerte nestes dados** — idêntico com e sem
    ela nas duas escalas. A correção da §3 está feita: a flag continua nos builds
    por postura idêntica ao RDPAC e como proteção contra o GCC formar FMA no dot do
@@ -367,6 +389,16 @@ Mesmo fonte (`bench_bfstree.cpp`), quatro builds, duas escalas:
    mexer no build do produto significa **shippar um método que não reproduz o
    `CK_FINAL`** contra o qual a campanha inteira foi jurada. Não é defeito do
    port — é incompatibilidade de contrato de arredondamento com `-ffast-math`.
+4. **A culpa é do `-ffast-math`, não da contração de FMA** (medido com o regime
+   PRODC): desligar só a contração faz a hipótese voltar a 45/45, mas o port
+   continua não bit-exato (`POS_EQUAL=0,999975`). A reassociação de fast-math
+   quebra o port sozinha.
+5. **O regime barato existe e está medido (NFM)** — mantém `-O3 -march=native
+   -DNDEBUG` e remove só as três flags de fast-math (com `-ffp-contract=off`):
+   gate completo **`BFSTREE GATES: OK`** e bit-exatidão em N=800 **e** N=4000,
+   a **−0,2%** de PROD no caso sintético de tempo (§7.4). Os quatro regimes,
+   com determinismo verificado (`A4_repeticao_md5_unico=1` em todos), estão no
+   dossiê `numerics_prod/`.
 
 ### 7.3 O que fica bloqueado neste host (fronteira, não falha)
 
@@ -380,6 +412,13 @@ Mesmo fonte (`bench_bfstree.cpp`), quatro builds, duas escalas:
   depende do item acima.
 - **`A5` (`W` por valor)**: gate pronto (`CK_FINAL` do `A4`), falta a prova de que
   pular termos ausentes é bit-exato.
+- **A fronteira do instrumento de valores** (auditoria `numerics_prod`): o
+  `nnz=2500000` é invariante nos 4 regimes × 6 casos e as duas suites têm md5
+  idêntico ao registrado em `s2_close`; o `checksum`, porém, diverge no PROD
+  **só no caso `dense`** (1·10⁻⁶ a 1,3·10⁻⁵) — e ele é soma serial em double,
+  o mesmo instrumento que o `-ffast-math` reassocia. Com este instrumento dá
+  para afirmar "estrutura idêntica, aritmética reassociada no PROD"; separar
+  ULP de reassociação *dentro* do checksum está fora do que a medição cobre.
 
 ### 7.4 A decisão de inclusão, quando ela for tomada
 
@@ -392,6 +431,14 @@ Pré-condição (a única de verdade): escolher o regime de arredondamento do pr
 2. **Contrato de tolerância** — o produto mantém `-ffast-math` e o `BFSTree`
    declara tolerância (com os números da tabela acima como testemunha); o
    `BITFINAL` passa a ser propriedade do regime de teste.
+
+**Custo medido da opção (1)** (`numerics_prod/README.md` Q3): o regime NFM —
+tudo do build do produto mantido, menos as três flags de fast-math, mais
+`-ffp-contract=off` — **passa o gate completo e é bit-exato em N=800 e N=4000**
+por **−0,2%** no tempo (46695,63 vs 46807,34 ms, n=3 intercalados, dentro do
+ruído) ⇒ a opção (1) é **gratuita nesta medição**. O caso real (ALOI, n=2)
+**não** é utilizável como delta (spread até +44% por drift de sessão WSL2) e
+fica registrado como limitação — não existe "ganho de 16%" a reivindicar.
 
 Recomendação: **(1)**, porque `-ffast-math` já torna duvidoso um contrato herdado
 do RDPAC ("`0/0` sem guarda = NaN verbatim", Etapa 3) por causa de

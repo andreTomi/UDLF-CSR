@@ -1,0 +1,2 @@
+[1/3] hipotese F5 = SpGEMM (T1/T3 bit-exatos, T4a/T4b em tolerancia)
+BFSTREE GATE FAILED: hyp suite: RESULT: 45 checks, 6 failures

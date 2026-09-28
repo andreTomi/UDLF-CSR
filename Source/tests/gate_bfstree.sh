@@ -28,6 +28,19 @@
 # sobrevive as flags do produto -- o obstaculo a inclusao e a numerica do build,
 # nao o port (debito 6.3 / dossie 7.4).
 #
+# Re-medido em 28/09/2026 com a string REAL do Makefile (`make -C Source -s
+# show-flags`), mesmo gate e mesma fixture nos quatro regimes, nos DOIS
+# fixtures -- N=800 L=300 k=8 seed=42 e N=4000 L=1400 k=20 seed=42, B=256
+# limit=N (Source/bench/prod_numerics.sh, dossie numerics_prod/README.md):
+#   PROD  produto completo            -> FALHA (hipotese: 45 checks, 6 failures)
+#   PRODC produto + -ffp-contract=off -> FALHA no bit-pin (POS_EQUAL=0.999975);
+#                                        contracao de FMA nao e a causa nem o
+#                                        conserto
+#   NFM   produto - as 3 flags de fast-math + -ffp-contract=off
+#                                      -> OK (BFSTREE GATES: OK), bit-exato em
+#                                        N=800 E N=4000
+#   BENCH -O2 da malha                -> OK (reproduz o pin 0x7b70dfb313c2b151)
+#
 # O RSS NAO e pinado aqui: em N=800 o path CSR gasta MAIS que o legado
 # (42 MB vs 10 MB medidos) porque o crossover de pico esta em N* ~ 12*L; RSS e
 # propriedade de campanha (Data/phase_profile/bfstree_step1), nao de gate.
@@ -46,9 +59,13 @@ set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd) || exit 1
 cd "$ROOT" || exit 1
 CXX=${CXX:-g++}
-HYP=/tmp/gate_bfstree_hyp
-BIN=/tmp/gate_bfstree_bench
-FLAGS="-std=gnu++2b -O2 -ffp-contract=off -fopenmp"
+HYP=${HYP:-/tmp/gate_bfstree_hyp}
+BIN=${BIN:-/tmp/gate_bfstree_bench}
+# FLAGS e sobreponivel de proposito: Source/bench/prod_numerics.sh reusa este gate
+# (mesma fixture, mesmo pin, mesmas assert de contrato) com as flags do build do
+# produto, em vez de duplicar a logica la dentro. O default preserva exatamente a
+# postura strict-IEEE em -O2 medida no cabecalho deste arquivo.
+FLAGS=${FLAGS:-"-std=gnu++2b -O2 -ffp-contract=off -fopenmp"}
 
 fail() { echo "BFSTREE GATE FAILED: $*" >&2; exit 1; }
 

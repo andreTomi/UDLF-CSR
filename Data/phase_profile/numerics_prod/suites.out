@@ -1,0 +1,10 @@
+test_csr_ops PROD rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops PRODC rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops NFM rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops BENCH rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_multiply_and_prune PROD rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune PRODC rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune NFM rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune BENCH rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_csr_ops MD5_UNICO_ENTRE_REGIMES=1
+test_multiply_and_prune MD5_UNICO_ENTRE_REGIMES=1

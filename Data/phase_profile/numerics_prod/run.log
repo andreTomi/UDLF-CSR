@@ -1,0 +1,123 @@
+== [1/6] regimes ==
+# extraido em 2026-09-28T13:47:58-03:00 por Source/bench/prod_numerics.sh
+host=Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
+compiler=g++ (Debian 14.2.0-19) 14.2.0
+cpu_model=Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz
+
+== bruto: make -C Source -s show-flags ==
+Compiler: g++
+Optimization flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32
+Linker flags: -L/usr/lib/x86_64-linux-gnu -lm -lpthread -ltbb -ljemalloc -lgraphblas -L/opt/intel/oneapi/mkl/latest/lib/intel64 -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lmkl_rt
+Include flags: -I./src -I/usr/include/eigen3 -I/usr/include/suitesparse -I/opt/intel/oneapi/mkl/latest/include -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp
+
+== regime PROD ==
+flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32
+== regime PRODC ==
+flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off
+== regime NFM ==
+flags: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off
+== regime BENCH ==
+flags: -std=gnu++2b -O2 -fopenmp
+
+== guardas ==
+PROD contem -ffast-math: sim (sem isso o script teria abortado)
+PROD contem -DNDEBUG: sim  # as assert exatas do codigo moram aqui
+NFM sem as tres flags de fast-math: verificado no preambulo
+BENCH = flags de Source/tests/run_all.sh: '-std=gnu++2b -O2 -fopenmp'
+== [2/6] suites de igualdade exata nos quatro regimes ==
+  [PROD] test_csr_ops.cpp
+  [PRODC] test_csr_ops.cpp
+  [NFM] test_csr_ops.cpp
+  [BENCH] test_csr_ops.cpp
+  [PROD] test_multiply_and_prune.cpp
+  [PRODC] test_multiply_and_prune.cpp
+  [NFM] test_multiply_and_prune.cpp
+  [BENCH] test_multiply_and_prune.cpp
+test_csr_ops PROD rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops PRODC rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops NFM rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops BENCH rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_multiply_and_prune PROD rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune PRODC rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune NFM rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune BENCH rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_csr_ops MD5_UNICO_ENTRE_REGIMES=1
+test_multiply_and_prune MD5_UNICO_ENTRE_REGIMES=1
+== [3/6] digital de VALORES do motor (bench_e2e: nnz + checksum) ==
+  [PROD] bench_e2e.cpp
+  [PRODC] bench_e2e.cpp
+  [NFM] bench_e2e.cpp
+  [BENCH] bench_e2e.cpp
+adaptive/1000000 nnz_distinto=1 checksum_distinto=1  nnz: PROD=2500000 PRODC=2500000 NFM=2500000 BENCH=2500000  ck: PROD=277.889357 PRODC=277.889357 NFM=277.889357 BENCH=277.889357
+adaptive/100000  nnz_distinto=1 checksum_distinto=1  nnz: PROD=2500000 PRODC=2500000 NFM=2500000 BENCH=2500000  ck: PROD=1587.610859 PRODC=1587.610859 NFM=1587.610859 BENCH=1587.610859
+adaptive/10000   nnz_distinto=1 checksum_distinto=1  nnz: PROD=2500000 PRODC=2500000 NFM=2500000 BENCH=2500000  ck: PROD=-618.763392 PRODC=-618.763392 NFM=-618.763392 BENCH=-618.763392
+dense/1000000    nnz_distinto=1 checksum_distinto=2  nnz: PROD=2500000 PRODC=2500000 NFM=2500000 BENCH=2500000  ck: PROD=277.889358 PRODC=277.889357 NFM=277.889357 BENCH=277.889357
+dense/100000     nnz_distinto=1 checksum_distinto=2  nnz: PROD=2500000 PRODC=2500000 NFM=2500000 BENCH=2500000  ck: PROD=1587.610864 PRODC=1587.610859 NFM=1587.610859 BENCH=1587.610859
+dense/10000      nnz_distinto=1 checksum_distinto=2  nnz: PROD=2500000 PRODC=2500000 NFM=2500000 BENCH=2500000  ck: PROD=-618.763379 PRODC=-618.763392 NFM=-618.763392 BENCH=-618.763392
+== [4/6] pin bit-a-bit do port BFSTree nos quatro regimes ==
+  [PROD] bench_bfstree.cpp
+  [PRODC] bench_bfstree.cpp
+  [NFM] bench_bfstree.cpp
+  [BENCH] bench_bfstree.cpp
+PROD ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x0423b12779c26d3d bitfinal_A4=NO 0.999983 pin800_O2=IGUAL hist_A4_800=IGUAL ck_ref4000=0x4bf87608f93a5f33 ck_A4_4000=0x2ee66ecc142b668b hist_ref4000=DIFERENTE gate_rc=1 gate_msg='hyp suite: RESULT: 45 checks, 6 failures'
+PRODC ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7829b615b6824fb1 bitfinal_A4=NO 0.999975 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0x515d10c2d2ba613b ck_A4_4000=0x158245acc50b26cf hist_ref4000=DIFERENTE gate_rc=1 gate_msg='modo A4 nao bit-exato: BITFINAL=NO POS_EQUAL=0.999975'
+NFM ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7b70dfb313c2b151 bitfinal_A4=YES 1.000000 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0x515d10c2d2ba613b ck_A4_4000=0x515d10c2d2ba613b hist_ref4000=DIFERENTE gate_rc=0 gate_msg='BFSTREE GATES: OK'
+BENCH ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7b70dfb313c2b151 bitfinal_A4=YES 1.000000 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0x515d10c2d2ba613b ck_A4_4000=0x515d10c2d2ba613b hist_ref4000=DIFERENTE gate_rc=0 gate_msg='BFSTREE GATES: OK'
+PROD A4_repeticao_md5_unico=1
+PRODC A4_repeticao_md5_unico=1
+NFM A4_repeticao_md5_unico=1
+BENCH A4_repeticao_md5_unico=1
+== [5/6] custo de tempo (T_TOTAL_MS = F1..F9, exclusive a leitura do arquivo) ==
+  [PROD] bench_bfstree.cpp
+  [NFM] bench_bfstree.cpp
+  [BENCH] bench_bfstree.cpp
+  synth PROD rep=1 T_TOTAL_MS=NA
+  synth NFM rep=1 T_TOTAL_MS=NA
+  synth BENCH rep=1 T_TOTAL_MS=NA
+  synth PROD rep=2 T_TOTAL_MS=NA
+  synth NFM rep=2 T_TOTAL_MS=NA
+  synth BENCH rep=2 T_TOTAL_MS=NA
+  synth PROD rep=3 T_TOTAL_MS=NA
+  synth NFM rep=3 T_TOTAL_MS=NA
+  synth BENCH rep=3 T_TOTAL_MS=NA
+  real PROD rep=1 T_TOTAL_MS=NA
+  real NFM rep=1 T_TOTAL_MS=NA
+  real BENCH rep=1 T_TOTAL_MS=NA
+  real PROD rep=2 T_TOTAL_MS=NA
+  real NFM rep=2 T_TOTAL_MS=NA
+  real BENCH rep=2 T_TOTAL_MS=NA
+synth PROD SEM_DADO
+synth NFM SEM_DADO
+synth BENCH SEM_DADO
+real PROD SEM_DADO
+real NFM SEM_DADO
+real BENCH SEM_DADO
+== [6/6] veredito (derivado dos artefatos, nada digitado a mao) ==
+# numerica do motor sob as flags do produto -- 2026-09-28T14:29:13-03:00
+# gerado por Source/bench/prod_numerics.sh; cada linha e um sed/awk no
+# artefato bruto do mesmo diretorio (suites.out, values_cmp.txt,
+# golden.out, timing.summary).
+
+## Q1 -- os valores do motor mudam?
+ENGINE_SUITE_test_csr_ops_MD5_DISTINTOS=1  # 1 = nenhuma flag mudou a saida
+ENGINE_SUITE_test_csr_ops_CONFERE_REGISTRO_BENCH=IGUAL  # IGUAL = bate com o md5 gravado em s2_close
+ENGINE_SUITE_test_multiply_and_prune_MD5_DISTINTOS=1  # 1 = nenhuma flag mudou a saida
+ENGINE_SUITE_test_multiply_and_prune_CONFERE_REGISTRO_BENCH=IGUAL  # IGUAL = bate com o md5 gravado em s2_close
+ENGINE_VALORES_DISTINTOS_MAX_NNZ=1 CHECKSUM=2
+ENGINE_VALUES_NNZ_IGUAL_EM_TODOS_REGIMES=SIM
+ENGINE_VALUES_CHECKSUM_IGUAL_EM_TODOS_REGIMES=NAO
+
+## Q2 -- o pin bit-a-bit do port sobrevive? (golden gravado pelo proprio legado)
+GOLDEN_PROD:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+GOLDEN_PRODC:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+GOLDEN_NFM:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+GOLDEN_BENCH:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+
+## Q3 -- quanto custa o regime que preserva bits
+[caso synth] PROD SEM_DADO
+[caso synth] NFM SEM_DADO
+[caso synth] BENCH SEM_DADO
+[caso real] PROD SEM_DADO
+[caso real] NFM SEM_DADO
+[caso real] BENCH SEM_DADO
+NUMERICS_STAGE_all_DONE

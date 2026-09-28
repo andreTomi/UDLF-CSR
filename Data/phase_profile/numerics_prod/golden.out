@@ -1,0 +1,8 @@
+PROD ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x0423b12779c26d3d bitfinal_A4=NO 0.999983 pin800_O2=IGUAL hist_A4_800=IGUAL ck_ref4000=0xa299c0fa9515e5de ck_A4_4000=0xed6d982a1d98511e hist_ref4000=IGUAL gate_rc=1 gate_msg='hyp suite: RESULT: 45 checks, 6 failures'
+PRODC ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7829b615b6824fb1 bitfinal_A4=NO 0.999975 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0xd1a967056882795e ck_A4_4000=0x294efaa7aff3930e hist_ref4000=DIFERENTE gate_rc=1 gate_msg='modo A4 nao bit-exato: BITFINAL=NO POS_EQUAL=0.999975'
+NFM ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7b70dfb313c2b151 bitfinal_A4=YES 1.000000 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0xd1a967056882795e ck_A4_4000=0xd1a967056882795e hist_ref4000=DIFERENTE gate_rc=0 gate_msg='BFSTREE GATES: OK'
+BENCH ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7b70dfb313c2b151 bitfinal_A4=YES 1.000000 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0xd1a967056882795e ck_A4_4000=0xd1a967056882795e hist_ref4000=DIFERENTE gate_rc=0 gate_msg='BFSTREE GATES: OK'
+PROD A4_repeticao_md5_unico=1
+PRODC A4_repeticao_md5_unico=1
+NFM A4_repeticao_md5_unico=1
+BENCH A4_repeticao_md5_unico=1

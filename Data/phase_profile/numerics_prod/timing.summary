@@ -1,0 +1,6 @@
+synth PROD n=3 mediana=46807.34 min=46011.62 max=48742.58
+synth NFM n=3 mediana=46695.63 min=43732.06 max=58886.29
+synth BENCH n=3 mediana=46048.42 min=45809.64 max=46859.92
+real PROD n=2 mediana=42189.38 min=40344.68 max=44034.07
+real NFM n=2 mediana=35320.05 min=30074.88 max=40565.22
+real BENCH n=2 mediana=36834.26 min=30152.30 max=43516.23

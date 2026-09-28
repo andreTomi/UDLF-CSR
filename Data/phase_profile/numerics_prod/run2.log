@@ -1,0 +1,86 @@
+== [2/6] suites de igualdade exata nos quatro regimes ==
+  [PROD] test_csr_ops.cpp
+  [PRODC] test_csr_ops.cpp
+  [NFM] test_csr_ops.cpp
+  [BENCH] test_csr_ops.cpp
+  [PROD] test_multiply_and_prune.cpp
+  [PRODC] test_multiply_and_prune.cpp
+  [NFM] test_multiply_and_prune.cpp
+  [BENCH] test_multiply_and_prune.cpp
+test_csr_ops PROD rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops PRODC rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops NFM rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_csr_ops BENCH rc=0 md5=b6a4f54ec7dc0e9c9b251254597ea215 registrado=b6a4f54e prefixo=IGUAL ultima_linha='ALL TESTS PASSED: 99 checks, 0 failures'
+test_multiply_and_prune PROD rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune PRODC rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune NFM rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_multiply_and_prune BENCH rc=0 md5=112fb48749110da3c1cf31a5612fbe91 registrado=112fb487 prefixo=IGUAL ultima_linha='ALL TESTS PASSED'
+test_csr_ops MD5_UNICO_ENTRE_REGIMES=1
+test_multiply_and_prune MD5_UNICO_ENTRE_REGIMES=1
+== [4/6] pin bit-a-bit do port BFSTree nos quatro regimes ==
+  [PROD] bench_bfstree.cpp
+  [PRODC] bench_bfstree.cpp
+  [NFM] bench_bfstree.cpp
+  [BENCH] bench_bfstree.cpp
+PROD ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x0423b12779c26d3d bitfinal_A4=NO 0.999983 pin800_O2=IGUAL hist_A4_800=IGUAL ck_ref4000=0xa299c0fa9515e5de ck_A4_4000=0xed6d982a1d98511e hist_ref4000=IGUAL gate_rc=1 gate_msg='hyp suite: RESULT: 45 checks, 6 failures'
+PRODC ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7829b615b6824fb1 bitfinal_A4=NO 0.999975 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0xd1a967056882795e ck_A4_4000=0x294efaa7aff3930e hist_ref4000=DIFERENTE gate_rc=1 gate_msg='modo A4 nao bit-exato: BITFINAL=NO POS_EQUAL=0.999975'
+NFM ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7b70dfb313c2b151 bitfinal_A4=YES 1.000000 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0xd1a967056882795e ck_A4_4000=0xd1a967056882795e hist_ref4000=DIFERENTE gate_rc=0 gate_msg='BFSTREE GATES: OK'
+BENCH ck_ref800=0x7b70dfb313c2b151 ck_A=0x7b70dfb313c2b151 ck_A2=0x7b70dfb313c2b151 ck_A4=0x7b70dfb313c2b151 bitfinal_A4=YES 1.000000 pin800_O2=IGUAL hist_A4_800=DIFERENTE ck_ref4000=0xd1a967056882795e ck_A4_4000=0xd1a967056882795e hist_ref4000=DIFERENTE gate_rc=0 gate_msg='BFSTREE GATES: OK'
+PROD A4_repeticao_md5_unico=1
+PRODC A4_repeticao_md5_unico=1
+NFM A4_repeticao_md5_unico=1
+BENCH A4_repeticao_md5_unico=1
+== [5/6] custo de tempo (T_TOTAL_MS = F1..F9, exclusive a leitura do arquivo) ==
+  [PROD] bench_bfstree.cpp
+  [NFM] bench_bfstree.cpp
+  [BENCH] bench_bfstree.cpp
+  synth PROD rep=1 T_TOTAL_MS=46011.62
+  synth NFM rep=1 T_TOTAL_MS=46695.63
+  synth BENCH rep=1 T_TOTAL_MS=46859.92
+  synth PROD rep=2 T_TOTAL_MS=48742.58
+  synth NFM rep=2 T_TOTAL_MS=58886.29
+  synth BENCH rep=2 T_TOTAL_MS=45809.64
+  synth PROD rep=3 T_TOTAL_MS=46807.34
+  synth NFM rep=3 T_TOTAL_MS=43732.06
+  synth BENCH rep=3 T_TOTAL_MS=46048.42
+  real PROD rep=1 T_TOTAL_MS=40344.68
+  real NFM rep=1 T_TOTAL_MS=40565.22
+  real BENCH rep=1 T_TOTAL_MS=43516.23
+  real PROD rep=2 T_TOTAL_MS=44034.07
+  real NFM rep=2 T_TOTAL_MS=30074.88
+  real BENCH rep=2 T_TOTAL_MS=30152.30
+synth PROD n=3 mediana=46807.34 min=46011.62 max=48742.58
+synth NFM n=3 mediana=46695.63 min=43732.06 max=58886.29
+synth BENCH n=3 mediana=46048.42 min=45809.64 max=46859.92
+real PROD n=2 mediana=42189.38 min=40344.68 max=44034.07
+real NFM n=2 mediana=35320.05 min=30074.88 max=40565.22
+real BENCH n=2 mediana=36834.26 min=30152.30 max=43516.23
+== [6/6] veredito (derivado dos artefatos, nada digitado a mao) ==
+# numerica do motor sob as flags do produto -- 2026-09-28T15:16:14-03:00
+# gerado por Source/bench/prod_numerics.sh; cada linha e um sed/awk no
+# artefato bruto do mesmo diretorio (suites.out, values_cmp.txt,
+# golden.out, timing.summary).
+
+## Q1 -- os valores do motor mudam?
+ENGINE_SUITE_test_csr_ops_MD5_DISTINTOS=1  # 1 = nenhuma flag mudou a saida
+ENGINE_SUITE_test_csr_ops_CONFERE_REGISTRO_BENCH=IGUAL  # IGUAL = bate com o md5 gravado em s2_close
+ENGINE_SUITE_test_multiply_and_prune_MD5_DISTINTOS=1  # 1 = nenhuma flag mudou a saida
+ENGINE_SUITE_test_multiply_and_prune_CONFERE_REGISTRO_BENCH=IGUAL  # IGUAL = bate com o md5 gravado em s2_close
+ENGINE_VALORES_DISTINTOS_MAX_NNZ=1 CHECKSUM=2
+ENGINE_VALUES_NNZ_IGUAL_EM_TODOS_REGIMES=SIM
+ENGINE_VALUES_CHECKSUM_IGUAL_EM_TODOS_REGIMES=NAO
+
+## Q2 -- o pin bit-a-bit do port sobrevive? (golden gravado pelo proprio legado)
+GOLDEN_PROD:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+GOLDEN_PRODC:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+GOLDEN_NFM:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+GOLDEN_BENCH:  PIN800_O2= HIST_A4_800_PROD= HIST_REF4000_PROD= gate_rc= A4_repeticao_md5=1
+
+## Q3 -- quanto custa o regime que preserva bits
+[caso synth] PROD n=3 mediana=46807.34 min=46011.62 max=48742.58
+[caso synth] NFM n=3 mediana=46695.63 min=43732.06 max=58886.29
+[caso synth] BENCH n=3 mediana=46048.42 min=45809.64 max=46859.92
+[caso real] PROD n=2 mediana=42189.38 min=40344.68 max=44034.07
+[caso real] NFM n=2 mediana=35320.05 min=30074.88 max=40565.22
+[caso real] BENCH n=2 mediana=36834.26 min=30152.30 max=43516.23
+NUMERICS_STAGE_suites golden timing verdict_DONE

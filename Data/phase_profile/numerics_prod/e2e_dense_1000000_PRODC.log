@@ -1,0 +1,6 @@
+  [BuildV2] Total triplets: 1000000
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2500000
+  [BuildV2] Total triplets: 2500000
+  [BuildV2] Total triplets: 2500000
+dense     N=1000000   time_ms=401.5     peak_rss_KB=243344     nnz=2500000   checksum=277.889357

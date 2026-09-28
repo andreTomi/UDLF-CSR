@@ -1,0 +1,6 @@
+  [BuildV2] Total triplets: 1000000
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2500000
+  [BuildV2] Total triplets: 2500000
+  [BuildV2] Total triplets: 2500000
+adaptive  N=100000    time_ms=98.6      peak_rss_KB=131604     nnz=2500000   checksum=1587.610859

@@ -1,0 +1,2 @@
+contract break: 937 rows with < L survivors; refusing to continue
+DATA=REAL path=real:Datasets/aloi/rkLists.txt N=5000 L=400 rows_read=5000 rows_short=937 self_missing=0 self_at0=4880 min_survivors=122 mean_survivors=536.6
