@@ -1,0 +1,4 @@
+# pass0 gates -- 2026-09-29T12:50:19-03:00
+# PROD: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32
+# NFM:  -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off
+# input=/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin N=72000 L=400 k=10 limit=400 reps=1

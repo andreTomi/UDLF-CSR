@@ -156,6 +156,37 @@ synth — reavaliar se um delta real for decisão de custo.
    bit-exatidão em dados reais grandes continua em aberto depois desta
    auditoria.
 
+## Passo 0 — a numérica do MOTOR sob as duas strings de flags (LHRR/CPRR)
+
+Pergunta (não é sobre o BFSTree, é sobre o motor): as flags do produto mudam a
+saída do `multiply_and_prune`/builder v2 que CPRR, LHRR e o port usam? Driver
+`Source/bench/pass0_rkcmp.sh` (protocolo herdado de `_p2_rkcmp.sh`: taskset,
+`PHASE_RK_OUT` + `PHASE_DUMP_DIR`, REPS=1), ALOI `N=72000 L=400 k=10 limit=400`,
+braços **PROD vs NFM** (as mesmas strings de `flags.out`), T=1 e T=12.
+
+| pipeline | `.rk` final | dumps canônicos |
+|---|---|---|
+| **CPRR** | `ec88d926…` **igual** (PROD = NFM e T=1 = T=12); saída ≠ input (`76087c1f…`) | `W`, `result` **idênticos** |
+| **LHRR** | **`4eb78982…` vs `68ba2066…`** — 58.558/72.000 linhas (81,3%), τ≈0,995 | `H`: estrutura igual, **88,98% dos valores a 1 ULP** (`max|delta|=1e-6`); `MM` idêntico; **`result`/`S`/`Srev`/`Stot` com `nnz` 8–11% menor no NFM (ESTRUTURAL)** |
+
+Leitura: no LHRR a diferença de **1 ULP no `H`** muda o que o prune a jusante
+descarta na fronteira → o suporte das matrizes agregadas cai (`result`:
+5.709.746 → 5.248.535 entradas) → 81% das linhas do `rk` final mudam. No CPRR a
+mesma troca de flags não move um bit. Determinismo está descartado como causa:
+dentro de cada regime T=1 e T=12 dão md5 **idêntico** nos 4 casos.
+
+**Consequência — decisão em aberto.** Adotar NFM no produto **não é neutro para
+o LHRR** (muda suporte/`nnz` e a saída final); a numérica do motor deixa de ser
+"problema só do BFSTree". O registro do `A4` em `Source/src` ficou **parado**
+até a decisão entre: alvo próprio por método, NFM global (aceitando a mudança
+medida acima) ou contrato de tolerância. Evidência:
+`pass0_flags.txt` (as duas strings), `pass0_gate.txt` (gates + classificação),
+`pass0_report.txt` (inventário completo com `dump_cmp.py` por arquivo),
+`pass0_runs.out` e os 8 logs `pass0_<pipe>_t<T>_<R>.log`; `.rk`/dumps (920 MB)
+fora do repo, em `/home/andre/udlf_cache/pass0/`. Estágios:
+`bash Source/bench/pass0_rkcmp.sh build|runs|gates|report` (o `gates` retorna
+≠0 em divergência).
+
 ## Arquivos
 
 | artefato | estágio | conteúdo |
@@ -167,6 +198,7 @@ synth — reavaliar se um delta real for decisão de custo.
 | `timing.raw`, `timing.summary` + `time_*.log` | `timing` | 15 execuções brutas, medianas e deltas |
 | `verdict.txt` | `verdict` | Q1/Q2/Q3 derivados por sed/awk dos acima |
 | `run2.log` | — | transcrição da execução (`grep DONE run2.log`) |
+| `pass0_flags.txt`, `pass0_gate.txt`, `pass0_report.txt`, `pass0_runs.out`, `pass0_*.log` | `pass0` | motor LHRR/CPRR (ALOI 72k) PROD vs NFM: strings, gates, inventário de dumps, 8 runs |
 
 Reprodução: `bash Source/bench/prod_numerics.sh <estágio>` (um estágio de cada
 vez é válido; `verdict` roda em segundos). O dossiê que consome estes números é

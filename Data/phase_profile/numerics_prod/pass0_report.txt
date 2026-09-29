@@ -1,0 +1,100 @@
+== pass0 report -- 2026-09-29T12:51:53-03:00
+input md5: 76087c1f2e78c93d94dcac1dedb24655  (/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin)
+-- lhrr PROD rk md5 (T=1, T=12) --
+4eb789820542d43a23eb8e005b57918e  /home/andre/udlf_cache/pass0/lhrr_t1_PROD.rk
+4eb789820542d43a23eb8e005b57918e  /home/andre/udlf_cache/pass0/lhrr_t12_PROD.rk
+-- lhrr NFM rk md5 (T=1, T=12) --
+68ba20662614f4b7c8b88dddd1867009  /home/andre/udlf_cache/pass0/lhrr_t1_NFM.rk
+68ba20662614f4b7c8b88dddd1867009  /home/andre/udlf_cache/pass0/lhrr_t12_NFM.rk
+-- cprr PROD rk md5 (T=1, T=12) --
+ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t1_PROD.rk
+ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t12_PROD.rk
+-- cprr NFM rk md5 (T=1, T=12) --
+ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t1_NFM.rk
+ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t12_NFM.rk
+-- lhrr T=1 dumps (PROD vs NFM) --
+  H.bin DIFF (16433624 B vs 16433624 B):
+    == H.bin ==
+       header a: rows=72000 cols=72000 nnz=1982199
+       header b: rows=72000 cols=72000 nnz=1982199
+       structural: row_ptr identical
+       structural: columns identical | values: 1763854 of 1982199 entries differ (88.9847%)
+       max |delta| = 0.000001  (1.00e+00 relative to the affected values)
+       samples (row, col, a, b, delta):
+         (0, 0) 2.714341163635254 vs 2.714340925216675 delta=0.000000
+         (0, 1) 1.9384020566940308 vs 1.9384019374847412 delta=0.000000
+         (0, 3) 0.9404904842376709 vs 0.9404902458190918 delta=0.000000
+         (0, 4) 0.6771640777587891 vs 0.6771637201309204 delta=0.000000
+         ... 1763850 more
+       RESULT: columns equal, values differ in the last bits
+  MM.bin IDENTICAL (322299680 B)
+  result.bin DIFF (46254000 B vs 42564312 B):
+    == result.bin ==
+       header a: rows=72000 cols=72000 nnz=5709746
+       header b: rows=72000 cols=72000 nnz=5248535
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  S.bin DIFF (62947704 B vs 58870952 B):
+    == S.bin ==
+       header a: rows=72000 cols=72000 nnz=7796459
+       header b: rows=72000 cols=72000 nnz=7286865
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Srev.bin DIFF (75766048 B vs 70057552 B):
+    == Srev.bin ==
+       header a: rows=72000 cols=72000 nnz=9398752
+       header b: rows=72000 cols=72000 nnz=8685190
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Stot.bin DIFF (51032784 B vs 46629304 B):
+    == Stot.bin ==
+       header a: rows=72000 cols=72000 nnz=6307094
+       header b: rows=72000 cols=72000 nnz=5756659
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+-- lhrr T=12 dumps (PROD vs NFM) --
+  H.bin DIFF (16433624 B vs 16433624 B):
+    == H.bin ==
+       header a: rows=72000 cols=72000 nnz=1982199
+       header b: rows=72000 cols=72000 nnz=1982199
+       structural: row_ptr identical
+       structural: columns identical | values: 1763854 of 1982199 entries differ (88.9847%)
+       max |delta| = 0.000001  (1.00e+00 relative to the affected values)
+       samples (row, col, a, b, delta):
+         (0, 0) 2.714341163635254 vs 2.714340925216675 delta=0.000000
+         (0, 1) 1.9384020566940308 vs 1.9384019374847412 delta=0.000000
+         (0, 3) 0.9404904842376709 vs 0.9404902458190918 delta=0.000000
+         (0, 4) 0.6771640777587891 vs 0.6771637201309204 delta=0.000000
+         ... 1763850 more
+       RESULT: columns equal, values differ in the last bits
+  MM.bin IDENTICAL (322299680 B)
+  result.bin DIFF (46254000 B vs 42564312 B):
+    == result.bin ==
+       header a: rows=72000 cols=72000 nnz=5709746
+       header b: rows=72000 cols=72000 nnz=5248535
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  S.bin DIFF (62947704 B vs 58870952 B):
+    == S.bin ==
+       header a: rows=72000 cols=72000 nnz=7796459
+       header b: rows=72000 cols=72000 nnz=7286865
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Srev.bin DIFF (75766048 B vs 70057552 B):
+    == Srev.bin ==
+       header a: rows=72000 cols=72000 nnz=9398752
+       header b: rows=72000 cols=72000 nnz=8685190
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Stot.bin DIFF (51032784 B vs 46629304 B):
+    == Stot.bin ==
+       header a: rows=72000 cols=72000 nnz=6307094
+       header b: rows=72000 cols=72000 nnz=5756659
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+-- cprr T=1 dumps (PROD vs NFM) --
+  result.bin IDENTICAL (22565440 B)
+  W.bin IDENTICAL (6336032 B)
+-- cprr T=12 dumps (PROD vs NFM) --
+  result.bin IDENTICAL (22565440 B)
+  W.bin IDENTICAL (6336032 B)

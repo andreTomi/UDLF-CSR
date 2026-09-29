@@ -1,0 +1,8 @@
+tag=lhrr_t1_PROD rc=0 regime=PROD pipe=lhrr T=1 end=2026-09-29T12:49:10-03:00
+tag=lhrr_t12_PROD rc=0 regime=PROD pipe=lhrr T=12 end=2026-09-29T12:49:14-03:00
+tag=cprr_t1_PROD rc=0 regime=PROD pipe=cprr T=1 end=2026-09-29T12:49:15-03:00
+tag=cprr_t12_PROD rc=0 regime=PROD pipe=cprr T=12 end=2026-09-29T12:49:15-03:00
+tag=lhrr_t1_NFM rc=0 regime=NFM pipe=lhrr T=1 end=2026-09-29T12:49:25-03:00
+tag=lhrr_t12_NFM rc=0 regime=NFM pipe=lhrr T=12 end=2026-09-29T12:49:30-03:00
+tag=cprr_t1_NFM rc=0 regime=NFM pipe=cprr T=1 end=2026-09-29T12:49:30-03:00
+tag=cprr_t12_NFM rc=0 regime=NFM pipe=cprr T=12 end=2026-09-29T12:49:31-03:00

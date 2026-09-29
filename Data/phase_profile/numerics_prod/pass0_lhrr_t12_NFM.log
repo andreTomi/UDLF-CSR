@@ -1,0 +1,33 @@
+ABKNOBS,builder=v2,rowsort=idx,dumpdir=/home/andre/udlf_cache/pass0/dump_lhrr_t12_NFM,rkout=/home/andre/udlf_cache/pass0/lhrr_t12_NFM.rk,validate=0
+RUN,real-lhrr,/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin,12,1,0
+TSET,omp_threads=12,tbb_max=none,affinity_omp=0,1,2,3,4,5,6,7,8,9,10,11,affinity_at_entry=0,1,2,3,4,5,6,7,8,9,10,11,req_mask=unset,cpus=12,max_concurrency=12,pid=95622
+REAL,dataset=/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin,bin=/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin,N=72000,L=400,k=10,limit=400,T=1,pipeline=lhrr
+  [BuildV2] Total triplets: 57600000
+DUMP,MM,nnz=40215456
+DUMP,MM,nnz=40215456
+  [BuildV2] Total triplets: 7272000
+DUMP,H,nnz=1982199
+DUMP,H,nnz=1982199
+  [BuildV2] Total triplets: 7286865
+DUMP,S,nnz=7286865
+  [BuildV2] Total triplets: 8685190
+DUMP,Srev,nnz=8685190
+  [BuildV2] Total triplets: 5756659
+DUMP,Stot,nnz=5756659
+  [BuildV2] Total triplets: 5248535
+DUMP,result,nnz=5248535
+REP,0,4821.096,5248535,119396288415.396088
+REPRU,0,189483,0,1608320
+DRVAGG,restore_rk_state,median_ms=8.372,n=1
+DRVAGG,position_build,median_ms=2865.908,n=1
+DRVAGG,update_ranked_lists_pos,median_ms=147.473,n=1
+DRVAGG,H_build,median_ms=106.783,n=1
+DRVAGG,H_transpose,median_ms=13.896,n=1
+DRVAGG,mult_S,median_ms=106.417,n=1
+DRVAGG,mult_Srev,median_ms=118.090,n=1
+DRVAGG,combine_S_total,median_ms=82.601,n=1
+DRVAGG,combine_main,median_ms=87.783,n=1
+DRVAGG,update_ranked_lists,median_ms=18.309,n=1
+DRVAGG,iter_free,median_ms=31.033,n=1
+RKOUT,/home/andre/udlf_cache/pass0/lhrr_t12_NFM.rk,bytes=115200000
+DONE,/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin,-1,1608320
