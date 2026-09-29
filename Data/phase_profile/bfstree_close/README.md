@@ -274,12 +274,31 @@ que é exato — a verificar por `CK_FINAL` contra o `A4`.
    0,43 GB, e o F7 passa a sondar `L×ρ·N` entradas em vez de `L²`. Pico projetado
    **~2,5 GB**. Gate pronto: `CK_FINAL` do `A4`; falta provar que pular termos
    ausentes é bit-exato (`W ≥ 0`, parciais não-negativas).
+   **Status (28/09/2026) — a prova saiu, e com ela dois achados que corrigem a
+   projeção** (`Data/phase_profile/bfstree_a5/`): o modo `A5` está no bench e é
+   **bit-exato em 3/3 pontos reais** — vegfru@13k, sun397@18k e ALOI@18k com
+   `CK_FINAL` idêntico ao golden do legado, `BITFINAL=YES POS_EQUAL=1,000000` e
+   determinismo entre execuções —; o censo `A5CENSUS` fecha com `STORED_DIFF=0`,
+   `DENSE_NONZERO_MISSING=0`, `COLSUM_ZERO=0` e `NAN=0` nos três dados (o caso
+   cego do argumento — coluna com soma zero virando `0/0` NaN — **não ocorre
+   nestes pontos, medido**); e o termo `W` cai **3,1–22,4×**. Porém o **pico
+   RSS não caiu: subiu**, pelas duas causas medidas e derivadas no dossiê §4a
+   (o scratch denso de F1/F2 continua alocado; o transiente de emissão do F5
+   custa 12 B/célula visitada), e o F7 esparso ficou **mais lento** em L grande
+   (ALOI: 89,4 s vs 55,8 s — sonda `L² log` em vez de iterar a interseção,
+   dossiê §4b). Os débitos 1/2 do dossiê `bfstree_a5` (F1/F2 por valor +
+   emissão streaming; kernel de interseção) são o que separa este patch da
+   projeção ~2,5 GB e do ganho de tempo prometido.
 2. **Medição real em N=72.000**: cabe em **~32 GB** com `A4` (não 48 GB) e em ~3 GB
    com o `A5`. A bit-exatidão sobre estrutura real já saiu (`real_bitex`:
-   `BITFINAL=YES` de `A`, `A4` e `A2` contra o golden do legado em N=18.000, §5), mas
+   `BITFINAL=YES` de `A`, `A4` e `A2` contra o golden do legado em N=18.000, §5 —
+   agora **também `A5`**, nos três pontos do dossiê `bfstree_a5/`), mas
    em N=24.000 real os portadores só bateram `CK_FINAL` entre si -- o golden daquele
    ponto pede as duas densas do legado (~4,8 GB), que este host de 8 GB não dá sem
    swap. Levar o `real_bitex` a uma máquina de 32 GB+ fecha os dois de uma vez.
+   Pista não verificada (medido no `rho_datasets`, não testado aqui): o `A@24k`
+   completo já rodou com RSS **4,53 GB** neste host, então o `ref@24k` pode caber
+   -- confirmar antes de citar.
 3. **Integração no produto**: os portadores `A2/A3/A4` vivem só no
    `bench_bfstree.cpp`; `BFSTree.cpp` ainda é o legado. Migrar exige (i) o knob de
    `B` por regime de `L` (débito 4), (ii) **a decisão de arredondamento do §7.4** —

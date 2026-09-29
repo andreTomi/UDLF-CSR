@@ -537,6 +537,9 @@ static M compute_w_diffusion_a4(long B, const std::vector<double>& ac);
 static int run_f6a();
 static int run_eattr(size_t limit);
 static int run_touch();
+static uint64_t run_A5(long B, PhaseTimes* t, long* nnz_w_out,
+                       uint64_t* ck_w_out, size_t* skipped_out);
+static int run_a5_census(long B);
 
 static void print_common(const char* mode, int N, int L, int k, int seed,
                          long B, size_t limit, const PhaseTimes& t,
@@ -691,6 +694,28 @@ int main(int argc, char** argv) {
         ck_final = run_A3(mode == "A3a",
                           mode == "A4" ? 1 : mode == "A4b" ? 2 : 0, B, &t,
                           &nnz_w, &ck_w);
+        print_common(mode.c_str(), N, L, k, seed, B, limit, t, ck_w, nnz_w,
+                     ck_final);
+        if (!refpath.empty()) {
+            std::vector<int> ref;
+            if (read_ref(refpath, &ref)) {
+                CmpOut c = compare_final(ref);
+                std::printf("BITFINAL=%s POS_EQUAL=%.6f P1=%.6f P5=%.6f "
+                            "P10=%.6f P20=%.6f\n",
+                            c.bit ? "YES" : "NO",
+                            c.total_cells ? (double)c.equal_cells /
+                                            c.total_cells : 0.0,
+                            c.p1, c.p5, c.p10, c.p20);
+            } else {
+                std::printf("BITFINAL=SKIP\n");
+            }
+        }
+        return 0;
+    }
+    if (mode == "A5CENSUS") return run_a5_census(B);
+    if (mode == "A5") {
+        size_t skipped = 0;
+        ck_final = run_A5(B, &t, &nnz_w, &ck_w, &skipped);
         print_common(mode.c_str(), N, L, k, seed, B, limit, t, ck_w, nnz_w,
                      ck_final);
         if (!refpath.empty()) {
@@ -1384,7 +1409,334 @@ static M compute_w_diffusion_a4(long B, const std::vector<double>& ac) {
     memprobe("A4_csr_built");
     return rc;
 }
-// A4 dispatch wired in main.
+// ===========================================================================
+// A5: W (F5) guardada POR VALOR (CSR) em vez de densa n*n, e F7 esparso.
+//
+// Por que isto e legitimo -- e o que NAO se assume:
+//  * em dados reais 98% de W e zero, e a densa e o unico termo N^2 dos
+//    portadores A2/A3/A4 (20,7 GB dos ~24,8 GB do A4 em N=72k, close 6.1);
+//  * W >= 0 sem cancelamento possivel (rbo >= 0, diagonal = 1 -- ver o censo
+//    do TOUCH), entao uma celula exatamente 0.0f soma exatamente 0.0f a todo
+//    produto do kernel F7: pular esses termos e exato nos VALORES;
+//  * o unico ponto cego e a DIVISAO: o denso calcula (float)(W[i][c]/acum[c])
+//    para toda celula, inclusive as ausentes; se acum[c] == 0 isso da 0.0/0.0 =
+//    NaN, e um CSR que simplesmente nao tem a celula daria 0.0f. Por isso o
+//    kernel A5 usa a MESMA expressao (via get() ausente -> 0.0f) e o censo
+//    CONTA as colunas com acum[c] == 0 neste dado -- medicao, nao algebra;
+//  * celulas visitadas que somam 0.0f SAO guardadas (suporte estrutural >=
+//    suporte nao-zero), e o censo separa os dois contadores.
+// ===========================================================================
+namespace a5 {
+
+// Acumulador por linha, por valor: ordem de acumulacao = ordem de visita
+// (identica ao replay do A2), update O(1) via indice denso col->posicao.
+struct RowAcc {
+    std::vector<int> cols;     // colunas visitadas, ordem de primeira visita
+    std::vector<int> pos;      // coluna -> indice em cols (-1 = nao visitada)
+    std::vector<float> vals;
+    explicit RowAcc(int n) : pos((size_t)n, -1) {}
+    void begin() {
+        for (int c : cols) pos[(size_t)c] = -1;
+        cols.clear();
+        vals.clear();
+    }
+    inline float& at(int c) {
+        int p = pos[(size_t)c];
+        if (p < 0) {
+            p = (int)cols.size();
+            pos[(size_t)c] = p;
+            cols.push_back(c);
+            vals.push_back(0.0f);   // == fill(0) do rowbuf denso
+        }
+        return vals[(size_t)p];
+    }
+    float get(int c) const {
+        const int p = pos[(size_t)c];
+        return p < 0 ? 0.0f : vals[(size_t)p];
+    }
+};
+
+// ESPELHO de replay_q_into_row (A2): mesma sequencia de termos, mesma ordem de
+// acumulacao por celula; a unica diferenca e o acumulador por valor. Manter em
+// sincronia -- qualquer divergencia aqui quebra a exatidao (o gate compara).
+static inline void replay_q_into_acc(int q, int a, RowAcc& acc) {
+    static thread_local std::vector<int> l1, l2;
+    static thread_local std::vector<double> l2d;
+    l1.clear(); l2.clear(); l2d.clear();
+    l1.push_back(q);
+    for (int i = 1; i < leg::topK; i++) {
+        int imgI = leg::getRKElem(q, i);
+        l1.push_back(imgI);
+        float ircor = leg::imgCor[q][imgI];
+        for (int j = 1; j < leg::topK; j++) {
+            int imgJ = leg::getRKElem(imgI, j);
+            l2.push_back(imgJ);
+            l2d.push_back(ircor * leg::imgCor[imgI][imgJ]);
+        }
+    }
+    for (int img1a : l1) {
+        if (img1a != a) continue;
+        for (int img1b : l1)
+            acc.at(img1b) += leg::imgCor[q][img1a] * leg::imgCor[q][img1b];
+    }
+    for (size_t i = 0; i < l2.size(); i++) {
+        if (l2[i] != a) continue;
+        for (size_t j = 0; j < l2.size(); j++)
+            acc.at(l2[j]) += (float)(l2d[i] * l2d[j]);
+    }
+    for (size_t i = 0; i < l1.size(); i++) {
+        if (l1[i] != a) continue;
+        for (size_t j = 0; j < l2.size(); j++)
+            acc.at(l2[j]) += leg::imgCor[q][l1[i]] * (float)l2d[j];
+    }
+}
+struct W5 {
+    M w;                     // W por valor
+    size_t touched = 0;      // celulas visitadas (suporte ESTRUTURAL)
+    size_t nonzero = 0;      // visitadas com valor != 0
+    size_t zero_touched = 0; // visitadas que somaram exatamente 0.0f
+    double t_f5_ms = 0;
+};
+
+// F5-A5: mesmos batches/linhas do A2 (a ordem por celula e a mesma), mas a
+// linha acumula por valor e nenhuma densa e escrita.
+static W5 build_w_a5(long B) {
+    const int n = (int)leg::n;
+    W5 out;
+    std::vector<std::tuple<idx_t, idx_t, float>> trips;
+    trips.reserve((size_t)n * (size_t)leg::l);
+    if (B < 1) B = 1;
+    if (B > n) B = n;
+    const auto t0 = Clock::now();
+    for (long r0 = 0; r0 < n; r0 += B) {
+        const long r1 = std::min<long>(n, r0 + B);
+        #pragma omp parallel
+        {
+            RowAcc acc(n);
+            std::vector<std::tuple<idx_t, idx_t, float>> local;
+            #pragma omp for schedule(static)
+            for (long a = r0; a < r1; a++) {
+                acc.begin();
+                for (uint32_t q : g_inv[a])
+                    replay_q_into_acc((int)q, (int)a, acc);
+                for (size_t i = 0; i < acc.cols.size(); i++)
+                    local.emplace_back((idx_t)a, (idx_t)acc.cols[i],
+                                       acc.vals[i]);
+            }
+            #pragma omp critical
+            { trips.insert(trips.end(), local.begin(), local.end()); }
+        }
+    }
+    out.t_f5_ms = ms_since(t0);
+    out.touched = trips.size();
+    for (size_t i = 0; i < trips.size(); i++) {
+        if (std::get<2>(trips[i]) == 0.0f) out.zero_touched++;
+        else out.nonzero++;
+    }
+    out.w = build_csr((idx_t)n, (idx_t)n, trips);
+    return out;
+}
+
+// F6-A5: colsum identico ao legacy (inicio 1.0, por coluna com linhas
+// ascendentes -- zeros sao no-ops exatos na soma em double).
+static std::vector<double> colsum_a5(const M& w) {
+    const int n = (int)leg::n;
+    std::vector<double> acum((size_t)n, 1.0);
+    for (int a = 0; a < n; a++)
+        w.for_each_in_row((idx_t)a,
+                          [&](idx_t c, float v) { acum[(size_t)c] += (double)v; });
+    return acum;
+}
+
+// F7-A5: mesma aritmetica e mesma ordem do kernel A4 (vi/buf por posicao, acc
+// em posM ascendente); as leituras vao ao W por valor. O termo e pulado SOMENTE
+// quando vi[p]*buf[p] == 0.0f (no-op exato -- +0.0f; um NaN nunca cai aqui,
+// pois NaN == 0.0f e falso), entao a semantica do denso (inclusive o NaN de
+// 0.0/0.0 quando acum[c] == 0) e reproduzida por construcao.
+static M compute_w_diffusion_a5(long B, const std::vector<double>& ac,
+                               const M& w, size_t* skipped_out) {
+    const int n = (int)leg::n, l = (int)leg::l;
+    if (B < 1) B = 1;
+    if (B > n) B = n;
+    std::vector<std::tuple<idx_t, idx_t, float>> trips;
+    trips.reserve((size_t)n * (size_t)l);
+    long long skipped = 0;
+    for (long r0 = 0; r0 < n; r0 += B) {
+        const long r1 = std::min<long>(n, r0 + B);
+        #pragma omp parallel
+        {
+            std::vector<std::tuple<idx_t, idx_t, float>> local;
+            std::vector<float> vi((size_t)l), buf((size_t)l);
+            long long sk = 0;
+            #pragma omp for schedule(static)
+            for (long imgI = r0; imgI < r1; imgI++) {
+                const int* rki = &leg::rkLists[(size_t)imgI * (size_t)l];
+                for (int p = 0; p < l; p++) {           // 1. hoist row i
+                    const int c = rki[p];
+                    vi[(size_t)p] =
+                        (float)((double)w.get((idx_t)imgI, (idx_t)c) /
+                                ac[(size_t)c]);
+                }
+                for (int posJ = 0; posJ < l; posJ++) {
+                    const int imgJ = rki[posJ];
+                    for (int p = 0; p < l; p++) {       // 2. row j at rk_i cols
+                        const int c = rki[p];
+                        buf[(size_t)p] =
+                            (float)((double)w.get((idx_t)imgJ, (idx_t)c) /
+                                    ac[(size_t)c]);
+                    }
+                    float acc = 0.0f;
+                    for (int p = 0; p < l; p++) {       // 3. posM ascending
+                        const float prod = vi[(size_t)p] * buf[(size_t)p];
+                        if (prod == 0.0f) { ++sk; continue; }   // no-op exato
+                        acc += prod;
+                    }
+                    local.emplace_back((idx_t)imgI, (idx_t)imgJ, acc);
+                }
+            }
+            #pragma omp critical
+            {
+                trips.insert(trips.end(), local.begin(), local.end());
+                skipped += sk;
+            }
+        }
+    }
+    if (skipped_out) *skipped_out = (size_t)skipped;
+    return build_csr((idx_t)n, (idx_t)n, trips);
+}
+
+// FNV do W por valor (linhas asc, colunas asc): determinismo entre execucoes.
+static uint64_t fnv_w5(const M& w) {
+    uint64_t h = 14695981039346656037ULL;
+    const idx_t n = (idx_t)leg::n;
+    for (idx_t a = 0; a < n; a++)
+        w.for_each_in_row(a, [&](idx_t c, float v) {
+            uint32_t b; std::memcpy(&b, &v, 4);
+            uint64_t x = ((uint64_t)a << 32) ^ (uint64_t)c;
+            h ^= x; h *= 1099511628211ULL;
+            h ^= b; h *= 1099511628211ULL;
+        });
+    return h;
+}
+} // namespace a5
+
+// A5 pipeline: F1..F4 densas (identicas ao A4 -- e a LIMITACAO medida deste
+// patch: o scratch N^2 de F1/F2 continua sendo alocado; ver README), F5/F6/F7
+// por valor, F8/F9 esparsos sobre rc.
+static uint64_t run_A5(long B, PhaseTimes* t, long* nnz_w_out,
+                       uint64_t* ck_w_out, size_t* skipped_out) {
+    const auto t_all = Clock::now();
+    const int n = (int)leg::n;
+    auto t0 = Clock::now();
+    leg::zero_matrix();
+    leg::computeRankNormalization(1);
+    leg::computeRankNormalization(2);
+    t->f1f2 = ms_since(t0);
+    t0 = Clock::now();
+    leg::computeRankCorrelation();
+    t->f3 = ms_since(t0);
+    t0 = Clock::now();
+    leg::zero_matrix();   // F4: a densa nao e mais usada daqui em diante
+    build_inv();
+    a5::W5 w5 = a5::build_w_a5(B);
+    t->f5 = ms_since(t0);
+    std::printf("T_INV_MS=%.2f\n", g_t_inv_ms);
+    const uint64_t bytes = (uint64_t)w5.w.nnz() *
+                           (uint64_t)(sizeof(idx_t) + sizeof(float)) +
+                           ((uint64_t)n + 1) * (uint64_t)sizeof(idx_t);
+    std::printf("A5_TOUCHED=%zu A5_NONZERO=%zu A5_ZERO_TOUCHED=%zu "
+                "A5_W_BYTES=%llu A5_DENSE_BYTES=%llu\n",
+                w5.touched, w5.nonzero, w5.zero_touched,
+                (unsigned long long)bytes,
+                (unsigned long long)((uint64_t)n * (uint64_t)n *
+                                     (uint64_t)sizeof(float)));
+    if (nnz_w_out) *nnz_w_out = (long)w5.nonzero;
+    if (ck_w_out) *ck_w_out = a5::fnv_w5(w5.w);
+    t0 = Clock::now();
+    std::vector<double> ac = a5::colsum_a5(w5.w);
+    t->f6 = ms_since(t0);
+    t0 = Clock::now();
+    size_t skipped = 0;
+    M rc = a5::compute_w_diffusion_a5(B, ac, w5.w, &skipped);
+    t->f7 = ms_since(t0);
+    std::printf("A5_F7_SKIPPED_TERMS=%zu A5_F5_MS=%.2f\n", skipped, w5.t_f5_ms);
+    t0 = Clock::now();
+    M rc8 = normalize_w_prob_sparse(rc);
+    t->f8 = ms_since(t0);
+    t0 = Clock::now();
+    for (int i = 0; i < leg::n; i++)
+        kernelSortRankedLists_sparse(i, rc8);
+    t->f9 = ms_since(t0);
+    t->total = ms_since(t_all);
+    if (skipped_out) *skipped_out = skipped;
+    return fnv_rk();
+}
+
+// Censo A5-vs-denso no MESMO processo: roda o caminho denso do A2 e o W por
+// valor sobre a MESMA entrada (F1/F2/F3 reexecutados identicos) e compara
+// celula a celula. Conta tambem as colunas com acum[c] == 0 (a unica origem do
+// NaN na divisao do F7) e os NaN do denso dividido. So em N pequeno: o teste
+// (b) e O(N^2).
+static int run_a5_census(long B) {
+    const int n = (int)leg::n;
+    leg::zero_matrix();
+    leg::computeRankNormalization(1);
+    leg::computeRankNormalization(2);
+    leg::computeRankCorrelation();
+    leg::zero_matrix();
+    build_inv();
+    acum_bfstree_a2(B);                 // denso (A2), mesma ordem de acumulacao
+    a5::W5 w5 = a5::build_w_a5(B);      // por valor
+    long long diff = 0, dense_nonzero_missing = 0, dense_nonzero = 0;
+    for (idx_t a = 0; a < (idx_t)n; a++) {
+        w5.w.for_each_in_row(a, [&](idx_t c, float v) {
+            const float d = leg::matrix[(size_t)a * (size_t)n + (size_t)c];
+            uint32_t x, y;
+            std::memcpy(&x, &v, 4);
+            std::memcpy(&y, &d, 4);
+            if (x != y) ++diff;          // (a) valor guardado != denso (bits)
+        });
+        for (int c = 0; c < n; c++) {
+            const float d = leg::matrix[(size_t)a * (size_t)n + (size_t)c];
+            if (d == 0.0f) continue;
+            ++dense_nonzero;
+            if (w5.w.get(a, (idx_t)c) == 0.0f) ++dense_nonzero_missing;  // (b)
+        }
+    }
+    std::vector<double> ac_leg = colsum_legacy_exact();
+    std::vector<double> ac_a5 = a5::colsum_a5(w5.w);
+    long ac_zero = 0, ac_diff = 0, nan_dense = 0, nan_a5 = 0;
+    for (int c = 0; c < n; c++) {
+        uint64_t x, y;
+        std::memcpy(&x, &ac_leg[(size_t)c], 8);
+        std::memcpy(&y, &ac_a5[(size_t)c], 8);
+        if (x != y) ++ac_diff;
+        if (ac_leg[(size_t)c] == 0.0) ++ac_zero;    // (c) coluna que vira NaN
+    }
+    // NaN do denso dividido vs NaN do A5 dividido (mesma expressao nos dois)
+    const int l = (int)leg::l;
+    for (int r = 0; r < n; r++) {
+        for (int p = 0; p < l; p++) {
+            const int c = leg::getRKElem(r, p);
+            const float dv = (float)((double)leg::matrix[(size_t)r * (size_t)n +
+                                (size_t)c] / ac_leg[(size_t)c]);
+            const float av = (float)((double)w5.w.get((idx_t)r, (idx_t)c) /
+                                ac_a5[(size_t)c]);
+            if (std::isnan(dv)) ++nan_dense;
+            if (std::isnan(av)) ++nan_a5;
+        }
+    }
+    std::printf("A5_CENSUS_N=%d CELLS=%lld STORED_DIFF=%lld DENSE_NONZERO=%lld "
+                "DENSE_NONZERO_MISSING=%lld TOUCHED=%zu NONZERO=%zu "
+                "ZERO_TOUCHED=%zu COLSUM_DIFF=%ld COLSUM_ZERO=%ld "
+                "NAN_DENSE=%ld NAN_A5=%ld\n",
+                n, (long long)n * (long long)n, diff, dense_nonzero,
+                dense_nonzero_missing, w5.touched, w5.nonzero, w5.zero_touched,
+                ac_diff, ac_zero, nan_dense, nan_a5);
+    return (diff == 0 && dense_nonzero_missing == 0 && ac_diff == 0) ? 0 : 1;
+}
+
+// A5 dispatch wired in main.
 // NEXT_A4
 // ===========================================================================
 // Eattr: W-level attribution of E vs A (three error sources, inherited gates)

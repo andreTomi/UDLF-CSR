@@ -164,6 +164,68 @@ medido com L pequeno (40/25/120) e o L do full-N é 1400/1000; a correção é
 estimativa de 1ª ordem com dois pontos medidos, não uma medição — o número
 medido em N pleno continua sendo o raw, e o pós-front em N pleno é débito.
 
+**O que o guard do carregador ganha com este dado — `L=1400` não é parâmetro
+geral.** Em N pleno, `L=1400` exige `largura ≥ 1400`: vegfru/sun397 (2000)
+passam, cifar10 (1000) **não pode em nenhum N** — o rc=5 nas 60 000 linhas é o
+guard funcionando, não um bug. Em sub-corpus, `min_survivors ≈ largura·(N_sub/
+N_total)` com cauda pesada (medido: vegfru 46@13k, sun397 17@13k e 67@18k,
+cifar10 127@13k) — ou seja, para coleções de listas estreitas (largura/N ≈ 1–2%)
+`L=1400` só existe **perto de N pleno**, e é exatamente lá que nada denso cabe
+(47–103 GB). O ALOI é a exceção que originou o parâmetro: largura/N = 10%
+(7200/72000), `L=1400` cabe a partir de N≈24k (mínimo 1490, Etapa 1) e em N
+pleno sobra folga. **Conclusão registrada**: `L=1400` é o `L` da configuração
+de produção ALOI; para qualquer outra coleção o `L` de produção deve ser
+derivado do `min_survivors` medido no N alvo — que é justamente o que o
+carregador já força com `rc=5`. Não bloqueia nada; entra como dado novo para o
+guard, não como mudança de código.
+
+### Curva ρ(N) completa — todos os pontos medidos (não só os extremos)
+
+`TOUCH` = pós-F1–F3 com **L constante por dataset** (a leitura limpa); `RAW` =
+`TOUCHRAW` (único modo possível em N pleno). `sup/linha` = suporte médio por
+linha, o termo que decide a queda.
+
+| ds | L | ρ @13k | ρ @24k | ρ @30k | ρ full-N (RAW) |
+|---|---|---|---|---|---|
+| vegfru | 40 | **0,110692** (1439/linha) | **0,077810** (1867) | **0,063967** (1919) | 0,020497 (L=1400; 3294/linha) |
+| sun397 | 25 | — (min=17, **sem L≥k**) | **0,137551** (3301) | **0,119292** (3579) | 0,053097 (L=1400; 5774) |
+| cifar10 | 120 | **0,359718** (4676) | **0,267102** (6410) | **0,245363** (7361) | 0,098992 (L=1000; 5939) |
+
+Ajuste `suporte ~ N^α` (α < 2 = sub-quadrático ⇒ ρ cai):
+
+| ds | α (13k→24k) | α (24k→30k) | queda de ρ equivalente |
+|---|---|---|---|
+| vegfru | **1,43** | **1,12** | ~ N^−0,6 a N^−0,9 |
+| sun397 | — | **1,36** | ~ N^−0,64 |
+| cifar10 | **1,52** | **1,62** | ~ N^−0,4 (a mais lenta) |
+
+**Leitura (o que dá e o que não dá para afirmar):**
+
+1. **Dentro de cada dataset a queda é suave e monotônica** com L constante —
+   é efeito estrutural de escala, não degrau nem caso de domínio: o suporte por
+   linha cresce muito menos que N (vegfru 1439→1919 para **+131%** de N — a
+   expansão de vizinhança satura; ρ = (sup/linha)/N cai por construção).
+2. **α não é constante** (vegfru 1,43→1,12; cifar10 1,52→1,62) ⇒ **não existe
+   uma lei de potência única**; extrapolação quantitativa para além de ~2× do
+   intervalo medido **não está licenciada**. O que está licenciado: a direção
+   (queda) e o fato de que o **pior caso de extrapolação é cifar10** (denso e
+   com α crescente — cai mais devagar).
+3. Os pontos full-N **confirmam a direção** mas não são coláveis à curva
+   (modo e L diferentes): com L 10–35× maior, ρ ainda é 2–6× menor que aos
+   24k/30k.
+4. **Efeito N ≠ efeito manifold**: pontos RAW a N=24k — ALOI (L=1400) 0,0192 <
+   vegfru (L=40) 0,0710 < sun397 (L=25) 0,1306 < cifar10 (L=120) 0,1729. O `L`
+   difere (cada um com o L do seu gate) e ρ **cresce** com `L` — logo a
+   comparação é conservadora **a favor do ALOI**: mesmo com 35× mais `L`, ele é
+   3,7× mais esparso que o vegfru. O manifold importa além da escala; a curva
+   intra-dataset isola a componente N, e a diferença residual em N casado é a
+   componente manifold (o par casado ALOI⇔novos continua indisponível pelo
+   contrato, acima).
+5. Break-even `ρ≈0,5` do CSR-por-valor (8 B/nnz vs 4 B/célula): os quatro
+   grandes ficam **todos abaixo** — o pior pós-front corrigido é 0,156
+   (cifar10) ⇒ o termo `W` por valor custa `2ρ` do denso, ou seja ≥3,2× menos
+   bytes (ALOI/vegfru full-N: ~20–25× menos).
+
 ### Leitura (A5 e a conexão com a tese)
 
 - **A premissa do A5 não generaliza**: em N pleno, ρ_raw é 2,0× (vegfru), 5,1×

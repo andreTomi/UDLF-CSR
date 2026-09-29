@@ -1,0 +1,7 @@
+DATA=REAL path=real:Datasets/vegfru/rkLists.txt N=13000 L=40 rows_read=13000 rows_short=0 self_missing=0 self_at0=12997 min_survivors=46 mean_survivors=555.0
+MODE=ref N=13000 L=40 k=20 seed=0 B=0 limit=13000
+DENSITY=0.110692 NNZ_W=18706869 N2=169000000
+T_F1F2_MS=42.10 T_F3_MS=1075.50 T_F5_MS=2694.64 T_F6_MS=3740.40 T_F7_MS=662.45 T_F8_MS=3734.94 T_F9_MS=8.34 T_TOTAL_MS=12876.16
+RSS_KB=1338752
+CK_W=0xe382b8d977c7bebb CK_FINAL=0x8294b8d507e421af
+REF_WRITTEN=Data/phase_profile/bfstree_a5/g_veg13.bin

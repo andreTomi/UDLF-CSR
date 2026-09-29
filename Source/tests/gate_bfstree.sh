@@ -14,7 +14,7 @@
 #         sobreviventes depois de filtrar id<N (foi o que salvou oito runs em
 #         N=13k/18k reais), rc=4 se alguma linha nao contem o proprio id.
 #   [3/3] bit-exactness do port contra o golden gravado pelo proprio legado
-#         (mode=ref), em escala pequena e sintetico: ref/A/A2/A4 tem que
+#         (mode=ref), em escala pequena e sintetico: ref/A/A2/A4/A5 tem que
 #         fechar com CK_FINAL identico e BITFINAL=YES POS_EQUAL=1.000000.
 #
 # Postura de build (medida aqui, nao herdada do RDPAC): os dois builds rodam
@@ -106,13 +106,13 @@ for m in A A4; do
 done
 echo "      rc=0 valida, rc=5 linha curta (<L), rc=4 sem self -- em A e A4"
 
-echo "[3/3] bit-exactness ref/A/A2/A4 vs golden do legado (N=800 L=300 k=8)"
+echo "[3/3] bit-exactness ref/A/A2/A4/A5 vs golden do legado (N=800 L=300 k=8)"
 G="$T/golden.bin"
 "$BIN" ref 800 300 8 42 256 800 "$G" > "$T/ref.out" 2>&1 \
   || fail "modo ref (golden) nao rodou"
 ck_ref=$(grep -o 'CK_FINAL=0x[0-9a-f]*' "$T/ref.out")
 [ -n "$ck_ref" ] || fail "golden sem CK_FINAL na saida"
-for m in A A2 A4; do
+for m in A A2 A4 A5; do
   "$BIN" "$m" 800 300 8 42 256 800 "$G" > "$T/$m.out" 2>&1 \
     || fail "modo $m rc!=0"
   grep -q 'BITFINAL=YES POS_EQUAL=1.000000' "$T/$m.out" \
@@ -130,6 +130,6 @@ d=$(for t in 1 2 12; do
     done | sort -u | wc -l)
 [ "$d" = 1 ] || fail "A4 nao deterministica entre threads ($d md5)"
 rm -rf "$T"
-echo "      $ck_ref NNZ_W=553578 em ref/A/A2/A4; BITFINAL=YES nos tres ports"
+echo "      $ck_ref NNZ_W=553578 em ref/A/A2/A4/A5; BITFINAL=YES nos quatro ports"
 echo "BFSTREE GATES: OK"
 

@@ -1,0 +1,32 @@
+tag=veg13_probe mode=TOUCH N=13000 L=40 seed=0 B=256 ref=pair:probe file=Datasets/vegfru/rkLists.txt start=2026-09-28T22:17:06-03:00
+tag=veg13_probe rc=0 end=2026-09-28T22:17:49-03:00
+tag=sun18_probe mode=TOUCH N=18000 L=25 seed=0 B=256 ref=pair:probe file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T22:17:49-03:00
+tag=sun18_probe rc=0 end=2026-09-28T22:18:48-03:00
+tag=aloi18_probe mode=TOUCH N=18000 L=1150 seed=0 B=256 ref=pair:probe file=Datasets/aloi/rkLists.txt start=2026-09-28T22:18:48-03:00
+tag=aloi18_probe rc=0 end=2026-09-28T22:22:38-03:00
+tag=veg13_ref mode=ref N=13000 L=40 seed=0 B=0 ref=Data/phase_profile/bfstree_a5/g_veg13.bin file=Datasets/vegfru/rkLists.txt start=2026-09-28T22:22:52-03:00
+tag=veg13_ref rc=0 end=2026-09-28T22:23:43-03:00
+tag=veg13_A4 mode=A4 N=13000 L=40 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_veg13.bin file=Datasets/vegfru/rkLists.txt start=2026-09-28T22:23:43-03:00
+tag=veg13_A4 rc=0 end=2026-09-28T22:24:28-03:00
+tag=veg13_A5 mode=A5 N=13000 L=40 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_veg13.bin file=Datasets/vegfru/rkLists.txt start=2026-09-28T22:24:28-03:00
+tag=veg13_A5 rc=0 end=2026-09-28T22:25:12-03:00
+tag=veg13_A5b mode=A5 N=13000 L=40 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_veg13.bin file=Datasets/vegfru/rkLists.txt start=2026-09-28T22:25:12-03:00
+tag=veg13_A5b rc=0 end=2026-09-28T22:25:56-03:00
+tag=veg13_census mode=A5CENSUS N=13000 L=40 seed=0 B=256 ref=- file=Datasets/vegfru/rkLists.txt start=2026-09-28T22:25:56-03:00
+tag=veg13_census rc=0 end=2026-09-28T22:26:44-03:00
+tag=sun18_ref mode=ref N=18000 L=25 seed=0 B=0 ref=Data/phase_profile/bfstree_a5/g_sun18.bin file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T22:27:03-03:00
+tag=sun18_ref rc=0 end=2026-09-28T22:28:23-03:00
+tag=sun18_A4 mode=A4 N=18000 L=25 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_sun18.bin file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T22:28:23-03:00
+tag=sun18_A4 rc=0 end=2026-09-28T22:29:27-03:00
+tag=sun18_A5 mode=A5 N=18000 L=25 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_sun18.bin file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T22:29:27-03:00
+tag=sun18_A5 rc=0 end=2026-09-28T22:30:29-03:00
+tag=sun18_A5b mode=A5 N=18000 L=25 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_sun18.bin file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T22:30:29-03:00
+tag=sun18_A5b rc=0 end=2026-09-28T22:31:36-03:00
+tag=sun18_census mode=A5CENSUS N=18000 L=25 seed=0 B=256 ref=- file=Datasets/sun397/sun397_resnet152.txt start=2026-09-28T22:31:36-03:00
+tag=sun18_census rc=0 end=2026-09-28T22:32:49-03:00
+tag=aloi18_ref mode=ref N=18000 L=1150 seed=0 B=0 ref=Data/phase_profile/bfstree_a5/g_aloi18.bin file=Datasets/aloi/rkLists.txt start=2026-09-28T22:33:01-03:00
+tag=aloi18_ref rc=0 end=2026-09-28T22:37:31-03:00
+tag=aloi18_A5 mode=A5 N=18000 L=1150 seed=0 B=256 ref=Data/phase_profile/bfstree_a5/g_aloi18.bin file=Datasets/aloi/rkLists.txt start=2026-09-28T22:37:31-03:00
+tag=aloi18_A5 rc=0 end=2026-09-28T22:42:11-03:00
+tag=aloi18_census mode=A5CENSUS N=18000 L=1150 seed=0 B=256 ref=- file=Datasets/aloi/rkLists.txt start=2026-09-28T22:42:11-03:00
+tag=aloi18_census rc=0 end=2026-09-28T22:45:26-03:00
