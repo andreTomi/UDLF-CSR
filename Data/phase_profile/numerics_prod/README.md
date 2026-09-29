@@ -187,6 +187,42 @@ fora do repo, em `/home/andre/udlf_cache/pass0/`. Estágios:
 `bash Source/bench/pass0_rkcmp.sh build|runs|gates|report` (o `gates` retorna
 ≠0 em divergência).
 
+### M1 — a perturbação mexe em qualidade? (não; e o NFM é ligeiramente melhor)
+
+`pk_eval.py eval` sobre os `.rk` do LHRR (`pass0_quality.txt`); `L=400 k=10
+limit=400 T=1`:
+
+| regime | P@4 | P@10 | P@20 | MAP@100 | MAP@400 |
+|---|---|---|---|---|---|
+| PROD | 91,648960 | 84,200835 | 75,103194 | 45,630985 | 49,115577 |
+| PRODC | 91,648960 | 84,200835 | 75,104028 | 45,695409 | 49,187452 |
+| NFM | 91,648960 | 84,200835 | 75,103056 | **45,712760** | **49,203441** |
+
+P@4/P@5/P@10 **idênticos nos três**; as métricas profundas variam ~0,1 pp e
+**a favor do NFM**. Ou seja: 81% das linhas mudam de posição e a qualidade
+estatisticamente não se move. Aviso declarado: é o mesmo pipeline, via
+**driver**, não a config publicada do framework (uma equivalência end-to-end
+com `Data/Unified_Accuracy_Results.csv` seria M4 e não foi feita).
+
+### M2 — a causa é contração de FMA ou reassociação? (MISTA — a alternativa barata caiu)
+
+Braço `PRODC = PROD + -ffp-contract=off` (resto do fast-math intacto), T=1/12
+(`pass0_m2.txt`):
+
+- `.rk` do LHRR: **três valores distintos** — PROD `4eb78982`, PRODC `c4c6ac73`,
+  NFM `68ba2066` → o `PRODC` difere **dos dois**;
+- o `PRODC` muda a estrutura de novo (`result`: 5.709.746 → 5.815.878 nnz, ainda
+  longe do 5.248.535 do NFM) e o `H` continua com valores a 1 ULP (79,4% das
+  entradas vs PROD);
+- CPRR idêntico nos três braços (controle);
+- **veredito pré-registrado: causa MISTA** ⇒ `-ffp-contract=off` sozinho **não**
+  estabiliza o motor. A única medida que estabiliza estrutura **e** o pin do
+  BFSTree (que falha em PRODC, `POS_EQUAL=0,999975`) é o **NFM completo**.
+
+Consequência registrada: não existe atalho de um flag; a saída escolhida foi o
+**alvo estrito separado** (ver `bfstree_close` §7.4), deixando o regime global
+do produto em aberto — re-baselinar LHRR em 3 datasets é a conta em aberto.
+
 ## Arquivos
 
 | artefato | estágio | conteúdo |

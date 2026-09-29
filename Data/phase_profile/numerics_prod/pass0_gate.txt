@@ -23,16 +23,7 @@ lhrr 1  YES  DIFF  DIFF:H.bin  FAIL
      (9, 22, 24, 0.985441)
    RESULT: DIVERGENT (58558 rows differ)
 --- dump_cmp.py info (lhrr T=1) ---
-== dump_lhrr_t1_PROD ==
-Traceback (most recent call last):
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 119, in <module>
-    sys.exit(main())
-             ~~~~^^
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 111, in main
-    rc = compare(sys.argv[1], sys.argv[2], mr)
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 33, in compare
-    fa = open(pa, 'rb')
-IsADirectoryError: [Errno 21] Is a directory: '/home/andre/udlf_cache/pass0/dump_lhrr_t1_PROD'
+(por-arquivo em pass0_report.txt; dump_cmp.py compara arquivos, nao diretorios)
 lhrr 12  YES  DIFF  DIFF:H.bin  FAIL
 --- md5 (lhrr T=12, PROD NFM) ---
 4eb789820542d43a23eb8e005b57918e  /home/andre/udlf_cache/pass0/lhrr_t12_PROD.rk
@@ -57,16 +48,7 @@ lhrr 12  YES  DIFF  DIFF:H.bin  FAIL
      (9, 22, 24, 0.985441)
    RESULT: DIVERGENT (58558 rows differ)
 --- dump_cmp.py info (lhrr T=12) ---
-== dump_lhrr_t12_PROD ==
-Traceback (most recent call last):
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 119, in <module>
-    sys.exit(main())
-             ~~~~^^
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 111, in main
-    rc = compare(sys.argv[1], sys.argv[2], mr)
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 33, in compare
-    fa = open(pa, 'rb')
-IsADirectoryError: [Errno 21] Is a directory: '/home/andre/udlf_cache/pass0/dump_lhrr_t12_PROD'
+(por-arquivo em pass0_report.txt; dump_cmp.py compara arquivos, nao diretorios)
 cprr 1  YES  IDENTICAL  IDENTICAL  PASS
 --- md5 (cprr T=1, PROD NFM) ---
 ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t1_PROD.rk
@@ -76,16 +58,7 @@ ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t1_NFM.rk
    rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
    RESULT: IDENTICAL
 --- dump_cmp.py info (cprr T=1) ---
-== dump_cprr_t1_PROD ==
-Traceback (most recent call last):
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 119, in <module>
-    sys.exit(main())
-             ~~~~^^
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 111, in main
-    rc = compare(sys.argv[1], sys.argv[2], mr)
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 33, in compare
-    fa = open(pa, 'rb')
-IsADirectoryError: [Errno 21] Is a directory: '/home/andre/udlf_cache/pass0/dump_cprr_t1_PROD'
+(por-arquivo em pass0_report.txt; dump_cmp.py compara arquivos, nao diretorios)
 cprr 12  YES  IDENTICAL  IDENTICAL  PASS
 --- md5 (cprr T=12, PROD NFM) ---
 ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t12_PROD.rk
@@ -95,16 +68,7 @@ ec88d926f8a971189c905ce63b511a3d  /home/andre/udlf_cache/pass0/cprr_t12_NFM.rk
    rows=72000 cols=400: BIT-IDENTICAL (72000 rows)
    RESULT: IDENTICAL
 --- dump_cmp.py info (cprr T=12) ---
-== dump_cprr_t12_PROD ==
-Traceback (most recent call last):
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 119, in <module>
-    sys.exit(main())
-             ~~~~^^
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 111, in main
-    rc = compare(sys.argv[1], sys.argv[2], mr)
-  File "/mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR/Source/bench/dump_cmp.py", line 33, in compare
-    fa = open(pa, 'rb')
-IsADirectoryError: [Errno 21] Is a directory: '/home/andre/udlf_cache/pass0/dump_cprr_t12_PROD'
+(por-arquivo em pass0_report.txt; dump_cmp.py compara arquivos, nao diretorios)
 --- cross-T (info, nao gate) ---
 IDENTICAL lhrr t1 == t12 (PROD)
 IDENTICAL lhrr t1 == t12 (NFM)

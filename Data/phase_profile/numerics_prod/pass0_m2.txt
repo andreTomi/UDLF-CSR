@@ -1,0 +1,241 @@
+== pass0 M2 report (FMA vs reassociacao) -- 2026-09-29T13:57:06-03:00
+# PRODC: -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off
+-- lhrr T=1: PRODC vs NFM --
+  rk DIFF: c4c6ac7307f78675e28dc91cb038b9fe vs 68ba20662614f4b7c8b88dddd1867009
+    == /home/andre/udlf_cache/pass0/lhrr_t1_PRODC.rk vs /home/andre/udlf_cache/pass0/lhrr_t1_NFM.rk ==
+       rows=72000 cols=400: IDENTICAL_ROWS=10206 DIFF_ROWS=61794 (85.8250%)
+       WIDE DIVERGENCE (>1% of rows): per the S2.2b mandate, STOP and report before any timing.
+       position swaps/row: min=1 mean=9.24 max=84 (over 61794 rows)
+       set divergence/row: min=0 mean=10.04 max=103 | same-set rows=1782
+       Kendall tau (common elements, 200 of 200 sampled rows): min=0.966672 mean=0.994098
+       samples (row, pos_swaps, set_divergence, tau):
+         (0, 10, 11, 0.991062)
+         (1, 17, 17, 0.995814)
+         (2, 11, 7, 0.996524)
+         (3, 11, 12, 0.994909)
+         (4, 12, 13, 0.995373)
+         (5, 15, 20, 0.990850)
+         (6, 15, 14, 0.986538)
+         (7, 35, 43, 0.974971)
+         (8, 26, 29, 0.990077)
+         (9, 25, 25, 0.983597)
+       RESULT: DIVERGENT (61794 rows differ)
+  H.bin DIFF:
+    == H.bin ==
+       header a: rows=72000 cols=72000 nnz=1982199
+       header b: rows=72000 cols=72000 nnz=1982199
+       structural: row_ptr identical
+       structural: columns identical | values: 1813343 of 1982199 entries differ (91.4814%)
+       max |delta| = 0.000001  (1.00e+00 relative to the affected values)
+       samples (row, col, a, b, delta):
+         (0, 0) 2.714341163635254 vs 2.714340925216675 delta=0.000000
+         (0, 1) 1.9384020566940308 vs 1.9384019374847412 delta=0.000000
+         ... 1813341 more
+       RESULT: columns equal, values differ in the last bits
+  MM.bin IDENTICAL
+  result.bin DIFF:
+    == result.bin ==
+       header a: rows=72000 cols=72000 nnz=5815878
+       header b: rows=72000 cols=72000 nnz=5248535
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  S.bin DIFF:
+    == S.bin ==
+       header a: rows=72000 cols=72000 nnz=7961314
+       header b: rows=72000 cols=72000 nnz=7286865
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Srev.bin DIFF:
+    == Srev.bin ==
+       header a: rows=72000 cols=72000 nnz=9635632
+       header b: rows=72000 cols=72000 nnz=8685190
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Stot.bin DIFF:
+    == Stot.bin ==
+       header a: rows=72000 cols=72000 nnz=6445084
+       header b: rows=72000 cols=72000 nnz=5756659
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+-- lhrr T=1: PRODC vs PROD --
+  rk DIFF: c4c6ac7307f78675e28dc91cb038b9fe vs 4eb789820542d43a23eb8e005b57918e
+    == /home/andre/udlf_cache/pass0/lhrr_t1_PRODC.rk vs /home/andre/udlf_cache/pass0/lhrr_t1_PROD.rk ==
+       rows=72000 cols=400: IDENTICAL_ROWS=29153 DIFF_ROWS=42847 (59.5097%)
+       WIDE DIVERGENCE (>1% of rows): per the S2.2b mandate, STOP and report before any timing.
+       position swaps/row: min=1 mean=6.07 max=68 (over 42847 rows)
+       set divergence/row: min=0 mean=2.73 max=26 | same-set rows=4229
+       Kendall tau (common elements, 200 of 200 sampled rows): min=0.987277 mean=0.998577
+       samples (row, pos_swaps, set_divergence, tau):
+         (1, 2, 0, 0.999986)
+         (3, 2, 1, 0.998965)
+         (5, 4, 1, 0.999597)
+         (6, 1, 1, 0.998562)
+         (7, 19, 9, 0.999491)
+         (8, 17, 3, 0.995369)
+         (9, 18, 1, 0.997565)
+         (10, 18, 1, 0.995280)
+         (11, 24, 5, 0.994510)
+         (13, 20, 6, 0.997986)
+       RESULT: DIVERGENT (42847 rows differ)
+  H.bin DIFF:
+    == H.bin ==
+       header a: rows=72000 cols=72000 nnz=1982199
+       header b: rows=72000 cols=72000 nnz=1982199
+       structural: row_ptr identical
+       structural: columns identical | values: 1574058 of 1982199 entries differ (79.4097%)
+       max |delta| = 0.000001  (7.21e-01 relative to the affected values)
+       samples (row, col, a, b, delta):
+         (0, 3) 0.9404905438423157 vs 0.9404904842376709 delta=0.000000
+         (0, 5) 0.220517098903656 vs 0.22051700949668884 delta=0.000000
+         ... 1574056 more
+       RESULT: columns equal, values differ in the last bits
+  MM.bin IDENTICAL
+  result.bin DIFF:
+    == result.bin ==
+       header a: rows=72000 cols=72000 nnz=5815878
+       header b: rows=72000 cols=72000 nnz=5709746
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  S.bin DIFF:
+    == S.bin ==
+       header a: rows=72000 cols=72000 nnz=7961314
+       header b: rows=72000 cols=72000 nnz=7796459
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Srev.bin DIFF:
+    == Srev.bin ==
+       header a: rows=72000 cols=72000 nnz=9635632
+       header b: rows=72000 cols=72000 nnz=9398752
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Stot.bin DIFF:
+    == Stot.bin ==
+       header a: rows=72000 cols=72000 nnz=6445084
+       header b: rows=72000 cols=72000 nnz=6307094
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+-- cprr T=1: PRODC vs PROD --
+  rk IDENTICAL (md5 ec88d926f8a971189c905ce63b511a3d)
+  result.bin IDENTICAL
+  W.bin IDENTICAL
+-- lhrr T=12: PRODC vs NFM --
+  rk DIFF: c4c6ac7307f78675e28dc91cb038b9fe vs 68ba20662614f4b7c8b88dddd1867009
+    == /home/andre/udlf_cache/pass0/lhrr_t12_PRODC.rk vs /home/andre/udlf_cache/pass0/lhrr_t12_NFM.rk ==
+       rows=72000 cols=400: IDENTICAL_ROWS=10206 DIFF_ROWS=61794 (85.8250%)
+       WIDE DIVERGENCE (>1% of rows): per the S2.2b mandate, STOP and report before any timing.
+       position swaps/row: min=1 mean=9.24 max=84 (over 61794 rows)
+       set divergence/row: min=0 mean=10.04 max=103 | same-set rows=1782
+       Kendall tau (common elements, 200 of 200 sampled rows): min=0.966672 mean=0.994098
+       samples (row, pos_swaps, set_divergence, tau):
+         (0, 10, 11, 0.991062)
+         (1, 17, 17, 0.995814)
+         (2, 11, 7, 0.996524)
+         (3, 11, 12, 0.994909)
+         (4, 12, 13, 0.995373)
+         (5, 15, 20, 0.990850)
+         (6, 15, 14, 0.986538)
+         (7, 35, 43, 0.974971)
+         (8, 26, 29, 0.990077)
+         (9, 25, 25, 0.983597)
+       RESULT: DIVERGENT (61794 rows differ)
+  H.bin DIFF:
+    == H.bin ==
+       header a: rows=72000 cols=72000 nnz=1982199
+       header b: rows=72000 cols=72000 nnz=1982199
+       structural: row_ptr identical
+       structural: columns identical | values: 1813343 of 1982199 entries differ (91.4814%)
+       max |delta| = 0.000001  (1.00e+00 relative to the affected values)
+       samples (row, col, a, b, delta):
+         (0, 0) 2.714341163635254 vs 2.714340925216675 delta=0.000000
+         (0, 1) 1.9384020566940308 vs 1.9384019374847412 delta=0.000000
+         ... 1813341 more
+       RESULT: columns equal, values differ in the last bits
+  MM.bin IDENTICAL
+  result.bin DIFF:
+    == result.bin ==
+       header a: rows=72000 cols=72000 nnz=5815878
+       header b: rows=72000 cols=72000 nnz=5248535
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  S.bin DIFF:
+    == S.bin ==
+       header a: rows=72000 cols=72000 nnz=7961314
+       header b: rows=72000 cols=72000 nnz=7286865
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Srev.bin DIFF:
+    == Srev.bin ==
+       header a: rows=72000 cols=72000 nnz=9635632
+       header b: rows=72000 cols=72000 nnz=8685190
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Stot.bin DIFF:
+    == Stot.bin ==
+       header a: rows=72000 cols=72000 nnz=6445084
+       header b: rows=72000 cols=72000 nnz=5756659
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+-- lhrr T=12: PRODC vs PROD --
+  rk DIFF: c4c6ac7307f78675e28dc91cb038b9fe vs 4eb789820542d43a23eb8e005b57918e
+    == /home/andre/udlf_cache/pass0/lhrr_t12_PRODC.rk vs /home/andre/udlf_cache/pass0/lhrr_t12_PROD.rk ==
+       rows=72000 cols=400: IDENTICAL_ROWS=29153 DIFF_ROWS=42847 (59.5097%)
+       WIDE DIVERGENCE (>1% of rows): per the S2.2b mandate, STOP and report before any timing.
+       position swaps/row: min=1 mean=6.07 max=68 (over 42847 rows)
+       set divergence/row: min=0 mean=2.73 max=26 | same-set rows=4229
+       Kendall tau (common elements, 200 of 200 sampled rows): min=0.987277 mean=0.998577
+       samples (row, pos_swaps, set_divergence, tau):
+         (1, 2, 0, 0.999986)
+         (3, 2, 1, 0.998965)
+         (5, 4, 1, 0.999597)
+         (6, 1, 1, 0.998562)
+         (7, 19, 9, 0.999491)
+         (8, 17, 3, 0.995369)
+         (9, 18, 1, 0.997565)
+         (10, 18, 1, 0.995280)
+         (11, 24, 5, 0.994510)
+         (13, 20, 6, 0.997986)
+       RESULT: DIVERGENT (42847 rows differ)
+  H.bin DIFF:
+    == H.bin ==
+       header a: rows=72000 cols=72000 nnz=1982199
+       header b: rows=72000 cols=72000 nnz=1982199
+       structural: row_ptr identical
+       structural: columns identical | values: 1574058 of 1982199 entries differ (79.4097%)
+       max |delta| = 0.000001  (7.21e-01 relative to the affected values)
+       samples (row, col, a, b, delta):
+         (0, 3) 0.9404905438423157 vs 0.9404904842376709 delta=0.000000
+         (0, 5) 0.220517098903656 vs 0.22051700949668884 delta=0.000000
+         ... 1574056 more
+       RESULT: columns equal, values differ in the last bits
+  MM.bin IDENTICAL
+  result.bin DIFF:
+    == result.bin ==
+       header a: rows=72000 cols=72000 nnz=5815878
+       header b: rows=72000 cols=72000 nnz=5709746
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  S.bin DIFF:
+    == S.bin ==
+       header a: rows=72000 cols=72000 nnz=7961314
+       header b: rows=72000 cols=72000 nnz=7796459
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Srev.bin DIFF:
+    == Srev.bin ==
+       header a: rows=72000 cols=72000 nnz=9635632
+       header b: rows=72000 cols=72000 nnz=9398752
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+  Stot.bin DIFF:
+    == Stot.bin ==
+       header a: rows=72000 cols=72000 nnz=6445084
+       header b: rows=72000 cols=72000 nnz=6307094
+       STRUCTURAL: header mismatch -> STOP
+       RESULT: STRUCTURAL DIFFERENCE
+-- cprr T=12: PRODC vs PROD --
+  rk IDENTICAL (md5 ec88d926f8a971189c905ce63b511a3d)
+  result.bin IDENTICAL
+  W.bin IDENTICAL
+
+== veredito pre-registrado ==
+M2 VERDICT: causa MISTA (PRODC difere de PROD e de NFM)

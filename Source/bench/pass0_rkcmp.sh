@@ -41,11 +41,13 @@ PROD_FLAGS=$(make -C Source -s show-flags 2>/dev/null \
              | sed -n 's/^Optimization flags: //p' | head -1)
 [ -n "$PROD_FLAGS" ] || fail "nao extrai 'Optimization flags:' do Makefile"
 case " $PROD_FLAGS " in *" -ffast-math "*) : ;; *) fail "PROD sem -ffast-math" ;; esac
-NFM_FLAGS=$(printf '%s\n' "$PROD_FLAGS" \
+# PRODC: PROD com a CONTRACAO de FMA desligada, resto do fast-math intacto --
+# isola "FMA" de "reassociacao" como causa da divergencia do LHRR (M2).
+PRODC_FLAGS="$PROD_FLAGS -ffp-contract=off"
+NFM_FLAGS=$(printf '%s\n' "$PRODC_FLAGS" \
             | sed -e 's/ -ffast-math / /g' \
                   -e 's/ -funsafe-math-optimizations / /g' \
                   -e 's/ -ffinite-math-only / /g')
-NFM_FLAGS="$NFM_FLAGS -ffp-contract=off"
 [ "$NFM_FLAGS" != "$PROD_FLAGS" ] || fail "NFM identico a PROD"
 case " $NFM_FLAGS " in
   *" -ffast-math "*|*" -funsafe-math-optimizations "*|*" -ffinite-math-only "*)
@@ -53,11 +55,11 @@ case " $NFM_FLAGS " in
 esac
 case " $NFM_FLAGS " in *" -ffp-contract=off "*) : ;; *) fail "NFM sem -ffp-contract=off" ;; esac
 
-flags_of() { if [ "$1" = PROD ]; then printf '%s' "$PROD_FLAGS"; else printf '%s' "$NFM_FLAGS"; fi; }
+flags_of() { case "$1" in PROD) printf '%s' "$PROD_FLAGS" ;; PRODC) printf '%s' "$PRODC_FLAGS" ;; NFM) printf '%s' "$NFM_FLAGS" ;; esac; }
 
 stage_build() {
     local R
-    for R in PROD NFM; do
+    for R in PROD PRODC NFM; do
         echo "build $R"
         # shellcheck disable=SC2086
         $CXX $(flags_of "$R") -I Source/src Source/bench/bench_phase.cpp \
@@ -100,6 +102,7 @@ stage_gates() {
     {
         echo "# pass0 gates -- $(date -Is)"
         echo "# PROD: $PROD_FLAGS"
+        echo "# PRODC: $PRODC_FLAGS"
         echo "# NFM:  $NFM_FLAGS"
         echo "# input=$IN N=$N L=$L k=$K limit=$LIMIT reps=$REPS"
     } >"$OUT/pass0_flags.txt"
@@ -190,12 +193,108 @@ stage_report() {
     cat "$OUT/pass0_report.txt"
 }
 
+# --- M2: braco PRODC (FMA vs reassociacao) ---------------------------------
+stage_m2_runs() {
+    run_one PRODC lhrr 1  0
+    run_one PRODC lhrr 12 0-11
+    run_one PRODC cprr 1  0
+    run_one PRODC cprr 12 0-11
+}
+
+# m2_pair <T> <pipe> <A> <B>: cmp de rk + inventario de dumps do par (A vs B)
+m2_pair() {
+    local T=$1 pipe=$2 A=$3 B=$4
+    local fa="$CACHE/${pipe}_t${T}_${A}.rk" fb="$CACHE/${pipe}_t${T}_${B}.rk"
+    local da="$CACHE/dump_${pipe}_t${T}_${A}" db="$CACHE/dump_${pipe}_t${T}_${B}"
+    echo "-- ${pipe} T=$T: $A vs $B --"
+    if [ ! -r "$fa" ] || [ ! -r "$fb" ]; then echo "  MISSING_RK"; return 1; fi
+    if cmp -s "$fa" "$fb"; then echo "  rk IDENTICAL (md5 $(md5sum "$fa" | cut -d' ' -f1))"; else
+        echo "  rk DIFF: $(md5sum "$fa" | cut -d' ' -f1) vs $(md5sum "$fb" | cut -d' ' -f1)"
+        python3 "Source/bench/rk_cmp.py" "$fa" "$fb" "$N" "$L" 2>&1 | sed 's/^/    /'
+    fi
+    local base
+    for f in "$da"/*.bin; do
+        base=$(basename "$f")
+        [ -r "$db/$base" ] || { echo "  $base MISSING_IN_$B"; continue; }
+        if cmp -s "$f" "$db/$base"; then echo "  $base IDENTICAL"; else
+            echo "  $base DIFF:"
+            python3 "Source/bench/dump_cmp.py" "$f" "$db/$base" 2 2>&1 | sed 's/^/    /'
+        fi
+    done
+}
+
+# Veredito PRE-REGISTRADO (escrito antes de rodar, para nao decidir a posteriori):
+#   PRODC == NFM  -> a contracao de FMA e a causa; -ffp-contract=off (mantendo
+#                    fast-math) ja estabiliza a ESTRUTURA
+#   PRODC == PROD -> a causa e a reassociacao (so NFM resolve)
+#   nenhum dos dois -> causa mista (registrar)
+stage_m2_report() {
+    local T lhrr_cn lhrr_cp cprr_cp
+    {
+        echo "== pass0 M2 report (FMA vs reassociacao) -- $(date -Is)"
+        echo "# PRODC: $PRODC_FLAGS"
+        for T in 1 12; do
+            m2_pair "$T" lhrr PRODC NFM;  lhrr_cn=$?
+            m2_pair "$T" lhrr PRODC PROD; lhrr_cp=$?
+            m2_pair "$T" cprr PRODC PROD; cprr_cp=$?
+        done
+        echo
+        echo "== veredito pre-registrado =="
+        local a="$CACHE/lhrr_t1_PRODC.rk" b="$CACHE/lhrr_t1_NFM.rk" c="$CACHE/lhrr_t1_PROD.rk"
+        if cmp -s "$a" "$b" && cmp -s "$a" "$c"; then
+            echo "M2: PRODC == NFM == PROD (nenhuma das duas explica; revisar)"
+        elif cmp -s "$a" "$b"; then
+            echo "M2 VERDICT: PRODC == NFM != PROD -> a CONTRACAO DE FMA e a causa"
+            echo "  (=> -ffp-contract=off mantendo o fast-math estabiliza o LHRR)"
+        elif cmp -s "$a" "$c"; then
+            echo "M2 VERDICT: PRODC == PROD != NFM -> a REASSOCIACAO e a causa"
+            echo "  (=> so remover as 3 flags de fast-math resolve)"
+        else
+            echo "M2 VERDICT: causa MISTA (PRODC difere de PROD e de NFM)"
+        fi
+    } >"$OUT/pass0_m2.txt" 2>&1
+    cat "$OUT/pass0_m2.txt"
+}
+
+# --- M1: a perturbacao mexe em P@k/MAP? (mesmo pipeline, via driver) -------
+# Replica a semantica do avaliador publicado (pk_eval.py) sobre os .rk dos dois
+# bracos do LHRR. AVISO declarado: isto e o pipeline do driver (ALOI 72k, L=400,
+# k=10, limit=400, T=1) -- proxy indicativo, NAO equivalente a config publicada
+# do framework em Data/Unified_Accuracy_Results.csv (essa fica como M4, pesada).
+stage_quality() {
+    local R rk out
+    : >"$OUT/pass0_quality.txt"
+    for R in PROD PRODC NFM; do
+        rk="$CACHE/lhrr_t1_$R.rk"
+        [ -r "$rk" ] || { echo "$R: .rk ausente ($rk)" >>"$OUT/pass0_quality.txt"; continue; }
+        out="$OUT/pass0_pk_$R.txt"
+        python3 Source/bench/pk_eval.py eval --rk "$rk" --bin \
+            --classes Datasets/aloi/classes.txt --L "$L" \
+            --ks 4,5,10,15,20 --map-ks 100,400 \
+            >"$out" 2>&1 || echo "# pk_eval rc!=0 ($R)" >>"$out"
+        {
+            echo "== $R ($rk) =="
+            grep -v '^$' "$out"
+        } >>"$OUT/pass0_quality.txt"
+    done
+    {
+        echo
+        echo "== publicado (Data/Unified_Accuracy_Results.csv, LHRR/aloi) -- referencia externa =="
+        head -1 Data/Unified_Accuracy_Results.csv
+        grep -m2 -e '^aloi,LHRR' Data/Unified_Accuracy_Results.csv || true
+    } >>"$OUT/pass0_quality.txt"
+    cat "$OUT/pass0_quality.txt"
+}
+
 case "$STAGE" in
     build) stage_build ;;
     runs)  stage_runs ;;
     gates) stage_gates ;;
     report) stage_report ;;
-    all)   stage_build; stage_runs; stage_gates; stage_report ;;
-    *) echo "estagio desconhecido: $STAGE (build|runs|gates|report|all)"; exit 2 ;;
+    m2_runs) stage_m2_runs ;;
+    m2_report) stage_m2_report ;;
+    quality) stage_quality ;;
+    all)   stage_build; stage_runs; stage_m2_runs; stage_gates; stage_m2_report; stage_quality; stage_report ;;
+    *) echo "estagio desconhecido: $STAGE (build|runs|m2_runs|gates|m2_report|quality|report|all)"; exit 2 ;;
 esac
 echo "PASS0_STAGE_${STAGE}_DONE"

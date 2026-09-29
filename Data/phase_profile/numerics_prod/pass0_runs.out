@@ -6,3 +6,7 @@ tag=lhrr_t1_NFM rc=0 regime=NFM pipe=lhrr T=1 end=2026-09-29T12:49:25-03:00
 tag=lhrr_t12_NFM rc=0 regime=NFM pipe=lhrr T=12 end=2026-09-29T12:49:30-03:00
 tag=cprr_t1_NFM rc=0 regime=NFM pipe=cprr T=1 end=2026-09-29T12:49:30-03:00
 tag=cprr_t12_NFM rc=0 regime=NFM pipe=cprr T=12 end=2026-09-29T12:49:31-03:00
+tag=lhrr_t1_PRODC rc=0 regime=PRODC pipe=lhrr T=1 end=2026-09-29T13:56:30-03:00
+tag=lhrr_t12_PRODC rc=0 regime=PRODC pipe=lhrr T=12 end=2026-09-29T13:56:48-03:00
+tag=cprr_t1_PRODC rc=0 regime=PRODC pipe=cprr T=1 end=2026-09-29T13:56:50-03:00
+tag=cprr_t12_PRODC rc=0 regime=PRODC pipe=cprr T=12 end=2026-09-29T13:56:51-03:00
