@@ -463,6 +463,49 @@ Recomendação: **(1)**, porque `-ffast-math` já torna duvidoso um contrato her
 do RDPAC ("`0/0` sem guarda = NaN verbatim", Etapa 3) por causa de
 `-ffinite-math-only` — o problema é pré-existente, e o BFSTree só o torna visível.
 
+**DECIDIDO E IMPLEMENTADO (29/09/2026) — a opção (1), como alvo estrito.**
+
+- **Registro**: `Source/src/Methods/hpp/BFSTreeCore.hpp` (port A4, fase a fase)
+  + `BFSTree.hpp` (scaffold com o contrato de config
+  `PARAM_BFSTREE_{L,K,B,CORRELATION_METRIC}`, só `RBO` portado) +
+  `MethodRegister<BFSTree>` em `Method.cpp` + `Validator.hpp` + `PARAM_BFSTREE_B`
+  nos inis (7 datasets; `config_cifar.ini` corrigido para `L=1000`, a largura
+  medida do arquivo).
+- **Alvo**: `STRICT_FLAGS = CFLAGS − {-ffast-math, -funsafe-math-optimizations,
+  -ffinite-math-only} + -ffp-contract=off` ⇒ `make udlf-strict` →
+  `bin/udlf_strict`. **`CFLAGS` do produto intocado** — nada já publicado muda.
+- **Fail-closed**: o binário do produto **recusa** rodar BFSTree
+  (`BFSTree.hpp`: `#pragma message` na compilação + `throw` em `preprocess()`;
+  escape `BFSTREE_ALLOW_FASTMATH=1` só para reproduzir a divergência). Prova:
+  `check_bfstree_guard.cpp` → `strict -> GUARD ALLOWED; fast-math -> GUARD
+  REFUSED`, parte dos gates.
+- **Por que estrito e não global**: o Passo 0 (`numerics_prod`) mostrou que o
+  regime do produto **não é neutro para o motor** (LHRR: `nnz` −8/−11%,
+  81% das linhas do ranking mudam) e o M2 mostrou que a causa é **mista**
+  (nem `-ffp-contract=off` sozinho, nem só a remoção das flags resolve o pin do
+  BFSTree em PRODC). Trocar o regime global custaria re-baselinar LHRR em
+  aloi/sun397/vegfru — conta que continua em aberto.
+- **Gates verdes na mesma corrida**: `make test-bfstree` (TU → guarda →
+  paridade vs os pins do legado `CK_W=0x2aaaa7b5841c8ee1` /
+  `CK_FINAL=0x7b70dfb313c2b151` / `NNZ_W=553578` → `BITFINAL=YES`, corner com
+  B-independência em 3 seeds + `k=1` + `L≥N/2` + contratos, md5 estrito 1/12,
+  bench sob `OMP_WAIT_POLICY=PASSIVE`) e `run_all.sh` etapa 8 (md5 estrito
+  1/2/4/8/12 = `2301d70707511cac7b3a4fb49f406307`, serial-vs-parallel, ASan/UBSan)
+  — **nessa mesma corrida os md5 históricos `b6a4f54e…` (×5) e `112fb487…` (×4)
+  permaneceram idênticos**, i.e. nada do registro os tocou.
+- **Pendência de ambiente (não do código)**: `make all` / `make udlf-strict`
+  **não completam neste host** porque `libeigen3-dev` não está instalado e
+  `sudo` exige senha (`Method.cpp` inclui `CprrEigen.hpp`). O método é
+  verificado pelo TU check (`check_bfstree_tu.cpp`, `-fsyntax-only` com o
+  conjunto completo de includes) e pelos gates; **o link do binário fica
+  pendente** até a dependência existir. Neste host `Source/obj/` está vazio e
+  `Source/bin/` não existe — o produto nunca foi compilado aqui.
+- **Cobertura declarada**: o carrier mantém a densa `N²` (F1/F2 + `W`), então
+  cobre os datasets em que ela cabe na RAM (**ALOI incluso**); **vegfru/sun397 em
+  N pleno (103/47 GB) seguem fora de alcance até o A5 ser retomado** — os
+  débitos 1/2 do `Data/phase_profile/bfstree_a5/README.md` continuam registrados
+  e não bloqueiam nada.
+
 Depois disso, o caminho é o do RDPAC, item por item: `Source/src/Methods/hpp/BFSTree.hpp`
 header-only + `MethodRegister<BFSTree> signInMethod("BFSTree")` (padrão
 `Method.cpp:11,23`) + `Validator`/config para o knob `B` (débito 6.4) +

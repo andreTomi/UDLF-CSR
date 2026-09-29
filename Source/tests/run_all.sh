@@ -19,6 +19,10 @@
 #   7. RDPAC serial-vs-parallel bench under OMP_WAIT_POLICY=PASSIVE
 #      (libgomp's default ACTIVE spin-wait starves SMT siblings on this
 #      6-core/12-thread box; see bench_rdpac.cpp header for numbers).
+#   8. BFSTree framework gates (registered method, strict regime): TU check,
+#      parity vs the legacy's recorded pins, corner cases, strict md5 equality
+#      across 1/2/4/8/12 threads, serial-vs-parallel bench (PASSIVE) and
+#      ASan+UBSan. Additive: stages 1-7 and their historical md5s untouched.
 # NOTE: paths are hardcoded to the WSL mount of this repo; invoke as
 # `bash Source/tests/run_all.sh` (shell variables inside the file are fine).
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -106,3 +110,60 @@ echo "=== RDPAC gates: OK ==="
 echo "=== BFSTree port: hypothesis + input contract + bit-exactness vs golden ==="
 bash Source/tests/gate_bfstree.sh || exit 1
 echo "=== BFSTree gates: OK ==="
+
+# ---- Stage 8 (ADITIVA): BFSTree no framework (registro em Source/src) -------
+# Metade framework do padrao RDPAC (etapas 5/6/7): TU check, paridade contra os
+# pins gravados do legado, casos-limite, determinismo estrito de threads
+# (1/2/4/8/12), serial-vs-parallel sob PASSIVE e ASan/UBSan.
+# NAO toca as etapas 1-7 nem os md5 historicos: os 99 checks (b6a4f54e /
+# 112fb487) sao produzidos pelas suites das etapas 1-2, com linha de compilacao
+# propria, e continuam rodando ali.
+echo "=== BFSTree framework: TU check (factory registration, header-only) ==="
+g++ -std=gnu++23 -fsyntax-only -fopenmp -I Source/src -I Source/src/Config/hpp -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp Source/tests/check_bfstree_tu.cpp || exit 1
+
+echo "=== BFSTree framework: build guard (strict ALLOWED / fast-math REFUSED) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Config/hpp -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp Source/tests/check_bfstree_guard.cpp -o /tmp/check_bfstree_guard_strict || exit 1
+g++ -std=gnu++2b -O2 -fopenmp -ffast-math -I Source/src -I Source/src/Config/hpp -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp Source/tests/check_bfstree_guard.cpp -o /tmp/check_bfstree_guard_fastmath || exit 1
+/tmp/check_bfstree_guard_strict   | grep -q "GUARD ALLOWED" || { echo "BFSTree guard FAILED: strict build must ALLOW"; exit 1; }
+/tmp/check_bfstree_guard_fastmath | grep -q "GUARD REFUSED" || { echo "BFSTree guard FAILED: fast-math build must REFUSE"; exit 1; }
+echo "  strict -> GUARD ALLOWED; fast-math -> GUARD REFUSED"
+
+echo "=== BFSTree framework: parity vs legacy pins + corner cases ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp Source/tests/test_bfstree_parity.cpp -o /tmp/test_bfstree_parity || exit 1
+/tmp/test_bfstree_parity > /tmp/bf_par.out 2>&1 || { tail -40 /tmp/bf_par.out; exit 1; }
+grep -v BuildV2 /tmp/bf_par.out
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp Source/tests/test_bfstree_corner.cpp -o /tmp/test_bfstree_corner || exit 1
+/tmp/test_bfstree_corner > /tmp/bf_cor.out 2>&1 || { tail -40 /tmp/bf_cor.out; exit 1; }
+grep -v BuildV2 /tmp/bf_cor.out
+
+echo "=== BFSTree thread determinism (strict: all md5 must be identical) ==="
+bfstree_ref_md5=""
+bfstree_det_ok=1
+for t in 1 2 4 8 12; do
+  m=$(OMP_NUM_THREADS=$t /tmp/test_bfstree_parity | grep -v BuildV2 | md5sum | cut -d' ' -f1)
+  echo "  parity t=$t md5=$m"
+  if [ -z "$bfstree_ref_md5" ]; then bfstree_ref_md5=$m; elif [ "$m" != "$bfstree_ref_md5" ]; then bfstree_det_ok=0; fi
+done
+[ "$bfstree_det_ok" = 1 ] || { echo "BFSTree thread determinism FAILED: md5 mismatch across thread counts"; exit 1; }
+echo "=== BFSTree thread determinism: OK ==="
+
+echo "=== BFSTree serial-vs-parallel bench (OMP_WAIT_POLICY=PASSIVE) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp Source/bench/bench_bfstree.cpp -o /tmp/bench_bfstree || exit 1
+OMP_NUM_THREADS=1  OMP_WAIT_POLICY=PASSIVE /tmp/bench_bfstree A4 4000 640 10 42 256 4000 > /tmp/bf_t1.out  2>&1 || exit 1
+OMP_NUM_THREADS=12 OMP_WAIT_POLICY=PASSIVE /tmp/bench_bfstree A4 4000 640 10 42 256 4000 > /tmp/bf_t12.out 2>&1 || exit 1
+grep -E 'CK_FINAL=|BITFINAL=' /tmp/bf_t1.out  > /tmp/bf_t1.ck
+grep -E 'CK_FINAL=|BITFINAL=' /tmp/bf_t12.out > /tmp/bf_t12.ck
+cmp /tmp/bf_t1.ck /tmp/bf_t12.ck || { echo "BFSTree serial-vs-parallel checksum mismatch"; cat /tmp/bf_t1.ck /tmp/bf_t12.ck; exit 1; }
+cat /tmp/bf_t1.ck
+
+echo "=== BFSTree ASan/UBSan (parity + corner, 4 threads) ==="
+g++ -std=gnu++2b -O1 -g -fopenmp -fsanitize=address,undefined -fno-omit-frame-pointer -I Source/src -I Source/src/Core/hpp Source/tests/test_bfstree_parity.cpp -o /tmp/test_bfstree_parity_san || exit 1
+g++ -std=gnu++2b -O1 -g -fopenmp -fsanitize=address,undefined -fno-omit-frame-pointer -I Source/src -I Source/src/Core/hpp Source/tests/test_bfstree_corner.cpp -o /tmp/test_bfstree_corner_san || exit 1
+OMP_NUM_THREADS=4 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 /tmp/test_bfstree_parity_san > /tmp/bf_san1.out 2>&1 || { tail -30 /tmp/bf_san1.out; exit 1; }
+OMP_NUM_THREADS=4 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 /tmp/test_bfstree_corner_san > /tmp/bf_san2.out 2>&1 || { tail -30 /tmp/bf_san2.out; exit 1; }
+if grep -q -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/bf_san1.out /tmp/bf_san2.out; then
+  grep -a -m10 -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/bf_san1.out /tmp/bf_san2.out
+  exit 1
+fi
+echo "=== BFSTree ASan/UBSan: OK ==="
+echo "=== BFSTree framework gates: OK ==="

@@ -7,8 +7,11 @@ BFSTree) e o checklist que um método tem de passar para estar *incluído* no
 framework — para o próximo arco não rediscover as armadilhas da §"Armadilhas".
 
 Estado atual de cada método: **RDPAC** = incluído (fábrica + gates completos).
-**BFSTree** = medido e validado como ferramenta de medição, **não** incluído no
-produto — ver `Data/phase_profile/bfstree_close/README.md` §7.
+**BFSTree** = **incluído** na fábrica atrás do **alvo estrito** (`make
+udlf-strict` → `bin/udlf_strict`; o binário do produto recusa rodá-lo) —
+bit-exato em 3 pontos reais + paridade/corner/guard na malha. **A5** = pesquisa
+documentada, não bloqueia. Ver `Data/phase_profile/bfstree_close/README.md` §7.4
+e `Data/phase_profile/bfstree_a5/README.md`.
 
 ## O protocolo, em cinco passos
 
@@ -50,7 +53,7 @@ medição.
 | 5 | determinismo de threads | md5 da saída idêntico em **1/2/4/8/12 threads** (strict: drift aborta); md5 históricos não se tocam |
 | 6 | ASan + UBSan | `OMP_NUM_THREADS=4`, como no `run_all.sh` |
 | 7 | alvo de build próprio | `make test-<m>` em `Source/`, chamado também pelo `run_all.sh` |
-| 8 | numérica do build **decidida** | o build do produto é `-O3 -march=native -mfma -ffast-math`; um método com contrato de identidade precisa de alvo próprio (ver armadilha 4) |
+| 8 | numérica do build **decidida** | ✅ o build do produto é `-O3 -march=native -mfma -ffast-math` e **permanece assim** (Passo 0 mediu que trocar muda o LHRR: `nnz` −8/11%, 81% das linhas — regime global em aberto); para método com contrato de identidade existe **alvo próprio**: `STRICT_FLAGS`/`make udlf-strict` (ver armadilha 4) e o método **recusa** rodar em fast-math |
 | 9 | bench sob `OMP_WAIT_POLICY=PASSIVE` | spin-wait ACTIVE do libgomp esmaga os hyperthreads irmãos em host SMT (6c/12t) — causa-raiz diagnosticada no RDPAC |
 
 Para um port que ainda mora só no bench, o equivalente mínimo é o

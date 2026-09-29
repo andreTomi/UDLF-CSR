@@ -18,6 +18,16 @@ RELEASE_FLAGS = -DNDEBUG
 # Combined flags for maximum performance
 CFLAGS = $(BASE_FLAGS) $(RELEASE_FLAGS) $(VECTOR_FLAGS) $(OPENMP_FLAGS) $(FAST_MATH_FLAGS) $(LOOP_FLAGS) $(INLINE_FLAGS) $(CACHE_FLAGS)
 
+# STRICT_FLAGS: the same product flag set with the three fast-math flags removed
+# and FMA contraction off -- the regime a method with an identity contract
+# requires. Measured (Data/phase_profile/numerics_prod, "Passo 0"): under
+# CFLAGS ~89% of BFSTree's W cells shift by 1 ULP and the LHRR final rank lists
+# change in ~81% of the rows, so the BFSTree method refuses to run in a binary
+# built with CFLAGS. `make udlf-strict` produces bin/udlf_strict with this set;
+# the default target (bin/udlf) keeps CFLAGS untouched, so every existing
+# published number and md5 stays valid.
+STRICT_FLAGS = $(filter-out $(FAST_MATH_FLAGS),$(CFLAGS)) -ffp-contract=off
+
 # Define MKL Root for clarity
 MKL_ROOT = /opt/intel/oneapi/mkl/latest
 
@@ -42,6 +52,7 @@ INCFLAGS  = -I./src \
 # Build directories
 OBJ_DIR   = obj
 OBJ_DIR_SWAP = obj_swap
+OBJ_DIR_STRICT = obj_strict
 SRC_DIR   = src
 BUILD_DIR = bin
 
@@ -56,9 +67,10 @@ SRC_FILES  := $(wildcard \
 # Convert source file paths to object file paths
 OBJ_FILES  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_FILES))
 OBJ_FILES_SWAP := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_SWAP)/%.o, $(SRC_FILES))
+OBJ_FILES_STRICT := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_STRICT)/%.o, $(SRC_FILES))
 
 # Build targets
-.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap test-rdpac test-bfstree
+.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap udlf-strict test-rdpac test-bfstree
 
 # Default target - optimized builds for both versions
 all: udlf swap
@@ -69,6 +81,16 @@ udlf: $(OBJ_FILES)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(OBJ_FILES) -o $(BUILD_DIR)/udlf $(CFLAGS) $(LDFLAGS)
 	@echo "Build complete. Executable: $(BUILD_DIR)/udlf"
+
+# Strict build: same sources, same libraries, STRICT_FLAGS (no fast-math,
+# -ffp-contract=off). This is the binary where a method with an identity
+# contract (BFSTree) is allowed to run; bin/udlf keeps the product's CFLAGS and
+# its shipped behaviour. Build from Source/: make udlf-strict
+udlf-strict: $(OBJ_FILES_STRICT)
+	@echo "Building strict (no fast-math, -ffp-contract=off) executable..."
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(OBJ_FILES_STRICT) -o $(BUILD_DIR)/udlf_strict $(STRICT_FLAGS) $(LDFLAGS)
+	@echo "Build complete. Executable: $(BUILD_DIR)/udlf_strict"
 
 # Swap build target (Anonymous Memory / Swap-backed)
 swap: $(OBJ_FILES_SWAP)
@@ -88,6 +110,12 @@ $(OBJ_DIR_SWAP)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< (swap)..."
 	$(CC) $(CFLAGS) -DVIRTUAL_ARRAY_FULL_MEMORY $(INCFLAGS) -c $< -o $@
+
+# Rule to compile .cpp files into .o files (STRICT)
+$(OBJ_DIR_STRICT)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "Compiling $< (strict)..."
+	$(CC) $(STRICT_FLAGS) $(INCFLAGS) -c $< -o $@
 
 # Debug build (less optimization, better debugging)
 debug: CFLAGS = $(BASE_FLAGS) -O1 -DDEBUG -fsanitize=address -fsanitize=undefined
@@ -127,7 +155,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 # Clean target
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -rf $(OBJ_DIR) $(OBJ_DIR_SWAP) $(BUILD_DIR)/udlf $(BUILD_DIR)/udlf_swap $(BUILD_DIR)/udlf-debug $(BUILD_DIR)/udlf-profile $(BUILD_DIR)/udlf-vec
+	rm -rf $(OBJ_DIR) $(OBJ_DIR_SWAP) $(OBJ_DIR_STRICT) $(BUILD_DIR)/udlf $(BUILD_DIR)/udlf_strict $(BUILD_DIR)/udlf_swap $(BUILD_DIR)/udlf-debug $(BUILD_DIR)/udlf-profile $(BUILD_DIR)/udlf-vec
 	rm -f vectorization_report.txt gmon.out
 
 # Run targets
@@ -210,13 +238,39 @@ test-rdpac:
 # fails the bit-pin (POS_EQUAL 0.999975 -> FMA contraction is not the cause);
 # NFM (product minus -ffast-math/-funsafe-math-optimizations/-ffinite-math-only,
 # plus -ffp-contract=off) and BENCH (-O2) both print BFSTREE GATES: OK and are
-# bit-exact at N=800 AND N=4000. Shipping BFSTree therefore needs that numerics
-# decision first (dossiê 7.4, with the measured cost: NFM = -0.2% on synth);
-# the gate itself costs ~13 s and touches nothing in src/.
+# bit-exact at N=800 AND N=4000. DECIDED (2026-09-29, dossiê numerics_prod
+# "Passo 0" + M2): the identity contract holds only outside fast-math (and PRODC
+# does not fix it -- cause is mixed FMA/reassociation), so BFSTree is registered
+# in the factory and ships behind the strict target (make udlf-strict ->
+# bin/udlf_strict) while refusing to run in bin/udlf. Measured cost of that
+# regime: -0.2% on the synthetic case. The bench gate costs ~13 s.
 # Full audit: Data/phase_profile/numerics_prod/README.md
 # Run from Source/: make test-bfstree
+# Framework half: TU check + factory registration, parity gate against
+# the legacy's recorded digest pins, corner cases, strict thread determinism and
+# the bench-level gates (hypothesis + input contract + bit-exactness).
+# DECISION (2026-09-29, dossie numerics_prod "Passo 0"): the identity contract
+# holds only outside fast-math, so BFSTree ships behind the strict target
+# (`make udlf-strict` -> bin/udlf_strict) and refuses to run in bin/udlf.
+# The 1/12-thread cmp aborts make on any md5 drift across thread counts.
+# Run from Source/: make test-bfstree
 test-bfstree:
-	bash tests/gate_bfstree.sh
+	$(CC) -std=gnu++23 -fsyntax-only -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_bfstree_tu.cpp
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_bfstree_guard.cpp -o /tmp/check_bfstree_guard_strict
+	$(CC) -std=gnu++2b -O2 -ffast-math -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_bfstree_guard.cpp -o /tmp/check_bfstree_guard_fastmath
+	/tmp/check_bfstree_guard_strict | grep -q "GUARD ALLOWED"
+	/tmp/check_bfstree_guard_fastmath | grep -q "GUARD REFUSED"
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_bfstree_parity.cpp -o /tmp/test_bfstree_parity
+	/tmp/test_bfstree_parity
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_bfstree_corner.cpp -o /tmp/test_bfstree_corner
+	/tmp/test_bfstree_corner
+	OMP_NUM_THREADS=1 /tmp/test_bfstree_parity > /tmp/bfstree_t1.out
+	OMP_NUM_THREADS=12 /tmp/test_bfstree_parity > /tmp/bfstree_t12.out
+	cmp /tmp/bfstree_t1.out /tmp/bfstree_t12.out
+	OMP_NUM_THREADS=1 /tmp/test_bfstree_corner > /tmp/bfstree_c_t1.out
+	OMP_NUM_THREADS=12 /tmp/test_bfstree_corner > /tmp/bfstree_c_t12.out
+	cmp /tmp/bfstree_c_t1.out /tmp/bfstree_c_t12.out
+	OMP_WAIT_POLICY=PASSIVE bash tests/gate_bfstree.sh
 
 # Help target
 help:
@@ -233,5 +287,6 @@ help:
 	@echo "  show-flags         - Show compilation flags"
 	@echo "  perf-test          - Run performance analysis (requires perf)"
 	@echo "  test-rdpac         - Build+run the RDPAC parity gate and corner cases"
+	@echo "  udlf-strict        - Build bin/udlf_strict (no fast-math; required by BFSTree)"
 	@echo "  test-bfstree       - Build+run the BFSTree hypothesis, input-contract and bit-exactness gates"
 	@echo "  help               - Show this help message"

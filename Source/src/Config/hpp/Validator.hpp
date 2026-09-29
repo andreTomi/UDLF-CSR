@@ -135,6 +135,15 @@ class Validator {
         {"PARAM_RDPAC_K_END", {15, {}, false}},
         {"PARAM_RDPAC_K_INC", {1, {}, false}},
 
+        // BFSTree Parameters (only the RBO metric is ported; see
+        // Methods/hpp/BFSTree.hpp). PARAM_BFSTREE_B is the F5/F7 row batch:
+        // measured table 256 for L=1400, 1024 for L=100.
+        {"PARAM_BFSTREE_L", {1400, {}, false}},
+        {"PARAM_BFSTREE_K", {20, {}, false}},
+        {"PARAM_BFSTREE_B", {256, {}, false}},
+        {"PARAM_BFSTREE_CORRELATION_METRIC",
+         {std::string("RBO"), {std::string("RBO")}, false}},
+
         // RECKNNGRAPH Parameters
         {"PARAM_RECKNNGRAPH_L", {200, {}, false}},
         {"PARAM_RECKNNGRAPH_K", {15, {}, false}},
