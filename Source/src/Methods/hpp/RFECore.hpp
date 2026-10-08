@@ -615,13 +615,17 @@ void f4_combine_reverse_emb() {
   // would differ from the legacy's `if (found)` on the first term -- 0.0f + 0.0f
   // is fine, but the legacy SKIPS the add entirely, and reproducing "skip" via
   // an arithmetic no-op is exactly the kind of rewrite this port does not do.
+  // M1: skip non-finite sim values (bad_sim) to avoid propagating NaN/Inf
   static float merge_sim(const std::vector<std::pair<idx_t, float>>& a,
-                         const std::vector<std::pair<idx_t, float>>& b) {
+                           const std::vector<std::pair<idx_t, float>>& b) {
     float sim = 0;
     std::size_t ib = 0;
     for (const auto& kv : a) {
       while (ib < b.size() && b[ib].first < kv.first) ++ib;
-      if (ib < b.size() && b[ib].first == kv.first) sim += kv.second * b[ib].second;
+      if (ib < b.size() && b[ib].first == kv.first) {
+        float prod = kv.second * b[ib].second;
+        if (std::isfinite(prod)) sim += prod;  // M1: skip non-finite products
+      }
     }
     return sim;
   }
@@ -905,6 +909,12 @@ void f4_combine_reverse_emb() {
         a[(std::size_t)l_ + e] = (extras[e] == q) ? diag_pin_ : vals[e];
       }
 
+      // M2: guarda não-finito no F7b - check for non-finite values before sorting
+      for (std::size_t s = 0; s < cap; ++s) {
+        if (!std::isfinite(a[s])) {
+          a[s] = 0.0f;  // M2: replace non-finite with 0.0f to avoid NaN/Inf propagation
+        }
+      }
       std::vector<std::size_t> ord(cap);
       for (std::size_t s = 0; s < cap; ++s) ord[s] = s;
       std::stable_sort(ord.begin(), ord.end(),
