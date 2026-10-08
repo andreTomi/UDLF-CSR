@@ -272,6 +272,43 @@ test-bfstree:
 	cmp /tmp/bfstree_c_t1.out /tmp/bfstree_c_t12.out
 	OMP_WAIT_POLICY=PASSIVE bash tests/gate_bfstree.sh
 
+# RFE port: TU check + factory registration, parity gate against legacy pins,
+# corner cases, strict thread determinism (1/2/4/8/12), bench-level gates,
+# ASan+UBSan. Identity contract -> STRICT_FLAGS (no fast-math).
+# Run from Source/: make test-rfe
+test-rfe:
+	# 1. TU check (header compiles as the product includes it)
+	$(CC) -std=gnu++23 -fsyntax-only -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_rfe_tu.cpp
+
+	# 2. Strict-build guard (like BFSTree): must ALLOW under STRICT, REFUSE under fast-math
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_rfe_guard.cpp -o /tmp/check_rfe_guard_strict
+	$(CC) -std=gnu++2b -O2 -ffast-math -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_rfe_guard.cpp -o /tmp/check_rfe_guard_fastmath
+	/tmp/check_rfe_guard_strict | grep -q "GUARD ALLOWED"
+	/tmp/check_rfe_guard_fastmath | grep -q "GUARD REFUSED"
+
+	# 3. Parity gate (BENCH regime: -O2 -ffp-contract=off)
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_rfe_parity.cpp -o /tmp/test_rfe_parity
+	/tmp/test_rfe_parity
+
+	# 4. Corner cases
+	$(CC) -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I./src -I./src/Core/hpp tests/test_rfe_corner.cpp -o /tmp/test_rfe_corner
+	/tmp/test_rfe_corner
+
+	# 5. Thread determinism (md5 identical across 1/2/4/8/12)
+	OMP_NUM_THREADS=1 /tmp/test_rfe_parity > /tmp/rfe_t1.out
+	OMP_NUM_THREADS=12 /tmp/test_rfe_parity > /tmp/rfe_t12.out
+	cmp /tmp/rfe_t1.out /tmp/rfe_t12.out
+
+	# 6. ASan+UBSan (parity + corner, 4 threads)
+	$(CC) -std=gnu++2b -O1 -g -fopenmp -fsanitize=address,undefined -fno-omit-frame-pointer -I./src -I./src/Core/hpp tests/test_rfe_parity.cpp -o /tmp/test_rfe_parity_san
+	$(CC) -std=gnu++2b -O1 -g -fopenmp -fsanitize=address,undefined -fno-omit-frame-pointer -I./src -I./src/Core/hpp tests/test_rfe_corner.cpp -o /tmp/test_rfe_corner_san
+	OMP_NUM_THREADS=4 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 /tmp/test_rfe_parity_san > /tmp/rfe_san1.out 2>&1 || { tail -30 /tmp/rfe_san1.out; exit 1; }
+	OMP_NUM_THREADS=4 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 /tmp/test_rfe_corner_san > /tmp/rfe_san2.out 2>&1 || { tail -30 /tmp/rfe_san2.out; exit 1; }
+	if grep -q -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/rfe_san1.out /tmp/rfe_san2.out; then \
+	  grep -a -m10 -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/rfe_san1.out /tmp/rfe_san2.out; exit 1; \
+	fi
+	@echo "=== RFE test-rfe: OK ==="
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -289,4 +326,5 @@ help:
 	@echo "  test-rdpac         - Build+run the RDPAC parity gate and corner cases"
 	@echo "  udlf-strict        - Build bin/udlf_strict (no fast-math; required by BFSTree)"
 	@echo "  test-bfstree       - Build+run the BFSTree hypothesis, input-contract and bit-exactness gates"
+	@echo "  test-rfe           - Build+run the RFE parity gate, corner cases, thread determinism and sanitizers"
 	@echo "  help               - Show this help message"

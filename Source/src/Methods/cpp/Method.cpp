@@ -10,6 +10,7 @@
 #include "LHRR.hpp"
 #include "RDPAC.hpp"
 #include "BFSTree.hpp"
+#include "RFE.hpp"
 
 MethodRegister<Cprr> Cprr::signInMethod("CPRR");
 MethodRegister<CprrSparse> CprrSparse::signInMethod("CPRR_SPARSE");
@@ -23,3 +24,4 @@ MethodRegister<LHRRSparse> LHRRSparse::signInMethod("LHRR_SPARSE");
 MethodRegister<LHRREigen> LHRREigen::signInMethod("LHRR_EIGEN");
 MethodRegister<RDPAC> RDPAC::signInMethod("RDPAC");
 MethodRegister<BFSTree> BFSTree::signInMethod("BFSTree");
+MethodRegister<RFE> RFE::signInMethod("RFE");
