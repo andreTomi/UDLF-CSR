@@ -1008,6 +1008,34 @@ void f4_combine_reverse_emb() {
     return out;
   }
 
+  // H4: validate input at the START of run() -- O(N*L) fail-fast before any computation
+  // Checks: all ids in [0, n), each row has exactly l distinct ids, self at index 0.
+  void validate_input() {
+    // Check all ids in [0, n) and each row has exactly l entries
+    std::vector<char> seen((std::size_t)n_, 0);
+    for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
+      std::size_t base = (std::size_t)l_ * q;
+      // Check self at position 0
+      if (rk_[(std::size_t)l_ * q] != (int)q) {
+        throw std::runtime_error("RFE: row " + std::to_string(q) + " does not have self at index 0");
+      }
+      for (int i = 0; i < l_; ++i) {
+        int v = rk_[(std::size_t)l_ * q + i];
+        if (v < 0 || v >= n_) {
+          throw std::runtime_error("RFE: row " + std::to_string(q) + " has id " + std::to_string(v) + " out of range [0, " + std::to_string(n_) + ")");
+        }
+        if (seen[(std::size_t)v]) {
+          throw std::runtime_error("RFE: row " + std::to_string(q) + " has duplicate id " + std::to_string(v));
+        }
+        seen[(std::size_t)v] = 1;
+      }
+      // Reset seen for next row
+      for (int i = 0; i < l_; ++i) {
+        seen[(std::size_t)rk_[(std::size_t)l_ * q + i]] = 0;
+      }
+    }
+  }
+
   // THE ENTRY POINT. This is the ONLY pipeline the port is allowed to run, and
   // the parity gate calls THIS rather than spelling the sequence out again.
   //
@@ -1023,6 +1051,9 @@ void f4_combine_reverse_emb() {
   // this method REFUSES those configs at construction rather than skipping them
   // here and silently emitting different rank lists.
   void run() {
+    // H4: validate input at the START of run() -- O(N*L) fail-fast before any computation
+    validate_input();
+
     // The profile lives HERE, beside the sequence, not in the bench. A profile
     // outside run() would measure its own copy -- which is the defect X9 names,
     // and it is exactly how the pre-t-loop "full pipeline" numbers happened.
