@@ -113,43 +113,48 @@ class RFECore {
     alloc.reserve((std::size_t)nt);
     for (int i = 0; i < nt; ++i) alloc.emplace_back();
     std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
+    const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
 
     const double t_loop_0 = prof ? omp_get_wtime() : 0.0;
     std::vector<double> p_cells((std::size_t)nt, 0.0);
     std::vector<long long> p_absent((std::size_t)nt, 0);
 
-    #pragma omp parallel
-    {
+    // Refactored to use parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+    // Each iteration processes one chunk of rows. The tid is implicit via omp_get_thread_num().
+    std::vector<double> p_cells_chunk((std::size_t)nt, 0.0);
+    std::vector<long long> p_absent_chunk((std::size_t)nt, 0);
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
       const int tid = omp_get_thread_num();
       auto& a = *alloc[(std::size_t)tid].ptr;
-      const std::size_t chunk =
-          ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
-      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
-      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
       ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
       double t_row = prof ? omp_get_wtime() : 0.0;
       for (std::size_t q = r0; q < r1; ++q) {
         for (int i = 0; i < l_; ++i) {
           const int img = rk_[(std::size_t)l_ * q + (std::size_t)i];
           const int posqi = i + 1;
-          // getPosition(img_rl_i, q): where does q sit in img_rl_i's OWN list.
-          // The legacy scans O(L) per call and returns l+2 when absent; the
-          // position index answers the same thing in O(log L) (H9: 0 mismatches
-          // over every (q,i) pair, absent cases included).
           const int posiq = position_of((idx_t)img, (idx_t)q);
-          if (prof && posiq == l_ + 2) ++p_absent[(std::size_t)tid];
+          if (prof && posiq == l_ + 2) ++p_absent_chunk[(std::size_t)tid];
           const float v = rank_norm_cell(posqi, posiq);
           Triplet* t = a.allocate();
           t->row = (idx_t)q;
           t->col = (idx_t)img;
           t->value = v;
-          t->is_set = false;   // one record per (q,img): i is unique per row
+          t->is_set = false;
         }
         if (prof) {
           const double now = omp_get_wtime();
-          p_cells[(std::size_t)tid] += now - t_row;
+          p_cells_chunk[(std::size_t)tid] += now - t_row;
           t_row = now;
         }
+      }
+    }
+    if (prof) {
+      for (int i = 0; i < nt; ++i) {
+        p_cells[(std::size_t)i] += p_cells_chunk[(std::size_t)i];
+        p_absent[(std::size_t)i] += p_absent_chunk[(std::size_t)i];
       }
     }
     const double t_loop_1 = prof ? omp_get_wtime() : 0.0;
@@ -235,13 +240,14 @@ class RFECore {
     std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
     const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
 
-    #pragma omp parallel
-    {
+    // Refactored to parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
       const int tid = omp_get_thread_num();
       auto& a = *alloc[(std::size_t)tid].ptr;
       EmbAcc& acc = accs[(std::size_t)tid];
-      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
-      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
       ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
 
       for (std::size_t q = r0; q < r1; ++q) {
@@ -359,12 +365,13 @@ void f4_combine_reverse_emb() {
   std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
   const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
 
-  #pragma omp parallel
-  {
+  // Refactored to parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+  #pragma omp parallel for schedule(static) num_threads(nt)
+  for (int c = 0; c < nt; ++c) {
     const int tid = omp_get_thread_num();
     auto& a = *alloc[(std::size_t)tid].ptr;
-    const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
-    const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+    const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+    const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
     ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
 
     for (std::size_t q = r0; q < r1; ++q) {
@@ -434,11 +441,12 @@ void f4_combine_reverse_emb() {
     sorted_emb_.assign((std::size_t)n_, std::vector<int>());
     const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
 
-    #pragma omp parallel
-    {
+    // Refactored to parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
       const int tid = omp_get_thread_num();
-      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
-      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
       // Per-thread scratch, reused: the legacy allocates a fresh vector per row,
       // but capacity reuse cannot change std::sort's result.
       std::vector<std::pair<int, float>> A;
@@ -490,11 +498,12 @@ void f4_combine_reverse_emb() {
     const int nt = omp_get_max_threads();
     const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
 
-    #pragma omp parallel
-    {
+    // Refactored to parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
       const int tid = omp_get_thread_num();
-      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
-      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
       for (std::size_t q = r0; q < r1; ++q) {
         float eeValue = 0;
         int pos = 0;
@@ -560,15 +569,16 @@ void f4_combine_reverse_emb() {
     for (int i = 0; i < nt; ++i) alloc7a.emplace_back();
     std::vector<std::pair<idx_t, idx_t>> ranges7a((std::size_t)nt);
     const std::size_t chunk7a = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
-    #pragma omp parallel
-    {
+    // Refactored to parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
       const int tid = omp_get_thread_num();
       auto& a = *alloc7a[(std::size_t)tid].ptr;
-      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk7a);
-    const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk7a);
-    ranges7a[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
-    std::vector<std::pair<idx_t, float>> ra, rb;
-    for (std::size_t q = r0; q < r1; ++q) {
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk7a);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk7a);
+      ranges7a[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
+      std::vector<std::pair<idx_t, float>> ra, rb;
+      for (std::size_t q = r0; q < r1; ++q) {
       // Materialise row q ONCE: it is the left operand of every pair in this
       // row. H1b bounds a row at k + k^2 cells, independent of n, so this is
       // cheap and keeps the memory O(k^2) rather than O(nnz).
@@ -677,13 +687,14 @@ void f4_combine_reverse_emb() {
     std::vector<long long> p_raw((std::size_t)nt, 0), p_uniq((std::size_t)nt, 0),
                           p_inn((std::size_t)nt, 0);
 
-    #pragma omp parallel
-    {
+    // Refactored to parallel for over chunks (H3: robust to OMP_DYNAMIC/THREAD_LIMIT)
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
       const int tid = omp_get_thread_num();
       auto& a = *alloc[(std::size_t)tid].ptr;
       RowAcc& acc = accs[(std::size_t)tid];
-      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
-      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
       ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
 
       for (std::size_t i = r0; i < r1; ++i) {
