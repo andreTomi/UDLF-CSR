@@ -167,3 +167,74 @@ if grep -q -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/bf_san1.out /tm
 fi
 echo "=== BFSTree ASan/UBSan: OK ==="
 echo "=== BFSTree framework gates: OK ==="
+
+# Etapa 9: RFE framework gates (registered method, strict regime)
+# TU check, parity vs legacy pins, corner cases, strict md5 equality
+# across 1/2/4/8/12 threads, serial-vs-parallel bench (PASSIVE) and
+# ASan+UBSan. Additive: stages 1-8 and their historical md5s untouched.
+
+echo "=== RFE framework: TU check (factory registration, header-only method) ==="
+g++ -std=gnu++23 -fsyntax-only -fopenmp -I Source/src -I Source/src/Config/hpp \
+    -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp \
+    -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp \
+    Source/tests/check_rfe_tu.cpp || exit 1
+echo "=== Instantiation check: OK ==="
+
+echo "=== RFE strict-build guard (strict=ALLOW, fast-math=REFUSE) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Config/hpp \
+    -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp \
+    -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp \
+    Source/tests/check_rfe_guard.cpp -o /tmp/check_rfe_guard_strict || exit 1
+g++ -std=gnu++2b -O2 -fopenmp -ffast-math -I Source/src -I Source/src/Config/hpp \
+    -I Source/src/Config/models -I Source/src/Core/hpp -I Source/src/Methods/hpp \
+    -I Source/src/Evaluation/hpp -I Source/src/Utils/hpp \
+    Source/tests/check_rfe_guard.cpp -o /tmp/check_rfe_guard_fastmath || exit 1
+/tmp/check_rfe_guard_strict   | grep -q "GUARD ALLOWED" || { echo "RFE guard FAILED: strict build must ALLOW"; exit 1; }
+/tmp/check_rfe_guard_fastmath | grep -q "GUARD REFUSED" || { echo "RFE guard FAILED: fast-math build must REFUSE"; exit 1; }
+echo "  strict -> GUARD ALLOWED; fast-math -> GUARD REFUSED"
+
+echo "=== RFE framework: parity vs legacy pins + corner cases ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
+    Source/tests/test_rfe_parity.cpp -o /tmp/test_rfe_parity || exit 1
+/tmp/test_rfe_parity > /tmp/rfe_par.out 2>&1 || { tail -40 /tmp/rfe_par.out; exit 1; }
+grep -v BuildV2 /tmp/rfe_par.out
+
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
+    Source/tests/test_rfe_corner.cpp -o /tmp/test_rfe_corner || exit 1
+/tmp/test_rfe_corner > /tmp/rfe_cor.out 2>&1 || { tail -40 /tmp/rfe_cor.out; exit 1; }
+grep -v BuildV2 /tmp/rfe_cor.out
+
+echo "=== RFE thread determinism (strict: all md5 must be identical) ==="
+rfe_ref_md5=""
+rfe_det_ok=1
+for t in 1 2 4 8 12; do
+  m=$(OMP_NUM_THREADS=$t /tmp/test_rfe_parity | grep -v BuildV2 | md5sum | cut -d' ' -f1)
+  echo "  parity t=$t md5=$m"
+  if [ -z "$rfe_ref_md5" ]; then rfe_ref_md5=$m; elif [ "$m" != "$rfe_ref_md5" ]; then rfe_det_ok=0; fi
+done
+[ "$rfe_det_ok" = 1 ] || { echo "RFE thread determinism FAILED: md5 mismatch across thread counts"; exit 1; }
+echo "=== RFE thread determinism: OK ==="
+
+echo "=== RFE serial-vs-parallel bench (OMP_WAIT_POLICY=PASSIVE) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
+    Source/bench/bench_rfe_census.cpp -o /tmp/bench_rfe_census || exit 1
+OMP_NUM_THREADS=1  OMP_WAIT_POLICY=PASSIVE /tmp/bench_rfe_census /home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin 400 20 2 0.1 > /tmp/rfe_t1.out  2>&1 || exit 1
+OMP_NUM_THREADS=12 OMP_WAIT_POLICY=PASSIVE /tmp/bench_rfe_census /home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin 400 20 2 0.1 > /tmp/rfe_t12.out 2>&1 || exit 1
+grep -E 'ck_rk=' /tmp/rfe_t1.out  > /tmp/rfe_t1.ck
+grep -E 'ck_rk=' /tmp/rfe_t12.out > /tmp/rfe_t12.ck
+cmp /tmp/rfe_t1.ck /tmp/rfe_t12.ck || { echo "RFE serial-vs-parallel checksum mismatch"; cat /tmp/rfe_t1.ck /tmp/rfe_t12.ck; exit 1; }
+cat /tmp/rfe_t1.ck
+
+echo "=== RFE ASan/UBSan (parity + corner, 4 threads) ==="
+g++ -std=gnu++2b -O1 -g -fopenmp -fsanitize=address,undefined -fno-omit-frame-pointer \
+    -I Source/src -I Source/src/Core/hpp Source/tests/test_rfe_parity.cpp -o /tmp/test_rfe_parity_san || exit 1
+g++ -std=gnu++2b -O1 -g -fopenmp -fsanitize=address,undefined -fno-omit-frame-pointer \
+    -I Source/src -I Source/src/Core/hpp Source/tests/test_rfe_corner.cpp -o /tmp/test_rfe_corner_san || exit 1
+OMP_NUM_THREADS=4 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 /tmp/test_rfe_parity_san > /tmp/rfe_san1.out 2>&1 || { tail -30 /tmp/rfe_san1.out; exit 1; }
+OMP_NUM_THREADS=4 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 /tmp/test_rfe_corner_san > /tmp/rfe_san2.out 2>&1 || { tail -30 /tmp/rfe_san2.out; exit 1; }
+if grep -q -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/rfe_san1.out /tmp/rfe_san2.out; then
+  grep -a -m10 -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/rfe_san1.out /tmp/rfe_san2.out
+  exit 1
+fi
+echo "=== RFE ASan/UBSan: OK ==="
+echo "=== RFE framework gates: OK ==="
