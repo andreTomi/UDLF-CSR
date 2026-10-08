@@ -1,0 +1,4 @@
+  PROD RKF6 N=72000 gram_nnz=11132644 gram_zeros=7071700 (63.52% of nnz) incElemsL_rows=72000 ck_gram=0xdcc6e3c6d270f2dc | T_f6=2.73s
+  PROD RKF7B N=72000 ck_rk=0x8079b48d44cbd874 | T_f7b=0.16s
+  PROD RKF6 N=72000 gram_nnz=11132644 gram_zeros=7071700 (63.52% of nnz) incElemsL_rows=72000 ck_gram=0xdcc6e3c6d270f2dc | T_f6=2.44s
+  PROD RKF7B N=72000 ck_rk=0x8079b48d44cbd874 | T_f7b=0.16s

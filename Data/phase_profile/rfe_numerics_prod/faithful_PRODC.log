@@ -1,0 +1,11 @@
+RKCENSUS file=/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin bytes=115200000 cells=28800000 L=400 N=72000 k=10 t=2 pa=0.1
+RKSELF rows=72000 self_at_0=71448 (99.233%) self_in_L=72000 (100.000%) self_in_all=72000 (100.000%) out_of_range_ids=0
+  VERDICT grValue-theorem premise (self at 0): VIOLATED -- FINDINGS.md's theorem premise needs restating
+RKCONTRACT rows=72000 kept=72000 dropped_short=0 dropped_noself=0 first_bad=-1
+RKPIPE N=72000 L=400 k=10 t=2 | sim_nnz=28800000 emb_nnz=1595355 emb_zeros=421667 sorted_emb_keys=1595355 mean_row=22.2 | T_f1=5.04s T_f24=0.00s T_f5=0.00s
+RKGRAM N=72000 nnz_est=5297704 row_max=436 mean_row=73.6 rho_gram=0.001022 (T_census=0.06s)
+RKMEM  legacy dense = 20.74 GB | CSR gram (unpruned) = 0.042 GB | CSR gram (union-pruned to L) = 0.042 GB [prune would SAVE 0.0%]
+RKTOTAL 5.13s
+RKF6 N=72000 gram_nnz=5297704 gram_zeros=2139536 (40.39% of nnz) incElemsL_rows=72000 ck_gram=0xa2a8b83996537b97 | T_f6=0.00s
+RKF7B N=72000 ck_rk=0x4c9039d60bfbdc2e | T_f7b=0.00s
+RKPIPEFULL total=5.27s (T_f1=5.04 T_f24=0.00 T_f5=0.00 T_f6=0.00 T_f7b=0.00) VmHWM=1496MB

@@ -1,0 +1,140 @@
+=== step3e_linnaeus_touch.sh 2026-10-07T23:15:40Z ===
+flags: -std=gnu++2b -O2 -ffp-contract=off -fopenmp  threads: 12  RFE_FULL=1 RFE_F1PROF=1  pa=0.1 t=2
+[1/3] derivar linnaeus_L400.txt
+RKCV wrote=/tmp/linnaeus_touch/linnaeus_L400.txt rows=8000 cols=400 md5=dde830919922f758424282efaec41613
+  md5=dde830919922f758424282efaec41613 (esperado dde830919922f758424282efaec41613)
+[2/3] converter para .bin int32 LE
+bin cells=3200000 (esperado 3200000 = 8000*400)
+[3/3] census k=10 e k=20 (RFE_FULL: run() + leitura do Gram)
+--- k=10 (rc=0) ---
+RKCENSUS file=/tmp/linnaeus_touch/linnaeus_L400.bin bytes=12800000 cells=3200000 L=400 N=8000 k=10 t=2 pa=0.1
+RKSELF rows=8000 self_at_0=7995 (99.938%) self_in_L=8000 (100.000%) self_in_all=8000 (100.000%) out_of_range_ids=0
+  VERDICT grValue-theorem premise (self at 0): VIOLATED -- FINDINGS.md's theorem premise needs restating
+RKCONTRACT rows=8000 kept=8000 dropped_short=0 dropped_noself=0 first_bad=-1
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 360997
+  [BuildV2] Total triplets: 360997
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 283843
+  [BuildV2] Total triplets: 283843
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 259574
+  [BuildV2] Total triplets: 259574
+  [BuildV2] Total triplets: 2306216
+RKPIPE N=8000 L=400 k=10 t=2 | sim_nnz=3200000 emb_nnz=259574 emb_zeros=119540 sorted_emb_keys=259574 mean_row=32.4 | T_f1=0.99s T_f24=0.00s T_f5=0.00s
+RKGRAM N=8000 nnz_est=2306216 row_max=1347 mean_row=288.3 rho_gram=0.036035 (T_census=0.02s)
+RKMEM  legacy dense = 0.26 GB | CSR gram (unpruned) = 0.018 GB | CSR gram (union-pruned to L) = 0.016 GB [prune would SAVE 13.8%]
+RKTOTAL 1.02s
+RKF6 N=8000 gram_nnz=2306216 gram_zeros=1648730 (71.49% of nnz) incElemsL_rows=8000 ck_gram=0xa584ebbe38e86571 | T_f6=0.18s
+RKRUNPROF N=8000 L=400 k=10 t=2 threads=12  (t-loop INCLUDED)
+  t_total=0.986
+    f1_rank_norm          0.204 s ( 20.7%)
+    embRR f2 (t-loop)    0.034 s (  3.4%)
+    embRR f3 (t-loop)    0.005 s (  0.5%)
+    embRR f4 (t-loop)    0.024 s (  2.5%)
+    f7a rerank (t-loop)    0.457 s ( 46.3%)
+    embRR FINAL          0.031 s (  3.1%)
+    f5 sortEmb           0.004 s (  0.4%)
+    f5 effectEst         0.002 s (  0.2%)
+    f6 Gram+incElems    0.183 s ( 18.6%)
+    f7b CPRR tail        0.034 s (  3.5%)
+  per t-loop iteration (counts computed OUTSIDE the loop):
+    it0 emb_nnz=360997 emb_zeros=215475 f7a_row_visits=140924134 f7a_merges=3200000
+    it1 emb_nnz=283843 emb_zeros=137665 f7a_row_visits=112093820 f7a_merges=3200000
+    final emb_nnz=259574  f7a_merges_total=6400000
+  PEAK VmHWM by boundary (clear_refs=5 before each phase):
+    after f1            162.1 MB
+    after t-loop        199.7 MB
+    after embRR         180.2 MB
+    after f5            180.7 MB
+    after f6 Gram       221.6 MB
+    after f7b           221.7 MB
+RKF1PROF N=8000 L=400 k=10 threads=12
+  t_total=0.203 (wall)
+    t_index    =0.076 (37.5%) SERIAL build_position_index
+    t_loop     =0.047 (23.2%) parallel region wall
+    t_cells_max=0.045 (22.2%) CRITICAL PATH inside the loop
+    t_build    =0.048 (23.9%) SERIAL build_from_partial_results
+    t_sortrows =0.031 (15.3%) sort_ranked_lists
+  cells=3200000  position_of absent(l+2)=1748484 (54.6401%)
+RKF6PROF N=8000 threads=12
+  t_total=0.166 (wall)  t_inv=0.004 (serial)  t_build=0.022 (serial)
+  phase        sum(thread-s)  %capacity   max(critical)  %wall
+    t_disc      0.044        2.2%        0.006       3.6%  pass1 discovery
+    t_sort      0.463       23.2%        0.053      31.8%  finalize_candidates
+    t_acc       0.871       43.7%        0.093      55.7%  pass2 ORDERED acc
+    t_emit      0.019        0.9%        0.002       1.4%  triplet emission
+  work: cand_raw=9504778 cand_uniq=2306216 inner_iters=9504778
+  raw/uniq=4.12  iters/uniq=4.12  inv_min=1 inv_max=123 (imbalance 123.0x)
+  est insert-sort comparisons ~ cand_raw^2/(2*n) = 5.65e+09 vs binary-search steps ~ inner_iters*log2(uniq) = 7.77e+07
+RKF7B N=8000 ck_rk=0x09b624c5caae064c | T_f7b=0.03s
+RKPIPEFULL total=1.05s (T_f1=0.99 T_f24=0.00 T_f5=0.00 T_f6=0.18 T_f7b=0.03) VmHWM=221MB
+--- k=20 (rc=0) ---
+RKCENSUS file=/tmp/linnaeus_touch/linnaeus_L400.bin bytes=12800000 cells=3200000 L=400 N=8000 k=20 t=2 pa=0.1
+RKSELF rows=8000 self_at_0=7995 (99.938%) self_in_L=8000 (100.000%) self_in_all=8000 (100.000%) out_of_range_ids=0
+  VERDICT grValue-theorem premise (self at 0): VIOLATED -- FINDINGS.md's theorem premise needs restating
+RKCONTRACT rows=8000 kept=8000 dropped_short=0 dropped_noself=0 first_bad=-1
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 1025647
+  [BuildV2] Total triplets: 1025647
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 803825
+  [BuildV2] Total triplets: 803825
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 723345
+  [BuildV2] Total triplets: 723345
+  [BuildV2] Total triplets: 10123202
+RKPIPE N=8000 L=400 k=20 t=2 | sim_nnz=3200000 emb_nnz=723345 emb_zeros=326927 sorted_emb_keys=723345 mean_row=90.4 | T_f1=2.88s T_f24=0.00s T_f5=0.00s
+RKGRAM N=8000 nnz_est=10123202 row_max=4349 mean_row=1265.4 rho_gram=0.158175 (T_census=0.12s)
+RKMEM  legacy dense = 0.26 GB | CSR gram (unpruned) = 0.081 GB | CSR gram (union-pruned to L) = 0.024 GB [prune would SAVE 70.1%]
+RKTOTAL 3.01s
+RKF6 N=8000 gram_nnz=10123202 gram_zeros=6904350 (68.20% of nnz) incElemsL_rows=8000 ck_gram=0xa77502078055a83d | T_f6=1.55s
+RKRUNPROF N=8000 L=400 k=20 t=2 threads=12  (t-loop INCLUDED)
+  t_total=2.848
+    f1_rank_norm          0.188 s (  6.6%)
+    embRR f2 (t-loop)    0.047 s (  1.6%)
+    embRR f3 (t-loop)    0.013 s (  0.5%)
+    embRR f4 (t-loop)    0.026 s (  0.9%)
+    f7a rerank (t-loop)    0.920 s ( 32.3%)
+    embRR FINAL          0.026 s (  0.9%)
+    f5 sortEmb           0.004 s (  0.1%)
+    f5 effectEst         0.001 s (  0.0%)
+    f6 Gram+incElems    1.545 s ( 54.3%)
+    f7b CPRR tail        0.068 s (  2.4%)
+  per t-loop iteration (counts computed OUTSIDE the loop):
+    it0 emb_nnz=1025647 emb_zeros=546961 f7a_row_visits=381041092 f7a_merges=3200000
+    it1 emb_nnz=803825 emb_zeros=371793 f7a_row_visits=303356968 f7a_merges=3200000
+    final emb_nnz=723345  f7a_merges_total=6400000
+  PEAK VmHWM by boundary (clear_refs=5 before each phase):
+    after f1            162.0 MB
+    after t-loop        224.9 MB
+    after embRR         202.3 MB
+    after f5            204.3 MB
+    after f6 Gram       394.7 MB
+    after f7b           330.6 MB
+RKF1PROF N=8000 L=400 k=20 threads=12
+  t_total=0.188 (wall)
+    t_index    =0.075 (39.9%) SERIAL build_position_index
+    t_loop     =0.039 (20.9%) parallel region wall
+    t_cells_max=0.037 (19.8%) CRITICAL PATH inside the loop
+    t_build    =0.044 (23.5%) SERIAL build_from_partial_results
+    t_sortrows =0.029 (15.7%) sort_ranked_lists
+  cells=3200000  position_of absent(l+2)=1748484 (54.6401%)
+RKF6PROF N=8000 threads=12
+  t_total=1.531 (wall)  t_inv=0.007 (serial)  t_build=0.095 (serial)
+  phase        sum(thread-s)  %capacity   max(critical)  %wall
+    t_disc      0.203        1.1%        0.027       1.7%  pass1 discovery
+    t_sort      3.683       20.0%        0.436      28.5%  finalize_candidates
+    t_acc       8.200       44.6%        0.968      63.2%  pass2 ORDERED acc
+    t_emit      0.104        0.6%        0.012       0.8%  triplet emission
+  work: cand_raw=80332437 cand_uniq=10123202 inner_iters=80332437
+  raw/uniq=7.94  iters/uniq=7.94  inv_min=1 inv_max=395 (imbalance 395.0x)
+  est insert-sort comparisons ~ cand_raw^2/(2*n) = 4.03e+11 vs binary-search steps ~ inner_iters*log2(uniq) = 8.28e+08
+RKF7B N=8000 ck_rk=0xcb530cc3a7006366 | T_f7b=0.07s
+RKPIPEFULL total=3.08s (T_f1=2.88 T_f24=0.00 T_f5=0.00 T_f6=1.55 T_f7b=0.07) VmHWM=330MB
+  k=10 ck_gram=0xa584ebbe38e86571 ck_rk=0x09b624c5caae064c nnz_est=2306216 gram_nnz=2306216
+  k=20 ck_gram=0xa77502078055a83d ck_rk=0xcb530cc3a7006366 nnz_est=10123202 gram_nnz=10123202
+  k=20 ck_gram/nnz/rho: NOVA medicao fiel (sem expectativa pre-existente -- registrar)
+STEP3E: OK -- census fiel reproduz os dois pins do gate em k=10 e o ck_rk
+        fiel em k=20; nnz_est == gram_nnz nos dois; ck_gram fiel de
+        linnaeus k=20 medido (novo -- registrar em FINDINGS).

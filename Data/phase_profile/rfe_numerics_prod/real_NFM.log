@@ -1,0 +1,4 @@
+  NFM RKF6 N=72000 gram_nnz=11132644 gram_zeros=7071700 (63.52% of nnz) incElemsL_rows=72000 ck_gram=0x2dfa5891d430e9af | T_f6=2.54s
+  NFM RKF7B N=72000 ck_rk=0x0db02fefdf6bd62c | T_f7b=0.16s
+  NFM RKF6 N=72000 gram_nnz=11132644 gram_zeros=7071700 (63.52% of nnz) incElemsL_rows=72000 ck_gram=0x2dfa5891d430e9af | T_f6=2.51s
+  NFM RKF7B N=72000 ck_rk=0x0db02fefdf6bd62c | T_f7b=0.16s

@@ -1,0 +1,58 @@
+== PROD T=1 (exec_rc=0)
+     ck_gram=0xe91044f3d05246d6
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+== PRODC T=1 (exec_rc=0)
+     ck_gram=0xe91044f3d05246d6
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+== NFM T=1 (exec_rc=0)
+     ck_gram=0x9cf3d5102ffa87e9
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+== BENCH T=1 (exec_rc=0)
+     ck_gram=0x9cf3d5102ffa87e9
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+
+== PROD T=12 (exec_rc=0)
+     ck_gram=0xe91044f3d05246d6
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+== PRODC T=12 (exec_rc=0)
+     ck_gram=0xe91044f3d05246d6
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+== NFM T=12 (exec_rc=0)
+     ck_gram=0x9cf3d5102ffa87e9
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+== BENCH T=12 (exec_rc=0)
+     ck_gram=0x9cf3d5102ffa87e9
+     core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+     E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+     legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+     legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+   RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+

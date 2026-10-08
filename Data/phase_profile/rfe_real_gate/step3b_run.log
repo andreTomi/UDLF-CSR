@@ -1,0 +1,67 @@
+prod_flags : -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32 -ffp-contract=off -ffast-math -funsafe-math-optimizations -ffinite-math-only
+bench_flags: -std=gnu++2b -O2 -ffp-contract=off -fopenmp
+cpu        : Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz
+
+[1/2] pin PASSES under the strict regime (BENCH)
+      ok  : X8: ck_gram == 0x9cf3d5102ffa87e9 (ABSOLUTE pin, strict regime)
+      ok  : X8 SENTINEL: run() ck_gram == 0x46322e3d65fe6403 (strict regime, post-t-loop state)
+    RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
+
+[2/2] pin FAILS under the product's regime (PROD)  <-- the point of X8
+      FAIL: X8: ck_gram == 0x9cf3d5102ffa87e9 (ABSOLUTE pin, strict regime)
+      FAIL: X8 SENTINEL: run() ck_gram == 0x46322e3d65fe6403 (strict regime, post-t-loop state)
+    RFE PARITY F1+F2+F3+F4+F5+F6+F7: 2 FAILURE(S)
+    -> pin falhou sob PROD (rc=1), como deve.
+
+[3/3] pins HOLD on real data -- 6 configs (3 datasets; k in {5,10,20})
+    RKCV wrote=/tmp/rk_real/corel5k_L400.txt rows=5000 cols=400 md5=abc57bdd7aed6ee66e7fbfc32cbd3301
+    RKCV wrote=/tmp/rk_real/corel5k_L1000.txt rows=5000 cols=1000 md5=0fba3ef9d5fab266dceda912c7082877
+    RKCV wrote=/tmp/rk_real/linnaeus_L400.txt rows=8000 cols=400 md5=dde830919922f758424282efaec41613
+      veredito: OK
+      (F6 section, pre-t-loop, for contrast): 
+    N=5000 L=400 k=5
+      ck_gram got=0x0ff2642751009152 want=0x0ff2642751009152
+      ck_rk    got=0x36f430f2ddc9d424 want=0x36f430f2ddc9d424
+      X9 curto got=0x6f7e36fe5896edee
+      veredito: OK
+      (F6 section, pre-t-loop, for contrast): 
+    N=5000 L=400 k=10
+      ck_gram got=0x28bdf35f87bfff3d want=0x28bdf35f87bfff3d
+      ck_rk    got=0xb2d84793a18b7e43 want=0xb2d84793a18b7e43
+      X9 curto got=0x473fce01d34187bd
+      veredito: OK
+      (F6 section, pre-t-loop, for contrast): 
+    N=5000 L=400 k=20
+      ck_gram got=0x3218b119e9aabc2c want=0x3218b119e9aabc2c
+      ck_rk    got=0x2c264a0c6b975da9 want=0x2c264a0c6b975da9
+      X9 curto got=0x2c93f839b38c3a8c
+      veredito: OK
+      (F6 section, pre-t-loop, for contrast): 
+    N=5000 L=1000 k=10
+      ck_gram got=0x4ecba5630543276a want=0x4ecba5630543276a
+      ck_rk    got=0x7ce087aad8d272f1 want=0x7ce087aad8d272f1
+      X9 curto got=0x1f80c3032ed2c4be
+      veredito: OK
+      (F6 section, pre-t-loop, for contrast): 
+    N=5000 L=1000 k=20
+      ck_gram got=0x045f449c61d55fb5 want=0x045f449c61d55fb5
+      ck_rk    got=0x58162fc8a58e0739 want=0x58162fc8a58e0739
+      X9 curto got=0x42d265c7f25b5714
+      veredito: OK
+      (F6 section, pre-t-loop, for contrast): 
+    N=8000 L=400 k=10
+      ck_gram got=0xa584ebbe38e86571 want=0xa584ebbe38e86571
+      ck_rk    got=0x09b624c5caae064c want=0x09b624c5caae064c
+      X9 curto got=0xa47497d6d35097e5
+
+-- agregador final: veredito de TODOS os configs de dado real --
+  OK          : real_5000_400_k5.log
+  OK          : real_5000_400_k10.log
+  OK          : real_5000_400_k20.log
+  OK          : real_5000_1000_k10.log
+  OK          : real_5000_1000_k20.log
+  OK          : real_8000_400_k10.log
+STEP3B: OK -- pin passa em BENCH, FALHA em PROD (prova de que distingue), e
+        os 6 pins de dado real conferem; E2E Gram fiel e X9 presentes e
+        distinguindo em todos.
+Source/tests/step3b_real_gate.sh: 0 CRLF normalised -> /tmp/_gate_run.sh

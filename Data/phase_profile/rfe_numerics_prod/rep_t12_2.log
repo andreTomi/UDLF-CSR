@@ -1,0 +1,45 @@
+RKCENSUS file=/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin bytes=115200000 cells=28800000 L=400 N=72000 k=10 t=2 pa=0.1
+RKSELF rows=72000 self_at_0=71448 (99.233%) self_in_L=72000 (100.000%) self_in_all=72000 (100.000%) out_of_range_ids=0
+  VERDICT grValue-theorem premise (self at 0): VIOLATED -- FINDINGS.md's theorem premise needs restating
+RKCONTRACT rows=72000 kept=72000 dropped_short=0 dropped_noself=0 first_bad=-1
+RKPIPE N=72000 L=400 k=10 t=2 | sim_nnz=28800000 emb_nnz=1595355 emb_zeros=421667 sorted_emb_keys=1595355 mean_row=22.2 | T_f1=5.38s T_f24=0.00s T_f5=0.00s
+RKGRAM N=72000 nnz_est=5297704 row_max=436 mean_row=73.6 rho_gram=0.001022 (T_census=0.08s)
+RKMEM  legacy dense = 20.74 GB | CSR gram (unpruned) = 0.042 GB | CSR gram (union-pruned to L) = 0.042 GB [prune would SAVE 0.0%]
+RKTOTAL 5.50s
+RKF6 N=72000 gram_nnz=5297704 gram_zeros=2139536 (40.39% of nnz) incElemsL_rows=72000 ck_gram=0x6530a94efe1bff1a | T_f6=0.79s
+RKRUNPROF N=72000 L=400 k=10 t=2 threads=12  (t-loop INCLUDED)
+  t_total=5.361
+    f1_rank_norm          1.569 s ( 29.3%)
+    embRR f2 (t-loop)    0.119 s (  2.2%)
+    embRR f3 (t-loop)    0.024 s (  0.4%)
+    embRR f4 (t-loop)    0.053 s (  1.0%)
+    f7a rerank (t-loop)    2.498 s ( 46.6%)
+    embRR FINAL          0.078 s (  1.5%)
+    f5 sortEmb           0.007 s (  0.1%)
+    f5 effectEst         0.009 s (  0.2%)
+    f6 Gram+incElems    0.789 s ( 14.7%)
+    f7b CPRR tail        0.161 s (  3.0%)
+  per t-loop iteration (counts computed OUTSIDE the loop):
+    it0 emb_nnz=1957862 emb_zeros=698064 f7a_row_visits=805811592 f7a_merges=28800000
+    it1 emb_nnz=1698207 emb_zeros=474009 f7a_row_visits=696315459 f7a_merges=28800000
+    final emb_nnz=1595355  f7a_merges_total=57600000
+RKF1PROF N=72000 L=400 k=10 threads=12
+  t_total=1.566 (wall)
+    t_index    =0.692 (44.2%) SERIAL build_position_index
+    t_loop     =0.301 (19.2%) parallel region wall
+    t_cells_max=0.297 (19.0%) CRITICAL PATH inside the loop
+    t_build    =0.310 (19.8%) SERIAL build_from_partial_results
+    t_sortrows =0.263 (16.8%) sort_ranked_lists
+  cells=28800000  position_of absent(l+2)=11415456 (39.6370%)
+RKF6PROF N=72000 threads=12
+  t_total=0.644 (wall)  t_inv=0.079 (serial)  t_build=0.041 (serial)
+  phase        sum(thread-s)  %capacity   max(critical)  %wall
+    t_disc      0.190        2.5%        0.029       4.5%  pass1 discovery
+    t_sort      1.814       23.5%        0.186      28.9%  finalize_candidates
+    t_acc       3.072       39.7%        0.299      46.4%  pass2 ORDERED acc
+    t_emit      0.049        0.6%        0.008       1.3%  triplet emission
+  work: cand_raw=37723703 cand_uniq=5297704 inner_iters=37723703
+  raw/uniq=7.12  iters/uniq=7.12  inv_min=1 inv_max=90 (imbalance 90.0x)
+  est insert-sort comparisons ~ cand_raw^2/(2*n) = 9.88e+09 vs binary-search steps ~ inner_iters*log2(uniq) = 2.34e+08
+RKF7B N=72000 ck_rk=0x261f6b6bca514f76 | T_f7b=0.16s
+RKPIPEFULL total=5.64s (T_f1=5.38 T_f24=0.00 T_f5=0.00 T_f6=0.79 T_f7b=0.16) VmHWM=1496MB

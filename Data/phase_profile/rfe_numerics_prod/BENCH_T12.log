@@ -1,0 +1,96 @@
+RFE parity gate -- Step 2, F1 (rankNorm + sort)
+fixture N=200 L=40 k=10 t=2 pa=0.100 seed=42  [PINNED]
+  legacy: nnz=8000 ck_rk=0x3465e556d414ca79
+  core  : nnz=8000 ck_rk=0x3465e556d414ca79 ck_sim_dense=0x8afb15dd0502c7cb
+  ok  : F1: nnz == N*L (one written cell per rank-list slot)
+  ok  : F1: every similarity cell matches the legacy bit-exactly
+  expected row0 after sort by value (from the legacy's own cells): 190(2.07301e-05) 62(2.51644e-05) 154(3.05282e-05) 196(3.70097e-05) 150(5.42668e-05) 82(6.56254e-05)
+  legacy  row0 after rankNorm                        : 0(1) 95(0.0229052) 168(0.0156007) 130(0.00796153) 146(0.00729402) 29(0.00664948)
+  core    row0 after f1_rank_norm                   : 0(1) 95(0.0229052) 168(0.0156007) 130(0.00796153) 146(0.00729402) 29(0.00664948)
+  ok  : F1: rank lists match the legacy position by position
+  ok  : F1: self at position 0 in every row (sort pin)
+  ok  : F1: every id in [0,N)
+  ok  : F1: each row is a permutation of its input row (sort only reorders)
+
+-- F2: createEmb --
+  legacy emb keys=14651 | core emb keys=14651 | mismatched=0 | extra=0
+  exact-zero keys: legacy=2479 core=2479 (H2 says these are load-bearing)
+  ok  : F2: every emb value matches the legacy bit-exactly
+  ok  : F2: emb support (cell count) matches the legacy
+  ok  : F2: no cell the legacy lacks (no spurious insert)
+  ok  : F2: exact-zero cell count matches the legacy (zeros preserved, not filtered)
+  ok  : F2: pinned fixture DOES carry exact-zero emb keys (the premise)
+
+-- F3: createReverseEmb --
+  legacy remb cells=14651  core remb nnz=14651  value-diffs=0
+  remb rows: legacy has 0 empty-but-present, core has 200 non-empty
+  remb cells with no emb[q][col] counterpart: 8623
+  ok  : F3: every remb value matches the legacy bit-exactly
+  ok  : F3: no remb cell the legacy lacks (no spurious insert)
+  ok  : F3: core remb rows <= N
+  note: empty-row difference is expected and measured above; F4 reads these as 0.0f either way.
+
+-- F4: combineReverseEmb --
+  emb keys before combine=14651  after=14651 (legacy)  value-diffs=0  extra=0
+  post-combine exact-zero keys: 10209 of 14651 (69.68%)
+  ok  : F4: every combined emb value matches the legacy bit-exactly
+  ok  : F4: no cell the legacy lacks
+  ok  : F4: the support is UNCHANGED by the combine (keys kept, zeroed)
+  support check on the same input: legacy keys=14651 | combine() keys=5140 | merge() keys=4442
+    legacy keys combine() would DROP=9511  merge() would DROP=10209  (values alone cannot show this: 10209 of 14651 post-combine cells are exactly 0.0f, and get() reads 0 in both cases)
+  ok  : F4: CSRMatrix::combine DOES drop keys the legacy keeps (dedicated kernel justified)
+  ok  : F4: CSRMatrix::merge ALSO drops them (emission filter drops zeros)
+
+-- F5: sortEmb + effectEstimationEmb --
+  ok  : F5: sorted_emb KEY ORDER matches the legacy position by position
+  ok  : F5: sorted_emb row lengths match (support identical)
+  ok  : F5: every ee value matches the legacy bit-exactly
+  ok  : F5: sorted_ee ORDER matches the legacy (unstable tie-break reproduced)
+  positions where a STABLE sort would differ from the legacy order: 0 of 200
+  grValue=27.1544189  (theorem: > 0 always -- a 0 here would refute it)
+  ok  : F5: grValue (the max unnormalised ee) matches the legacy
+  ee pairs with EXACTLY equal normalised values: 0 of 19900
+  ck_ee=0x484e6c82e09b53ff ck_sorted_emb=0x8ef3378db5094594 ck_sorted_ee=0x12fdfcf13903c9b3
+
+-- F6: Gram + incElems (reRankingByCPRR core) --
+  incElems cells (legacy): 39996  core gram nnz: 39996
+  ok  : F6: every legacy incElems candidate survives in the Gram
+  ok  : F6: the Gram has no candidate the legacy lacks
+  ok  : F6: incElems cell count equals the Gram nnz (same support)
+  ok  : F6: every off-diagonal Gram value matches the legacy bit-exactly
+  off-diagonal Gram cells compared: 39796
+  exact-zero Gram cells: legacy=5950  core=5950  (14.88% of 39996 cells at N=200 L=40 k=10)
+  ok  : F6: the exact-zero Gram census matches the legacy
+  ok  : F6: incElemsL matches the legacy set for every row
+  ck_gram=0x9cf3d5102ffa87e9
+
+-- F7a: reRankingByEmbSim (the t-loop phase) --
+  ok  : F7a: rkLists after reRankingByEmbSim matches the legacy position by position
+  rk cells differing after one embRR pass: 0 of 8000
+
+-- E2E: full pipeline in legacy order (rankNorm + t x embRR + CP) --
+  F7b isolation: Gram cells differing from the legacy = 0 (zero-valued = 6616, compared = 39126)
+  ok  : F7b: the Gram comparison actually compared cells (not vacuous)
+  ok  : F7b: the Gram at the tail's input point matches the legacy (incl. the pow(2,30) diagonal read)
+  H8: union-prune rows differing=0  |  value-only-prune rows differing=88  (of 200; 6616 zero-valued Gram cells compared)
+  ok  : H8: the UNION prune reproduces the legacy's top-L for every row
+  ok  : H8: the prune comparison actually compared Gram cells (not vacuous)
+    PRUNE 200 40 10 2 0 88
+  F7b isolation: rkLists differing after the tail alone = 0 of 8000
+  ok  : F7b: the CPRR tail reproduces the legacy rank lists on a shared input
+  E2E final rkLists: legacy ck_rk=0x58ded033b72ded72  core ck_rk=0x58ded033b72ded72
+  cells differing: 0 of 8000  (identical)
+  ok  : E2E: the full pipeline in legacy order reproduces the final rank lists
+  ok  : E2E: ck_rk == 0x58ded033b72ded72 (Step 0 golden, full pipeline)
+
+-- F5: deliberate ee-tie fixtures --
+  MANY ties: all rows share one pattern N=200 L=40 k=10 pat= 1 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs=18145 | stable-sort would be wrong in 191/200
+  FEW ties: 3 patterns over 120 rows N=120 L=30 k= 8 pat= 3 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs= 3160 | stable-sort would be wrong in 80/120
+  MIXED: 40 patterns over 80 rows    N= 80 L=20 k= 6 pat=40 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs=   34 | stable-sort would be wrong in 11/80
+  DENSE: 2 patterns, small N, large k N= 60 L=20 k= 5 pat= 2 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs= 1084 | stable-sort would be wrong in 49/60
+  ok  : F5: the 4 deliberate tie fixtures are bit-exact end to end (rk + sorted_ee)
+  totals: ee tied pairs=22423, positions a stable sort would get wrong=331
+  ok  : F5: the tie fixtures really produce ee ties (not a vacuous pass)
+  ok  : F1: ck_rk == 0x3465e556d414ca79 (Step 0 pin)
+  ok  : F1: ck_matrix == 0x8afb15dd0502c7cb (Step 0 pin)
+RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)

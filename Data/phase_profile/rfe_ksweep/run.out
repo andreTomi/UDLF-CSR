@@ -1,0 +1,16 @@
+=== datasets (deterministic, md5-verified) ===
+RKCV wrote=/tmp/rk_real/corel5k_L400.txt rows=5000 cols=400 md5=abc57bdd7aed6ee66e7fbfc32cbd3301
+  built /tmp/rk_real/corel5k_L400.txt md5=abc57bdd7aed6ee66e7fbfc32cbd3301
+RKCV wrote=/tmp/rk_real/corel5k_L1000.txt rows=5000 cols=1000 md5=0fba3ef9d5fab266dceda912c7082877
+  built /tmp/rk_real/corel5k_L1000.txt md5=0fba3ef9d5fab266dceda912c7082877
+RKCV wrote=/tmp/rk_real/linnaeus_L400.txt rows=8000 cols=400 md5=dde830919922f758424282efaec41613
+  built /tmp/rk_real/linnaeus_L400.txt md5=dde830919922f758424282efaec41613
+=== cheap points ===
+done  corel5k   L=400   k=5   rc=0      13s  exact=1  gram=0x9f819208a7a2dc61  eetie=?
+done  corel5k   L=400   k=10  rc=0      38s  exact=1  gram=0x07a6340124066c15  eetie=?
+done  corel5k   L=400   k=20  rc=0     192s  exact=1  gram=0xae6e50cfea838cca  eetie=?
+done  corel5k   L=1000  k=5   rc=0      39s  exact=1  gram=0x9f819208a7a2dc61  eetie=?
+done  corel5k   L=1000  k=20  rc=0     321s  exact=1  gram=0xae6e50cfea838cca  eetie=?
+done  linnaeus  L=400   k=5   rc=0      22s  exact=1  gram=0x4721eea0c3e43302  eetie=?
+done  linnaeus  L=400   k=20  rc=0     208s  exact=1  gram=0x2b0ebc6f19e58e54  eetie=?
+=== dense points (long timeout) ===

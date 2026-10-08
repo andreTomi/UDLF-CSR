@@ -1,0 +1,1765 @@
+/**
+ * @file RFECore.hpp
+ * @brief RFE (Reciprocal re-ranking with embeddings) on the CSRMatrix engine --
+ *        Step 2 carrier. Built ONE PHASE AT A TIME, each validated against the
+ *        Step 0 golden (Source/tests/test_rfe_golden.cpp) before the next is
+ *        added. Never two changes measured together.
+ *
+ * PROVENANCE. Every phase below is the repo-root RFE.cpp with the framework glue
+ * removed. The verbatim legacy is mirrored in Source/tests/rfe_ref_verbatim.hpp
+ * and its recorded digests are the pins this core is measured against:
+ *   fixture N=200 L=40 k=10 t=2 pa=0.1 seed=42
+ *     rankNorm          ck_rk=0x3465e556d414ca79 ck_matrix=0x8afb15dd0502c7cb
+ *   (see Source/tests/step0_check.sh, gate [3/3]).
+ *
+ * WHAT STEP 1 MEASURED (Source/tests/test_rfe_hyp.cpp, all 9 hypotheses):
+ *   H1  emb == S + S*S bit-exactly, but only in the pos1 (rank position) order;
+ *       the "all S then all S*S" split order diverges (64 cells measured), so a
+ *       column-ordered SpGEMM does NOT reproduce the legacy here.
+ *   H2  emb carries keys whose value is EXACTLY 0.0f (20.7% measured). These are
+ *       load-bearing, and multiply_and_prune's |v| > 1e-9 emission filter
+ *       (SparseMatrix.hpp:559) would DISCARD them -> emb cannot be built with it.
+ *   H3  remb == emb^T in values, but 3035 keys have no counterpart in emb, so a
+ *       bare transpose() does not reproduce remb's row set.
+ *   H4  combineReverseEmb keeps every key and zeroes the asymmetric ones;
+ *       CSRMatrix::combine and merge() both LOSE 3443 of 5461 keys -> a dedicated
+ *       kernel is mandatory.
+ *   H5  simEmb is a two-pointer merge at 0 ULP.
+ *   H6  ee is invariant to the sorted_emb tie-break (3693 swaps, 0 ULP).
+ *   H7  the Gram matches bit-exactly in sorted_ee order; the legacy materialises
+ *       72-99% of the n^2 cells.
+ *   H8  26.56% of incElems cells have Gram value exactly 0.0f, so a VALUE-ONLY
+ *       top-L prune is NOT exact; the prune must select over the union of
+ *       (nonzero Gram) and (zero-valued incElems).
+ *   H9  a position index reproduces getPosition exactly, including l+2 absent.
+ *
+ * BUILD CONTRACT: as in BFSTree.hpp, bit-exactness holds only under the STRICT
+ * build (no -ffast-math, no FMA contraction). RFE calls exp/log/pow in rankNorm
+ * and accumulates 4-factor products in the Gram, so it is at least as exposed as
+ * BFSTree. Whether the strict target is mandatory is measured in Step 4; until
+ * then the core is developed and gated under -O2 -ffp-contract=off.
+ *
+ * COVERAGE: F1 (rankNorm) only at this revision. Phases are added one per
+ * validated step, each with its own parity digest.
+ */
+#ifndef RFE_CORE_HPP
+#define RFE_CORE_HPP
+
+#include "Core/hpp/SparseMatrix.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+class RFECore {
+ public:
+  using M = CSRMatrix<float>;
+  using idx_t = M::size_type;
+  using Triplet = M::Triplet;
+
+  // rk: row-major rank lists, n*l ints (legacy stride l). Read AND written in
+  // place, exactly as the legacy's sorts do.
+  RFECore(std::vector<int>& rk, size_t n, size_t l, int k, int t, double pa,
+          bool performCCs = false)
+      : rk_(rk), n_(n), l_((int)l), k_(k), t_(t), pa_(pa) {
+    if (l_ > (int)n_) throw std::runtime_error("RFE: L can't be greater than N");
+    // Not checked by the legacy's checkParameters (RFE.cpp:50-56), which only
+    // tests l > n -- but its own createEmb reads rkLists[l*q + pos1] for
+    // pos1 < k (RFE.cpp:589), so k > l reads out of bounds, and rankKScore
+    // divides by log(k) (RFE.cpp:645), so k < 2 is 0/0. Fail fast instead.
+    if (k_ > l_) throw std::runtime_error("RFE: need K <= L");
+    if (k_ < 2) throw std::runtime_error("RFE: need K >= 2");
+    if (rk_.size() != (size_t)n_ * (size_t)l_) {
+      throw std::runtime_error("RFE: rkLists size != N*L");
+    }
+    // PERFORM_CCS (Connected Components) is NOT ported. The legacy calls
+    // execRRCCs() after execCartesianProduct() when this flag is true.
+    // We refuse at construction so the carrier cannot silently skip it.
+    if (performCCs) {
+      throw std::runtime_error("PERFORM_CCS not ported yet");
+    }
+  }
+
+// ------------------------------------------------------------------ F1 --
+  // rankNorm (RFE.cpp:180-193) + execSortRankedLists (RFE.cpp:717-767).
+  //
+  // Writes EXACTLY l cells per row (assignment, not +=), so the result is
+  // N*L nonzeros -- natively sparse, no N^2 anywhere. Step 1 confirmed the
+  // structure; this phase reproduces the VALUES and the resulting order.
+  void f1_rank_norm() {
+    // F1 cost attribution (Step 3 / Step 3c). COARSE clocks only: one pair per
+    // PHASE, never per cell. A clock read per cell would cost ~57.6M reads on
+    // the ALOI shape (2 per cell x 28.8M cells) and would dominate the very
+    // thing being measured. The split INSIDE the cell loop (position_of vs
+    // rank_norm_cell) is obtained DIFFERENTIALLY instead -- by building the
+    // lookup-table variant and comparing, which needs no in-loop clock at all.
+    const bool prof = f1prof_.enabled;
+    const double t_f1_0 = prof ? omp_get_wtime() : 0.0;
+    f1prof_.threads = omp_get_max_threads();
+    const double t_idx_0 = prof ? omp_get_wtime() : 0.0;
+    build_position_index();
+    const double t_idx_1 = prof ? omp_get_wtime() : 0.0;
+    const int nt = omp_get_max_threads();
+    // M:: qualification is required: PaddedAllocator is a NESTED type of
+    // CSRMatrix and build_from_partial_results is a STATIC member. This is the
+    // engine's documented emission path (SparseMatrix.hpp contract: emission
+    // order is free, any thread, any row).
+    std::vector<M::PaddedAllocator> alloc;
+    alloc.reserve((std::size_t)nt);
+    for (int i = 0; i < nt; ++i) alloc.emplace_back();
+    std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
+
+    const double t_loop_0 = prof ? omp_get_wtime() : 0.0;
+    std::vector<double> p_cells((std::size_t)nt, 0.0);
+    std::vector<long long> p_absent((std::size_t)nt, 0);
+
+    #pragma omp parallel
+    {
+      const int tid = omp_get_thread_num();
+      auto& a = *alloc[(std::size_t)tid].ptr;
+      const std::size_t chunk =
+          ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
+      double t_row = prof ? omp_get_wtime() : 0.0;
+      for (std::size_t q = r0; q < r1; ++q) {
+        for (int i = 0; i < l_; ++i) {
+          const int img = rk_[(std::size_t)l_ * q + (std::size_t)i];
+          const int posqi = i + 1;
+          // getPosition(img_rl_i, q): where does q sit in img_rl_i's OWN list.
+          // The legacy scans O(L) per call and returns l+2 when absent; the
+          // position index answers the same thing in O(log L) (H9: 0 mismatches
+          // over every (q,i) pair, absent cases included).
+          const int posiq = position_of((idx_t)img, (idx_t)q);
+          if (prof && posiq == l_ + 2) ++p_absent[(std::size_t)tid];
+          const float v = rank_norm_cell(posqi, posiq);
+          Triplet* t = a.allocate();
+          t->row = (idx_t)q;
+          t->col = (idx_t)img;
+          t->value = v;
+          t->is_set = false;   // one record per (q,img): i is unique per row
+        }
+        if (prof) {
+          const double now = omp_get_wtime();
+          p_cells[(std::size_t)tid] += now - t_row;
+          t_row = now;
+        }
+      }
+    }
+    const double t_loop_1 = prof ? omp_get_wtime() : 0.0;
+    M sim((idx_t)n_, (idx_t)n_, 0);
+    const double t_build_0 = prof ? omp_get_wtime() : 0.0;
+    M::build_from_partial_results(sim, alloc, ranges);
+    sim_ = std::move(sim);
+    const double t_build_1 = prof ? omp_get_wtime() : 0.0;
+    if (prof) {
+      f1prof_.t_index = t_idx_1 - t_idx_0;
+      f1prof_.t_loop = t_loop_1 - t_loop_0;
+      f1prof_.t_build = t_build_1 - t_build_0;
+      f1prof_.cells = 0;
+      f1prof_.absent = 0;
+      for (int i = 0; i < nt; ++i) {
+        f1prof_.t_cells_max = std::max(f1prof_.t_cells_max, p_cells[(std::size_t)i]);
+        f1prof_.absent += p_absent[(std::size_t)i];
+      }
+      f1prof_.cells = (long long)n_ * (long long)l_;
+    }
+
+    // The legacy then sorts each rank list by the similarity of its members and
+    // pins self to position 0. Reproduced verbatim below in sort_ranked_lists().
+    const double t_sort_0 = prof ? omp_get_wtime() : 0.0;
+    sort_ranked_lists();
+    if (prof) {
+      f1prof_.t_sortrows = omp_get_wtime() - t_sort_0;
+      f1prof_.t_total = omp_get_wtime() - t_f1_0;
+    }
+  }
+
+  // ------------------------------------------------------------------ F2 --
+  // createEmb (RFE.cpp:583-600). This is the phase the port's shape is decided
+  // by, because three measured facts constrain it (Step 1, Source/tests/test_rfe_hyp.cpp):
+  //
+  //  H1  emb == S + S*S bit-exactly, but ONLY when accumulated in the legacy's
+  //      pos1 (RANK POSITION) order with term 1 of pos1 emitted BEFORE the k
+  //      terms 2 of that same pos1. The "all of S, then all of S*S" split order
+  //      diverges (64 cells measured on the pinned fixture), so a column-ordered
+  //      SpGEMM does NOT reproduce the legacy. Hence: not multiply_and_prune.
+  //
+  //  H2  emb carries keys whose value is EXACTLY 0.0f -- 20.7% of them measured.
+  //      rankKScore(K) == 1 - log(K)/log(K) == 0.0f exactly, and incEmb INSERTS
+  //      the key on first sight, so those zeros are structural: they reach
+  //      sorted_emb and incElems, and therefore the output rank lists.
+  //      multiply_and_prune's |v| > 1e-9 emission filter (SparseMatrix.hpp:559)
+  //      would DISCARD them, so this phase cannot go through it either.
+  //
+  //  H1b Support is at most k + k^2 columns per row, independent of n. That bound
+  //      is what lets the accumulator below be O(k^2) instead of O(n).
+  //
+  // WHY A PER-ROW ACCUMULATOR INSTEAD OF EMITTING DUPLICATES. Emitting one record
+  // per (pos1,pos2) term and letting build_from_partial_results coalesce would
+  // be shorter, but the builder sorts each row by column with an UNSTABLE
+  // std::sort before summing duplicates (SparseMatrix.hpp:322-336), so the order
+  // in which a cell's terms are added is whatever that sort leaves behind --
+  // deterministic for a given libstdc++, but NOT the legacy's (pos1,pos2) order,
+  // and therefore not guaranteed bit-equal. Accumulating here fixes the order
+  // explicitly: `add` is called in exactly the legacy's call sequence, so the
+  // per-cell partial sums are the legacy's, term for term. One record per column
+  // is then emitted, ascending, so the builder's V4 fast path sees a strictly
+  // increasing row and has nothing to coalesce -- removing the dependence on
+  // std::sort's tie behaviour entirely.
+  void f2_create_emb() {
+    // rankKScore is the legacy's expression, NOT a re-derivation:
+    //   1 - log(pos)/log(k), evaluated in double, narrowed once on return.
+    // Re-deriving it as (log(k)-log(pos))/log(k) matches in value here but is
+    // not guaranteed to match bit-for-bit, and at pos == k the exact 0.0f
+    // (which H2 shows is load-bearing) depends on log(k)/log(k) == 1.0 exactly.
+    auto rank_kscore = [this](int pos) -> float {
+      return (float)(1 - (log((double)pos) / log((double)k_)));
+    };
+
+    const int nt = omp_get_max_threads();
+    // Per-thread accumulators, each sized to the k + k^2 bound. Independent of n,
+    // so the phase's memory does not grow with the dataset.
+    std::vector<EmbAcc> accs((std::size_t)nt);
+    for (int i = 0; i < nt; ++i) accs[(std::size_t)i].init((std::size_t)k_ + (std::size_t)k_ * (std::size_t)k_);
+
+    std::vector<M::PaddedAllocator> alloc;
+    alloc.reserve((std::size_t)nt);
+    for (int i = 0; i < nt; ++i) alloc.emplace_back();
+    std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
+    const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+
+    #pragma omp parallel
+    {
+      const int tid = omp_get_thread_num();
+      auto& a = *alloc[(std::size_t)tid].ptr;
+      EmbAcc& acc = accs[(std::size_t)tid];
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
+
+      for (std::size_t q = r0; q < r1; ++q) {
+        acc.begin();
+        // The legacy's loop, term for term. pos1 is a RANK POSITION, not a
+        // column: img_n = rk[l*q + pos1], and the inner loop walks THAT image's
+        // own list. Order is load-bearing (see H1 above).
+        for (int pos1 = 0; pos1 < k_; ++pos1) {
+          const int img_n = rk_[(std::size_t)l_ * q + (std::size_t)pos1];
+          const float wn = rank_kscore(pos1 + 1);
+          acc.add((idx_t)img_n, wn);                       // term 1
+          for (int pos2 = 0; pos2 < k_; ++pos2) {
+            const float wnn = rank_kscore(pos2 + 1);
+            const int img_nn = rk_[(std::size_t)l_ * img_n + (std::size_t)pos2];
+            acc.add((idx_t)img_nn, wn * wnn);               // term 2, float product
+          }
+        }
+        // Emit one record per DISTINCT column, ascending -- including the
+        // exactly-zero ones, which H2 shows must survive. No |v| filter here.
+        acc.sort_columns();
+        for (std::size_t s = 0; s < acc.size(); ++s) {
+          Triplet* t = a.allocate();
+          t->row = (idx_t)q;
+          t->col = acc.col(s);
+          t->value = acc.val(s);
+          t->is_set = false;
+        }
+      }
+    }
+    M emb((idx_t)n_, (idx_t)n_, 0);
+    M::build_from_partial_results(emb, alloc, ranges);
+    emb_ = std::move(emb);
+  }
+
+  // ---- F3: createReverseEmb ----------------------------------------------------
+//
+// The legacy (RFE.cpp:618-632) is:
+//
+//     remb.clear();
+//     for (q = 0..n) remb[q] = {};                 // pre-create EVERY row, empty
+//     for (q = 0..n)
+//       for ((key, val) in emb[q])                  // ascending key (std::map)
+//         remb[key][q] += val;
+//
+// The second loop writes remb[key][q], the transpose position of emb[q][key].
+// Each (q,key) pair of emb is visited exactly once (emb's per-row keys are
+// unique), so the `+=` lands on a fresh-or-absent slot and is really a STORE:
+// remb[key][q] == emb[q][key]. So the VALUES are emb^T exactly, and transpose()
+// reproduces them with no arithmetic at all -- hence no accumulation order to
+// preserve. Measured on the pinned fixture: 14651/14651 cells, 0 value diffs.
+//
+// TWO THINGS THIS IS NOT, both measured rather than assumed:
+//
+//  (1) NOT a bare transpose in ROW SET. The first loop materialises a row for
+//      every q in [0,n), so the legacy's remb has n keys; transpose() has only
+//      the rows that receive a value. On the pinned fixture the measured
+//      difference is 0 empty-but-present rows (every id occurs in some emb row),
+//      but that is a property of THIS fixture -- a dataset where some id is
+//      nobody's embedding key would make the difference non-zero. The core does
+//      not synthesise empty rows: they carry no value, and F4 reads a missing row
+//      and an empty row identically (both 0.0f). The gate reports the count so
+//      the difference stays visible if a future fixture changes it.
+//
+//  (2) THE COUNTERPART-ASYMMETRY IS THE REAL STRUCTURAL FACT, and it is F4's
+//      problem, not F3's. Measured: 8623 of the 14651 remb cells (59%) have NO
+//      emb[q][col] counterpart. That is emb being strongly ASYMMETRIC -- and it
+//      means combineReverseEmb multiplies 59% of its entries by an absent (hence
+//      operator[]-inserted 0.0f) reverse. F3 itself is unaffected: it never asks
+//      whether a counterpart exists.
+void f3_create_reverse_emb() {
+  // Values: emb^T, exactly. transpose() copies each cell once with no
+  // arithmetic, so there is no accumulation order to preserve.
+  remb_ = emb_.transpose();
+}
+
+  // ------------------------------------------------------------------ F4 --
+// combineReverseEmb (RFE.cpp:634-642). The legacy is:
+//
+//     for (q = 0..n) {
+//       std::map<int,float> qemb = emb[q];        // COPY: iterate the old values
+//       for ((key, val) in qemb)                   // ascending key
+//         emb[q][key] = emb[q][key] * remb[q][key];
+//     }
+//
+// WHY THIS IS NOT combine() AND NOT merge() -- both MEASURED, Step 1 H4b:
+//   CSRMatrix::combine returns the intersection of the NONZERO supports
+//   (SparseMatrix.hpp:721-772): a cell whose reverse partner is 0 or absent is
+//   simply NOT EMITTED. The legacy keeps the KEY and writes 0.0f.
+//   CSRMatrix::merge covers the union but filters `if (res != T{})` on emission
+//   (SparseMatrix.hpp:675/682/701), so the same cells are dropped.
+//   Measured on the pinned fixture: BOTH lost 3443 of 5461 keys (63%).
+//   F3 measured WHY: emb is strongly asymmetric -- 8623 of 14651 remb cells
+//   (59%) have no emb[q][col] counterpart -- so this is not a rare corner, it
+//   is the majority case. Any engine kernel that drops zero-valued results is
+//   therefore structurally wrong here, not merely imprecise.
+//
+// The arithmetic itself is trivial (one multiply per cell, no accumulation), so
+// there is no summation order to preserve: `a * b` is commutative and
+// associative-exact for a single operation. The WHOLE difficulty is the support.
+//
+// Support semantics reproduced exactly:
+//   * every cell of emb is visited, so the support is UNCHANGED (H4 measured
+//     5461 -> 5461);
+//   * the reverse value is looked up in remb, which is emb^T (F3), so
+//     remb.get(q, key) == emb.get(key, q);
+//   * a missing reverse yields 0.0f via get() -- the same value the legacy's
+//     std::map operator[] inserts. The KEY stays, carrying 0.0f.
+//   * NO |v| filter on emission: the zeros are load-bearing (H2, and H8c, where
+//     26.56% of incElems cells are exactly zero because of them).
+void f4_combine_reverse_emb() {
+  const int nt = omp_get_max_threads();
+  std::vector<M::PaddedAllocator> alloc;
+  alloc.reserve((std::size_t)nt);
+  for (int i = 0; i < nt; ++i) alloc.emplace_back();
+  std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
+  const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+
+  #pragma omp parallel
+  {
+    const int tid = omp_get_thread_num();
+    auto& a = *alloc[(std::size_t)tid].ptr;
+    const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
+    const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+    ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
+
+    for (std::size_t q = r0; q < r1; ++q) {
+      // Iterate emb's cells in ascending column order (for_each_in_row's
+      // contract) and emit exactly one record per cell -- including the zeros.
+      // Rows are independent, so the emission order is free and each thread's
+      // records are already column-ascending, which lets the builder's V4 fast
+      // path skip the per-row sort with nothing to coalesce.
+      std::vector<Triplet> row;
+      emb_.for_each_in_row((idx_t)q, [&](idx_t col, float v) {
+        Triplet t;
+        t.row = (idx_t)q;
+        t.col = col;
+        t.value = v * remb_.get((idx_t)q, col);
+        t.is_set = false;
+        row.push_back(t);
+      });
+      for (const Triplet& t : row) {
+        Triplet* e = a.allocate();
+        *e = t;
+      }
+    }
+  }
+  M out((idx_t)n_, (idx_t)n_, 0);
+  M::build_from_partial_results(out, alloc, ranges);
+  emb_ = std::move(out);   // emb is REPLACED, as in the legacy
+}
+
+  // ------------------------------------------------------------------ F5 --
+  // sortEmb (RFE.cpp:469-489) + effectEstimationEmb (RFE.cpp:513-525, 527-550).
+  //
+  // THE LOAD-BEARING CONSTRAINT HERE IS std::sort INSTABILITY, and it is a
+  // different kind of constraint from F2's.
+  //
+  //   tag_sort (RFE.cpp:513-521) sorts the index permutation [0..n) by
+  //   ee[i] DESCENDING with std::sort. std::sort is NOT stable, so the relative
+  //   order of EQUAL-valued ee entries is whatever libstdc++'s introsort
+  //   happens to leave behind. That order becomes `sorted_ee`, which is the
+  //   OUTER LOOP ORDER of F6's Gram accumulation (RFE.cpp:559, `for (int q :
+  //   sorted_ee)`). Two entries with equal ee can therefore have DIFFERENT Gram
+  //   contributions, because their emb rows differ. So the tie-break is not a
+  //   cosmetic detail -- it is part of the output.
+  //
+  // CONSEQUENCE: this phase calls std::sort ITSELF, with the legacy's exact
+  // comparator over the legacy's exact input sequence, rather than delegating to
+  // a stable sort or to any engine kernel. Stable would be WRONG (it would not
+  // reproduce the legacy's permutation) and a different algorithm would be a
+  // different (and unjustified) tie-break. Reproducing libstdc++'s std::sort on
+  // the same inputs is the only bit-exact option, and it is stable across thread
+  // counts because the sort is single-threaded and input-ordered.
+  //
+  // sortEmb (RFE.cpp:497-510) has the same shape: std::sort over
+  // vector<pair<int,float>> descending by .second, then the KEYS are kept in
+  // that order. The legacy builds A by iterating emb[q], which for a CSR row is
+  // ASCENDING COLUMN ORDER -- so the input sequence matches for_each_in_row's,
+  // which is what makes the std::sort tie-break reproduce.
+  void f5_sort_emb() {
+    // NEGATIVE CONTROL, bench-only, OFF by default. The tie population is a
+    // COUNT, not an EXPOSURE: the F5 tie-break only reaches the Gram if two rows
+    // tied in `ee` contribute NON-ZERO values to the same cell in different
+    // orders. Summing 0.0f is exact and commutative, so a field of exact zeros
+    // cannot expose it at all. Toggling to stable_sort is the only way to find
+    // out whether a real dataset exposes it -- and if this changes nothing, the
+    // honest claim is "ties exist, exposure undemonstrated", not "covered".
+    const bool stable_probe = f5sort_stable_;
+    const int nt = omp_get_max_threads();
+    sorted_emb_.assign((std::size_t)n_, std::vector<int>());
+    const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+
+    #pragma omp parallel
+    {
+      const int tid = omp_get_thread_num();
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      // Per-thread scratch, reused: the legacy allocates a fresh vector per row,
+      // but capacity reuse cannot change std::sort's result.
+      std::vector<std::pair<int, float>> A;
+      for (std::size_t q = r0; q < r1; ++q) {
+        A.clear();
+        // Ascending column order == the legacy's std::map iteration order. The
+        // input SEQUENCE to std::sort is what pins its tie-break, so this is
+        // load-bearing and not merely cosmetic.
+        emb_.for_each_in_row((idx_t)q, [&](idx_t col, float v) {
+          A.emplace_back((int)col, v);
+        });
+        // The legacy's CmpDesc: strictly greater, descending. Using the same
+        // comparator (not >=) is what makes the unstable sort land the same way.
+        // The legacy's CmpDesc is strictly greater, descending. Using the same
+        // comparator (not >=) is what makes the UNSTABLE sort land the same way;
+        // the probe swaps only the ALGORITHM, never the comparator.
+        if (stable_probe) {
+          std::stable_sort(A.begin(), A.end(),
+                           [](const std::pair<int, float>& a,
+                              const std::pair<int, float>& b) {
+                             return a.second > b.second;
+                           });
+        } else {
+          std::sort(A.begin(), A.end(),
+                    [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
+                      return a.second > b.second;
+                    });
+        }
+        auto& out = sorted_emb_[(std::size_t)q];
+        out.reserve(A.size());
+        for (const auto& p : A) out.push_back(p.first);
+      }
+    }
+  }
+
+  // effectEstimationEmb (RFE.cpp:527-548).
+  //
+  //   ee[q] = sum over the FIRST k keys of sorted_emb[q] of emb[q][key]
+  //   sorted_ee = tag_sort(ee)                 // unstable, see above
+  //   grValue   = ee[sorted_ee[0]]              // the MAX, BEFORE normalisation
+  //   ee[q]    /= grValue                       // divides by zero if grValue==0
+  //
+  // The summation is over the first k keys IN sorted_emb ORDER, so its order is
+  // fixed once f5_sort_emb has reproduced that order. `emb[q][key]` is a
+  // std::map operator[] lookup of a key that came FROM emb[q], so it always
+  // hits; get() is the value-equivalent read (no spurious 0.0f insertion).
+  void f5_effect_estimation_emb() {
+    ee_.assign((std::size_t)n_, 0.0f);
+    const int nt = omp_get_max_threads();
+    const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+
+    #pragma omp parallel
+    {
+      const int tid = omp_get_thread_num();
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      for (std::size_t q = r0; q < r1; ++q) {
+        float eeValue = 0;
+        int pos = 0;
+        for (const int key : sorted_emb_[(std::size_t)q]) {
+          pos++;
+          if (pos > k_) break;          // first k keys only
+          eeValue += emb_.get((idx_t)q, (idx_t)key);
+        }
+        ee_[(std::size_t)q] = eeValue;
+      }
+    }
+
+    // tag_sort: the legacy's std::sort over an index permutation, descending,
+    // UNSTABLE. Kept as the same std::sort call on the same input.
+    sorted_ee_.resize((std::size_t)n_);
+    for (int i = 0; i < n_; ++i) sorted_ee_[(std::size_t)i] = i;
+    const std::vector<float>& v = ee_;
+    std::sort(sorted_ee_.begin(), sorted_ee_.end(),
+              [&v](const int lhs, const int rhs) {
+                return v[(std::size_t)lhs] > v[(std::size_t)rhs];
+              });
+
+    // grValue is read BEFORE the normalisation loop divides by it. If it is 0
+    // the legacy produces inf/nan here; kept verbatim rather than guarded,
+    // because guarding would change the output on exactly the inputs where the
+    // legacy is already degenerate.
+    const int key = sorted_ee_[0];
+    const float grValue = ee_[(std::size_t)key];
+    gr_value_ = grValue;
+    #pragma omp parallel for schedule(static)
+    for (int q = 0; q < n_; ++q)
+      ee_[(std::size_t)q] = ee_[(std::size_t)q] / grValue;
+  }
+
+  // ----------------------------------------------------------------- F7a --
+  // reRankingByEmbSim (RFE.cpp:648-661) -- the t-LOOP phase, and the phase that
+  // was MISSING from the F2..F6 chain.
+  //
+  //   for (q) { pos = 1; for (i < l) {
+  //     img_i = rkLists[l*q + i]
+  //     MX(q, img_i) = simEmb(emb[q], emb[img_i]) / pos;   pos += 1;
+  //   } }
+  //   execSortRankedLists();
+  //
+  // WHY THIS MATTERS MORE THAN ITS SIZE SUGGESTS. reRankingByEmbSim REWRITES
+  // rkLists_, and execCartesianProduct then rebuilds emb from the REWRITTEN
+  // lists. The Step 0 golden measures exactly this at the pinned fixture:
+  //
+  //   rankNorm       ck_rk=0x3465e556d414ca79
+  //   embRR[0]       ck_rk=0xad0c4fe24904d9d9   emb_keys=14651
+  //   embRR[1]       ck_rk=0xe86514a3dd0922a9   emb_keys=12812
+  //   cartesianProd  ck_rk=0x58ded033b72ded72   emb_keys=12227
+  //
+  // so the emb that feeds F5/F6 is the 12227-key one, NOT the 14651-key one a
+  // F1..F6-only chain produces. The earlier phases are still bit-exact as
+  // measured -- but they were measured on a chain that OMITS this phase, so the
+  // end-to-end pipeline could not have matched even with every phase individually
+  // correct. The end-to-end check added with F7 is what closes that gap.
+  void f7a_rerank_by_emb_sim() {
+    const int nt = omp_get_max_threads();
+    std::vector<M::PaddedAllocator> alloc7a;
+    alloc7a.reserve((std::size_t)nt);
+    for (int i = 0; i < nt; ++i) alloc7a.emplace_back();
+    std::vector<std::pair<idx_t, idx_t>> ranges7a((std::size_t)nt);
+    const std::size_t chunk7a = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+    #pragma omp parallel
+    {
+      const int tid = omp_get_thread_num();
+      auto& a = *alloc7a[(std::size_t)tid].ptr;
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk7a);
+    const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk7a);
+    ranges7a[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
+    std::vector<std::pair<idx_t, float>> ra, rb;
+    for (std::size_t q = r0; q < r1; ++q) {
+      // Materialise row q ONCE: it is the left operand of every pair in this
+      // row. H1b bounds a row at k + k^2 cells, independent of n, so this is
+      // cheap and keeps the memory O(k^2) rather than O(nnz).
+      ra.clear();
+      emb_.for_each_in_row((idx_t)q, [&](idx_t c, float v) { ra.emplace_back(c, v); });
+      for (int i = 0; i < l_; ++i) {
+        const int img = rk_[(std::size_t)l_ * q + (std::size_t)i];
+        rb.clear();
+        emb_.for_each_in_row((idx_t)img, [&](idx_t c, float v) { rb.emplace_back(c, v); });
+        const float sim = merge_sim(ra, rb);
+        Triplet* t = a.allocate();
+        t->row = (idx_t)q;
+        t->col = (idx_t)img;
+        // pos starts at 1 and increments AFTER the store, so slot i divides by
+        // i+1. int pos promotes to float for the division.
+        t->value = sim / (float)(i + 1);
+        t->is_set = false;   // img distinct within a row: a rank list is a
+                             // permutation, so exactly l records, no duplicates
+      }
+    }
+  }
+  M s((idx_t)n_, (idx_t)n_, 0);
+  M::build_from_partial_results(s, alloc7a, ranges7a);
+  sim_ = std::move(s);
+  sort_ranked_lists();   // kernelSortRankedLists: stable descending + self pin
+  }
+
+  // simEmb (RFE.cpp:677-686): iterate di ASCENDING, accumulate v_i*v_j only for
+  // keys dj also has. Both rows are CSR-ascending by column, so a two-pointer
+  // merge replays the legacy's sequence exactly (H5 measured ZERO ULP).
+  //
+  // Both operands are materialised rather than probed with get(), and that is
+  // deliberate: get() returns 0.0f for an ABSENT key, so accumulating v*0.0f
+  // would differ from the legacy's `if (found)` on the first term -- 0.0f + 0.0f
+  // is fine, but the legacy SKIPS the add entirely, and reproducing "skip" via
+  // an arithmetic no-op is exactly the kind of rewrite this port does not do.
+  static float merge_sim(const std::vector<std::pair<idx_t, float>>& a,
+                         const std::vector<std::pair<idx_t, float>>& b) {
+    float sim = 0;
+    std::size_t ib = 0;
+    for (const auto& kv : a) {
+      while (ib < b.size() && b[ib].first < kv.first) ++ib;
+      if (ib < b.size() && b[ib].first == kv.first) sim += kv.second * b[ib].second;
+    }
+    return sim;
+  }
+  // The Gram + incElems (reRankingByCPRR's core, RFE.cpp:552-581, via
+  // incSimByECP at RFE.cpp:696-715).
+  //
+  //   for (q : sorted_ee)                    // ORDER IS THE OUTPUT, see below
+  //     wi = ee[q]; wj = 1                   // literal 1 at the call site
+  //     for (i : sorted_emb[q])              // guard: skip if i not in emb[q]
+  //       vi = emb[q][i]
+  //       for (j : sorted_emb[q])            // guard: skip if j not in emb[q]
+  //         vj = emb[q][j]
+  //         incElems[i].insert(j)            // FIRES REGARDLESS OF VALUE
+  //         MX(i,j) += (vi*vj) * wi * wj
+  //
+  // WHY THIS CANNOT BE PARALLELISED OVER q. MX(i,j) is `+=`-accumulated once per
+  // q, so a cell's partial sums depend on the ORDER of the q loop. That order is
+  // sorted_ee -- which F5 established is a libstdc++-unstable tie-break -- so a
+  // parallel reduction over q would sum the same terms in a different order and
+  // produce a different float. Bit-exactness forbids it.
+  //
+  // THE KERNEL THEREFORE PARALLELISES OVER ROWS i, NOT OVER q. Rows are
+  // independent (row i only ever writes MX(i,*)), and within a row the q loop
+  // still runs in sorted_ee order, so every cell sees the legacy's exact
+  // summation sequence. This is the same re-association-avoidance as F2, one
+  // level up: F2 fixed the order inside a row, F6 fixes it across q.
+  //
+  // CANDIDATE DISCOVERY IS SEPARATE FROM ACCUMULATION, and it must be. The
+  // legacy discovers incElems[i] and accumulates MX(i,j) in the SAME pass, but
+  // the port cannot: a CSR row's column set must be known before the row can be
+  // emitted. So pass 1 builds the candidate set
+  //     incElems[i] = union over {q : i in sorted_emb[q]} of sorted_emb[q]
+  // and pass 2 accumulates into it. Splitting is sound precisely because
+  // `insert` is idempotent and value-independent -- which is exactly why the
+  // union is well defined.
+  //
+  // THE ZERO CELLS ARE THE POINT. incElems[i].insert(j) fires even when
+  // vi*vj*wi*wj == 0.0f exactly (H8: 26.56% of incElems cells at the pinned
+  // fixture). Those are real candidates carrying a real zero Gram value, and they
+  // must survive into the CSR with their zeros intact. NO |v| filter, and no
+  // combine()/merge() on the way in -- both were measured dropping keys (F4).
+  void f6_gram_and_inc_elems() {
+    const bool prof = f6prof_.enabled;
+    const double t_f6_0 = prof ? omp_get_wtime() : 0.0;
+    f6prof_.threads = omp_get_max_threads();
+    const double t_inv_0 = prof ? omp_get_wtime() : 0.0;
+    build_emb_inverted_by_sorted_ee();
+    const double t_inv_1 = prof ? omp_get_wtime() : 0.0;
+
+    const int nt = omp_get_max_threads();
+    const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+
+    std::vector<RowAcc> accs((std::size_t)nt);
+    std::vector<M::PaddedAllocator> alloc;
+    alloc.reserve((std::size_t)nt);
+    for (int i = 0; i < nt; ++i) alloc.emplace_back();
+    std::vector<std::pair<idx_t, idx_t>> ranges((std::size_t)nt);
+    // Per-thread profile slots. Per-thread, NOT atomics and NOT a shared
+    // reduction: the sums are of DISJOINT row ranges, so a flat sum after the
+    // region is exact and race-free.
+    std::vector<double> p_disc((std::size_t)nt, 0.0), p_sort((std::size_t)nt, 0.0),
+                        p_acc((std::size_t)nt, 0.0), p_emit((std::size_t)nt, 0.0);
+    std::vector<long long> p_raw((std::size_t)nt, 0), p_uniq((std::size_t)nt, 0),
+                          p_inn((std::size_t)nt, 0);
+
+    #pragma omp parallel
+    {
+      const int tid = omp_get_thread_num();
+      auto& a = *alloc[(std::size_t)tid].ptr;
+      RowAcc& acc = accs[(std::size_t)tid];
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)tid * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(tid + 1) * chunk);
+      ranges[(std::size_t)tid] = {(idx_t)r0, (idx_t)r1};
+
+      for (std::size_t i = r0; i < r1; ++i) {
+        acc.clear();
+        // ---- pass 1: candidate discovery (the union) ----
+        // qs_ is ascending in sorted_ee POSITION, i.e. the legacy's q order.
+        const std::vector<std::uint32_t>& qs = inv_of_col_[(idx_t)i];
+        const double ta = prof ? omp_get_wtime() : 0.0;
+        for (std::uint32_t t : qs) {
+          const int q = sorted_ee_[(std::size_t)t];
+          for (const int j : sorted_emb_[(std::size_t)q]) acc.add_candidate((idx_t)j);
+        }
+        const double tb = prof ? omp_get_wtime() : 0.0;
+        // Counted HERE, before finalize_candidates() resizes cols down to the
+        // distinct set -- reading cols.size() after it would silently report the
+        // uniq count for BOTH fields and make raw/uniq a tautological 1.00.
+        if (prof) p_raw[(std::size_t)tid] += (long long)acc.cols.size();
+        // Sort + dedupe HERE, between the passes: pass 2 binary-searches, so the
+        // column set must be sorted and unique before any value is added.
+        acc.finalize_candidates();
+        const double tc = prof ? omp_get_wtime() : 0.0;
+        if (prof) p_uniq[(std::size_t)tid] += (long long)acc.size();
+        // ---- pass 2: accumulation, q visited in sorted_ee order ----
+        for (std::uint32_t t : qs) {
+          const int q = sorted_ee_[(std::size_t)t];
+          const float wi = ee_[(std::size_t)q];
+          const float vi = emb_.get((idx_t)q, (idx_t)i);
+          for (const int j : sorted_emb_[(std::size_t)q]) {
+            const float vj = emb_.get((idx_t)q, (idx_t)j);
+            // The legacy's expression, term for term: (vi*vj) * wi * wj with wj
+            // the literal 1 at the call site. Written as written so the float ops
+            // match; the *1 is KEPT because dropping it would be a rewrite, not a
+            // simplification, and this port does not rewrite float expressions.
+            acc.add((idx_t)j, (vi * vj) * wi * 1.0f);
+          }
+        }
+        const double td = prof ? omp_get_wtime() : 0.0;
+        if (prof) {
+          for (std::uint32_t t : qs) p_inn[(std::size_t)tid] +=
+              (long long)sorted_emb_[(std::size_t)sorted_ee_[(std::size_t)t]].size();
+        }
+        // Columns are already ascending and unique after finalize_candidates(),
+        // and pass 2 never inserts, so the emission order is strictly ascending:
+        // the builder's V4 fast path applies with nothing to coalesce.
+        for (std::size_t s = 0; s < acc.size(); ++s) {
+          Triplet* t = a.allocate();
+          t->row = (idx_t)i;
+          t->col = acc.col(s);
+          t->value = acc.val(s);
+          t->is_set = false;
+        }
+        const double te = prof ? omp_get_wtime() : 0.0;
+        if (prof) {
+          p_disc[(std::size_t)tid] += tb - ta;
+          p_sort[(std::size_t)tid] += tc - tb;
+          p_acc[(std::size_t)tid]  += td - tc;
+          p_emit[(std::size_t)tid] += te - td;
+        }
+      }
+    }
+    if (prof) {
+      f6prof_.t_inv = t_inv_1 - t_inv_0;
+      f6prof_.t_disc = f6prof_.t_sort = f6prof_.t_acc = f6prof_.t_emit = 0.0;
+      f6prof_.cand_raw = f6prof_.cand_uniq = f6prof_.inner_iters = 0;
+      for (int i = 0; i < nt; ++i) {
+        f6prof_.t_disc += p_disc[(std::size_t)i];
+        f6prof_.t_sort += p_sort[(std::size_t)i];
+        f6prof_.t_acc  += p_acc[(std::size_t)i];
+        f6prof_.t_emit += p_emit[(std::size_t)i];
+        f6prof_.cand_raw    += p_raw[(std::size_t)i];
+        f6prof_.cand_uniq   += p_uniq[(std::size_t)i];
+        f6prof_.inner_iters += p_inn[(std::size_t)i];
+        if (p_disc[(std::size_t)i] > f6prof_.m_disc) f6prof_.m_disc = p_disc[(std::size_t)i];
+        if (p_sort[(std::size_t)i] > f6prof_.m_sort) f6prof_.m_sort = p_sort[(std::size_t)i];
+        if (p_acc [(std::size_t)i] > f6prof_.m_acc ) f6prof_.m_acc  = p_acc[(std::size_t)i];
+        if (p_emit[(std::size_t)i] > f6prof_.m_emit) f6prof_.m_emit = p_emit[(std::size_t)i];
+      }
+    }
+    const double t_build_0 = prof ? omp_get_wtime() : 0.0;
+    M gram((idx_t)n_, (idx_t)n_, 0);
+    M::build_from_partial_results(gram, alloc, ranges);
+    gram_ = std::move(gram);
+    if (prof) f6prof_.t_build = omp_get_wtime() - t_build_0;
+
+    if (prof) {
+      // Load balance of the row split: max/min |inv_of_col_[i]|. This is what
+      // bounds F6's parallel efficiency -- rows are independent but NOT
+      // equal-cost, and the chunking is static.
+      f6prof_.inv_min = (long long)n_;
+      f6prof_.inv_max = 0;
+      for (std::size_t i = 0; i < (std::size_t)n_; ++i) {
+        const long long m = (long long)inv_of_col_[i].size();
+        if (m < f6prof_.inv_min) f6prof_.inv_min = m;
+        if (m > f6prof_.inv_max) f6prof_.inv_max = m;
+      }
+    }
+
+    // incElems is the SAME support as the Gram rows by construction (pass 1
+    // created exactly the candidates pass 2 filled), so it is read off gram_
+    // rather than stored twice. incElemsL is the legacy's list-based set.
+    if (prof) f6prof_.t_total = omp_get_wtime() - t_f6_0;
+    build_inc_elems_l();
+  }
+
+  // Inverted index over columns: for each element i, the ascending list of
+  // sorted_ee POSITIONS t such that i in sorted_emb[sorted_ee[t]]. Built by one
+  // serial scan in t, so each list is already in the legacy's q order and F6's
+  // inner loop needs no sort. This is the F1 position-index trick again, one
+  // structure up: both replace a legacy O(n) scan with a prebuilt index.
+  void build_emb_inverted_by_sorted_ee() {
+    inv_of_col_.assign((std::size_t)n_, std::vector<std::uint32_t>());
+    for (std::size_t t = 0; t < sorted_ee_.size(); ++t) {
+      const int q = sorted_ee_[t];
+      for (const int i : sorted_emb_[(std::size_t)q])
+        inv_of_col_[(idx_t)i].push_back((std::uint32_t)t);
+    }
+  }
+
+  // incElemsL[q] = the set of the first l entries of rkLists row q. The legacy
+  // does `pos = 1; for (i < l) { pos++; insert(img_i); }` -- the pos++ is dead
+  // (pos is never read again), so this is exactly the l entries; and since a rank
+  // list is a permutation of distinct ids the set has l elements.
+  void build_inc_elems_l() {
+    inc_elems_l_.assign((std::size_t)n_, std::vector<int>());
+    #pragma omp parallel for schedule(static)
+    for (int q = 0; q < n_; ++q) {
+      std::vector<int>& s = inc_elems_l_[(std::size_t)q];
+      s.reserve((std::size_t)l_);
+      for (int i = 0; i < l_; ++i)
+        s.push_back(rk_[(std::size_t)l_ * q + (std::size_t)i]);
+      std::sort(s.begin(), s.end());
+      s.erase(std::unique(s.begin(), s.end()), s.end());
+    }
+  }
+
+  // ----------------------------------------------------------------- F7b --
+  // The CPRR TAIL: kernel_sort_ranked_lists_extra (RFE.cpp:769-833), driven by
+  // set_difference(incElems[q], incElemsL[q]).
+  //
+  //   rkTmp = rkLists[q][0..l) ++ extra_elems      // extras ASCENDING by id
+  //   a[j]  = MX(q, rkTmp[j])                     // incl. the pow(2,30) diagonal
+  //   insertion sort ASCENDING (stable: shifts on strict `<`)
+  //   pin self to position 0, then copy back only the first l entries
+  //
+  // THREE THINGS THAT ARE EASY TO GET WRONG, all found by measurement:
+  //
+  //  (1) THE SORT IS DESCENDING, and I got this wrong first. The legacy's loop is
+  //      `while (i >= 0 && a[i] < keyA) shift-right`, which moves SMALLER values
+  //      to HIGHER indices -- i.e. DESCENDING, not ascending. My first draft read
+  //      the same loop as an ascending insertion sort and failed E2E on
+  //      7800/8000 cells. The measured proof: the legacy's row-0 output carries
+  //      values 31.01, 16.81, 11.90, 4.16, 2.81, 2.59, 1.95 -- monotonically
+  //      DECREASING. The loop is also STABLE (it shifts on strict `<` only), so
+  //      std::stable_sort on `>` reproduces it, with ties keeping rkTmp order
+  //      (current list first, then extras ascending by id).
+  //
+  //  (2) THE DIAGONAL IS PINNED, so self wins BY VALUE, not by convention.
+  //      MX(q,q) = pow(2,30) (RFE.cpp:605) is applied at READ time here.
+  //      gram_.get(q,q) returns the ACCUMULATED diagonal instead, so without the
+  //      pin self sorts by its real (small) score and lands mid-list. Under a
+  //      DESCENDING sort the pin also makes self land at position 0 naturally,
+  //      which is why the explicit self-swap below is a no-op in practice -- it
+  //      is kept because the legacy performs it unconditionally.
+  //
+  //  (3) NO TOP-L PRUNE, DELIBERATELY. See union_prune_row() below: the prune
+  //      exists as a separate, separately-tested routine, and F7b does not call
+  //      it, so the parity claim stays unconditional.
+  void f7b_rerank_cprr_tail() {
+    // Recorded per row, thrown after the region -- see the note at the throw site.
+    std::vector<char> missing_self((std::size_t)n_, 0);
+    #pragma omp parallel for schedule(static)
+    for (int q = 0; q < n_; ++q) {
+      // set_difference(incElems[q], incElemsL[q]). Both ascending -- the Gram row
+      // is CSR-ascending and incElemsL[q] was sorted -- so this is a linear merge,
+      // not the legacy's std::set_difference over two std::sets.
+      std::vector<int> extras;
+      std::vector<float> vals;
+      gram_.for_each_in_row((idx_t)q, [&](idx_t c, float v) {
+        extras.push_back((int)c);
+        vals.push_back(v);
+      });
+      const std::vector<int>& L = inc_elems_l_[(std::size_t)q];
+      std::size_t w = 0;
+      {
+        std::size_t il = 0;
+        for (std::size_t s = 0; s < extras.size(); ++s) {
+          const int key = extras[s];
+          while (il < L.size() && L[il] < key) ++il;
+          if (il < L.size() && L[il] == key) continue;   // present in incElemsL
+          extras[w] = key;
+          vals[w] = vals[s];
+          ++w;
+        }
+        extras.resize(w);
+        vals.resize(w);
+      }
+
+      const std::size_t cap = (std::size_t)l_ + extras.size();
+      std::vector<int> rkTmp(cap);
+      std::vector<float> a(cap);
+      for (int i = 0; i < l_; ++i) {
+        const int img = rk_[(std::size_t)l_ * q + (std::size_t)i];
+        rkTmp[(std::size_t)i] = img;
+        a[(std::size_t)i] = (img == q) ? diag_pin_ : gram_.get((idx_t)q, (idx_t)img);
+      }
+      for (std::size_t e = 0; e < extras.size(); ++e) {
+        rkTmp[(std::size_t)l_ + e] = extras[e];
+        a[(std::size_t)l_ + e] = (extras[e] == q) ? diag_pin_ : vals[e];
+      }
+
+      std::vector<std::size_t> ord(cap);
+      for (std::size_t s = 0; s < cap; ++s) ord[s] = s;
+      std::stable_sort(ord.begin(), ord.end(),
+                       [&a](std::size_t x, std::size_t y) { return a[x] > a[y]; });
+      std::vector<int> sorted(cap);
+      for (std::size_t s = 0; s < cap; ++s) sorted[s] = rkTmp[ord[s]];
+
+      // Self pinned to 0. The legacy scans `rkTmp[i] != rk` BEFORE testing
+      // i < new_size (RFE.cpp:816), so a row without self reads out of bounds.
+      // Self is present by the dataset convention and the gate's self0 check
+      // enforces it; fail fast rather than read out of bounds.
+      std::size_t self_pos = sorted.size();
+      for (std::size_t s = 0; s < sorted.size(); ++s) {
+        if (sorted[s] == q) { self_pos = s; break; }
+      }
+      if (self_pos == sorted.size()) {
+        // RECORD, do not throw: this is inside `#pragma omp parallel for`, and a
+        // throw from an OpenMP region is undefined behaviour -- libgomp calls
+        // std::terminate, so the caller never sees the exception. Caught by
+        // test_rfe_corner.cpp. The throw is hoisted below the loop.
+        missing_self[(std::size_t)q] = 1;
+        continue;
+      }
+      if (self_pos > 0) std::swap(sorted[0], sorted[self_pos]);
+
+      for (int i = 0; i < l_; ++i)
+        rk_[(std::size_t)l_ * q + (std::size_t)i] = sorted[(std::size_t)i];
+    }
+    // Outside the parallel region, where a throw actually propagates.
+    for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
+      if (missing_self[q])
+        throw std::runtime_error(
+            "RFE: row " + std::to_string(q) + " does not contain its own id; the "
+            "legacy reads out of bounds in kernelSortRankedLists_extra (RFE.cpp:816)");
+    }
+  }
+
+  // H8's union prune, as a SEPARATE, SEPARATELY-TESTED routine. It is NOT called
+  // by f7b_rerank_cprr_tail: the legacy keeps every candidate and takes the first
+  // l after sorting, so pruning is an OPTIMISATION that must prove it never
+  // changes the first l. Keeping it out of the parity path means the parity claim
+  // does not depend on that proof.
+  //
+  // The candidate set is the UNION of (nonzero Gram) and (zero-valued incElems).
+  // H8 measured that a VALUE-ONLY prune is NOT exact: 15-27% of incElems cells
+  // carry exactly 0.0f yet still discover a candidate (RFE.cpp:710), so filtering
+  // on `v != 0` would drop real candidates. There is deliberately NO such filter.
+  //
+  // THE TIE ORDER IS THE WHOLE SUBTLETY, and my first version got it wrong. The
+  // legacy's rkTmp is [current list in ITS OWN ORDER] ++ [extras ascending by id],
+  // and the stable sort preserves that order within a tie group. Ranking ties by
+  // ascending id INSTEAD is wrong, because the current list is not in ascending
+  // id order -- measured as 3 of 200 rows differing. So this reuses the very same
+  // rkTmp construction f7b uses, and differs only in not writing back.
+  std::vector<int> union_prune_row(int q, std::size_t top_l) const {
+    std::vector<int> extras;
+    std::vector<float> vals;
+    gram_.for_each_in_row((idx_t)q, [&](idx_t c, float v) {
+      extras.push_back((int)c);
+      vals.push_back(v);
+    });
+    const std::vector<int>& L = inc_elems_l_[(std::size_t)q];
+    std::size_t w = 0;
+    {
+      std::size_t il = 0;
+      for (std::size_t s = 0; s < extras.size(); ++s) {
+        const int key = extras[s];
+        while (il < L.size() && L[il] < key) ++il;
+        if (il < L.size() && L[il] == key) continue;
+        extras[w] = key;
+        vals[w] = vals[s];
+        ++w;
+      }
+      extras.resize(w);
+      vals.resize(w);
+    }
+    const std::size_t cap = (std::size_t)l_ + extras.size();
+    std::vector<std::size_t> ord(cap);
+    for (std::size_t s = 0; s < cap; ++s) ord[s] = s;
+    // Rank by value, descending; ties keep the rkTmp position, which is the
+    // legacy's own order (current list first, then extras ascending by id).
+    auto value_at = [&](std::size_t s) -> float {
+      if (s < (std::size_t)l_) {
+        const int img = rk_[(std::size_t)l_ * q + s];
+        return (img == q) ? diag_pin_ : gram_.get((idx_t)q, (idx_t)img);
+      }
+      const std::size_t e = s - (std::size_t)l_;
+      return (extras[e] == q) ? diag_pin_ : vals[e];
+    };
+    std::stable_sort(ord.begin(), ord.end(),
+                     [&value_at](std::size_t x, std::size_t y) {
+                       return value_at(x) > value_at(y);
+                     });
+    std::vector<int> out;
+    for (std::size_t s = 0; s < cap && s < top_l; ++s) {
+      const std::size_t pos = ord[s];
+      out.push_back(pos < (std::size_t)l_
+                        ? rk_[(std::size_t)l_ * q + pos]
+                        : extras[pos - (std::size_t)l_]);
+    }
+    return out;
+  }
+
+  // THE ENTRY POINT. This is the ONLY pipeline the port is allowed to run, and
+  // the parity gate calls THIS rather than spelling the sequence out again.
+  //
+  // X9: the gate used to reimplement the sequence inside test_rfe_parity, and a
+  // COPY can drift from the thing it is checking without anything failing. It
+  // did: this function skipped f7a_rerank_by_emb_sim entirely and ran the embRR
+  // block once instead of t_ times, and the gate stayed green because the gate
+  // never called it. A gate must exercise the production entry point.
+  //
+  // Mirrors RFE::runUdlMethod() (RFE.cpp:102-124) restricted to the in-scope
+  // core. The legacy's tail -- if (performCCs) execRRCCs(); and
+  // if (rerankByEmb || exportEmbeddings) execRRByEmbCCs(); -- is NOT ported, so
+  // this method REFUSES those configs at construction rather than skipping them
+  // here and silently emitting different rank lists.
+  void run() {
+    // The profile lives HERE, beside the sequence, not in the bench. A profile
+    // outside run() would measure its own copy -- which is the defect X9 names,
+    // and it is exactly how the pre-t-loop "full pipeline" numbers happened.
+    const bool prof = runprof_.enabled;
+    if (prof) runprof_.begin(t_, n_, l_);
+    const double R0 = prof ? omp_get_wtime() : 0.0;
+
+    // Times a phase without changing the order. The branch is predictable and
+    // the closure is inlined; when prof is false this is a direct call.
+    auto tm = [prof](double& slot, auto&& fn) {
+      if (!prof) { fn(); return; }
+      const double s = omp_get_wtime();
+      fn();
+      slot += omp_get_wtime() - s;
+    };
+
+    tm(runprof_.t_f1, [this] { f1_rank_norm(); });
+    if (prof) { runprof_.pk_f1 = (double)peak_kb(); reset_peak(); }
+    for (int ct = 0; ct < t_; ++ct) {
+      tm(runprof_.t_f2t, [this] { f2_create_emb(); });
+      tm(runprof_.t_f3t, [this] { f3_create_reverse_emb(); });
+      tm(runprof_.t_f4t, [this] { f4_combine_reverse_emb(); });
+      // emb state ENTERING f7a -- that is what drives f7a's work, so it is
+      // recorded here, before f7a rewrites the rank lists.
+      if (prof) runprof_.record_emb(emb_, *this);
+      tm(runprof_.t_f7at, [this] { f7a_rerank_by_emb_sim(); });
+    }
+    if (prof) { runprof_.pk_tloop = (double)peak_kb(); reset_peak(); }
+    tm(runprof_.t_embrr, [this] {
+      f2_create_emb(); f3_create_reverse_emb(); f4_combine_reverse_emb();
+    });
+    if (prof) { runprof_.pk_embrr = (double)peak_kb(); reset_peak(); }
+    tm(runprof_.t_f5sort,  [this] { f5_sort_emb(); });
+    tm(runprof_.t_f5eff,   [this] { f5_effect_estimation_emb(); });
+    if (prof) { runprof_.pk_f5 = (double)peak_kb(); reset_peak(); }
+    tm(runprof_.t_f6,      [this] { f6_gram_and_inc_elems(); });
+    if (prof) { runprof_.pk_f6 = (double)peak_kb(); reset_peak(); }
+    tm(runprof_.t_f7b,     [this] { f7b_rerank_cprr_tail(); });
+    if (prof) runprof_.pk_f7b = (double)peak_kb();
+    if (prof) runprof_.end(*this, omp_get_wtime() - R0);
+  }
+
+ public:
+  // FASE 2. Per-phase TIMES plus per-iteration WORK COUNTS, so the cost model is
+  // measured rather than predicted. The two F7a counters are derived from OUTSIDE
+  // the parallel loop (a row-size table and the pair count), because a counter
+  // inside it would need atomics and would perturb the very time it measures.
+  struct RunProfile {
+    // Peak VmHWM reached by the time each boundary is passed (clear_refs=5
+    // before each phase).
+    double pk_f1 = 0, pk_tloop = 0, pk_embrr = 0, pk_f5 = 0, pk_f6 = 0, pk_f7b = 0;
+    double t_f1 = 0, t_f2t = 0, t_f3t = 0, t_f4t = 0, t_f7at = 0;
+    double t_embrr = 0, t_f5sort = 0, t_f5eff = 0, t_f6 = 0, t_f7b = 0, t_total = 0;
+    std::vector<long long> emb_nnz_it, emb_zeros_it, f7a_visits_it;
+    long long emb_nnz_final = 0, emb_zeros_final = 0;
+    long long gram_nnz = 0, gram_zeros = 0;
+    double gram_rho = 0;
+    // X6 applied to the INSTRUMENT. end() takes the core and fills every counter
+    // above. Four of them (emb_nnz_final, emb_zeros_final, gram_nnz, gram_zeros)
+    // plus gram_rho had NO writer at all for a while and reported a zero that
+    // nobody had measured -- indistinguishable from "measured zero". This flag
+    // separates the two, and the gate asserts the fields against the core's own
+    // accessors, so the profiler cannot drift from what it profiles.
+    bool fields_written = false;
+    long long f7a_merges_total = 0;
+    int t_loops = 0, threads = 1;
+    bool enabled = false;
+
+    void begin(int t, std::size_t n, std::size_t l) {
+      t_f1 = t_f2t = t_f3t = t_f4t = t_f7at = 0;
+      t_embrr = t_f5sort = t_f5eff = t_f6 = t_f7b = t_total = 0;
+      emb_nnz_it.clear(); emb_zeros_it.clear(); f7a_visits_it.clear();
+      emb_nnz_final = emb_zeros_final = gram_nnz = gram_zeros = 0;
+      gram_rho = 0; f7a_merges_total = 0;
+      emb_nnz_final = emb_zeros_final = gram_nnz = gram_zeros = 0;
+      fields_written = false;
+      t_loops = t; threads = omp_get_max_threads();
+      pk_f1 = pk_tloop = pk_embrr = pk_f5 = pk_f6 = pk_f7b = 0;
+      if (enabled) reset_peak();
+      f7a_merges_total = (long long)t * (long long)n * (long long)l;
+    }
+    void record_emb(const M& emb, const RFECore& c) {
+      emb_nnz_it.push_back((long long)emb.nnz());
+      emb_zeros_it.push_back((long long)c.count_emb_zeros());
+      f7a_visits_it.push_back(count_f7a_visits(emb, c));
+    }
+    void end(RFECore& c, double tot) {
+      t_total = tot;
+      emb_nnz_final   = (long long)c.emb_.nnz();
+      emb_zeros_final = c.count_emb_zeros();
+      gram_nnz        = (long long)c.gram_.nnz();
+      gram_zeros      = c.count_gram_zeros();
+      gram_rho        = c.n_ ? (double)gram_nnz / ((double)c.n_ * (double)c.n_) : 0.0;
+      fields_written  = true;
+    }
+    // Sum over the (q,i) pairs of |emb[ img ]| -- the cell visits f7a performs
+    // materialising the right operand. Computed from the CURRENT rank lists, so
+    // it must be called before f7a rewrites them.
+    static long long count_f7a_visits(const M& emb, const RFECore& c) {
+      std::vector<std::size_t> sz((std::size_t)c.n_, 0);
+      for (std::size_t q = 0; q < (std::size_t)c.n_; ++q) {
+        std::size_t k = 0;
+        emb.for_each_in_row((idx_t)q, [&](idx_t, float) { ++k; });
+        sz[q] = k;
+      }
+      long long visits = 0;
+      for (std::size_t q = 0; q < (std::size_t)c.n_; ++q)
+        for (int i = 0; i < c.l_; ++i) {
+          const int img = c.rk_[(std::size_t)c.l_ * q + (std::size_t)i];
+          if (img >= 0 && (std::size_t)img < (std::size_t)c.n_) visits += (long long)sz[img];
+        }
+      return visits;
+    }
+  };
+  RunProfile runprof_;
+
+ public:
+  long long count_emb_zeros() const {
+    long long c = 0;
+    for (idx_t r = 0; r < (idx_t)n_; ++r)
+      emb_.for_each_in_row(r, [&](idx_t, float v) { if (v == 0.0f) ++c; });
+    return c;
+  }
+
+  // Peak attribution by phase, using the repo's own precedent
+  // (Data/phase_profile/etapa_a/README.md: echo 5 > /proc/self/clear_refs before
+  // each build). clear_refs=5 resets the PEAK COUNTER only, never the memory, so
+  // each reading is the peak REACHED up to that boundary. The phase with the
+  // largest number is where the process peaked -- a single VmHWM says the peak
+  // but not WHO reached it.
+  static void reset_peak() {
+    std::FILE* f = std::fopen("/proc/self/clear_refs", "w");
+    if (f) { std::fputs("5\n", f); std::fclose(f); }
+  }
+  static long peak_kb() {
+    std::FILE* f = std::fopen("/proc/self/status", "r");
+    if (!f) return -1;
+    char line[256];
+    long kb = -1;
+    while (std::fgets(line, sizeof(line), f))
+      if (std::strncmp(line, "VmHWM:", 6) == 0) { kb = std::atol(line + 6); break; }
+    std::fclose(f);
+    return kb;
+  }
+
+  long long count_gram_zeros() const {
+    long long c = 0;
+    for (idx_t r = 0; r < (idx_t)n_; ++r)
+      gram_.for_each_in_row(r, [&](idx_t, float v) { if (v == 0.0f) ++c; });
+    return c;
+  }
+
+  void set_run_profile(bool on) { runprof_.enabled = on; }
+  const RunProfile& run_profile() const { return runprof_; }
+
+// --------------------------------------------------------------- F1 out --
+  const M& sim() const { return sim_; }
+  std::size_t nnz_sim() const { return sim_.nnz(); }
+
+  // FNV-1a over the raw bytes of the rank lists -- the SAME instrument the
+  // Step 0 golden uses, so the digests are directly comparable.
+  std::uint64_t ck_rk() const { return fnv_bytes(rk_.data(), rk_.size() * sizeof(int)); }
+  // FNV-1a over the CSR cells as (row, col, value_bits). The offset basis is the
+  // golden's literal -- see fnv_bytes below for why it is NOT the canonical one.
+  std::uint64_t ck_sim() const {
+    std::uint64_t h = 1469598103934665603ULL;
+    for (idx_t r = 0; r < (idx_t)n_; ++r) {
+      sim_.for_each_in_row(r, [&](idx_t c, float v) {
+        std::uint32_t b;
+        std::memcpy(&b, &v, 4);
+        std::uint64_t x = ((std::uint64_t)r << 32) ^ (std::uint64_t)c;
+        h ^= x; h *= 1099511628211ULL;
+        h ^= b; h *= 1099511628211ULL;
+      });
+    }
+    return h;
+  }
+  // Digest of the DENSE view (implicit zeros included), so it matches the
+  // golden's ck_matrix bit-for-bit. Used only by the parity gate.
+  std::uint64_t ck_sim_dense() const {
+    std::vector<float> dense((std::size_t)n_ * (std::size_t)n_, 0.0f);
+    for (idx_t r = 0; r < (idx_t)n_; ++r)
+      sim_.for_each_in_row(r, [&](idx_t c, float v) {
+        dense[(std::size_t)r * (std::size_t)n_ + (std::size_t)c] = v;
+      });
+    return fnv_bytes(dense.data(), dense.size() * sizeof(float));
+  }
+
+  // The legacy's rankScoreSigmoid (RFE.cpp:195-201) and the rankNorm cell value,
+  // exposed so the parity gate can check the narrowings directly.
+  float rank_score_sigmoid(int x, int pk) const {
+    if (x == 1) return 1;
+    float sigmoidv = 1 / (1 + exp((-pa_) * (x - pk)));
+    return 1 - sigmoidv;
+  }
+  float rank_norm_cell(int posqi, int posiq) const {
+    // The legacy writes (pow(sig(posqi), 2) * sig(posiq)). Three things are
+    // load-bearing and are reproduced literally:
+    //   * pow() takes a DOUBLE here (the float arg is promoted), so the square
+    //     is computed in double and the product narrows once, at the end;
+    //   * rankScoreSigmoid narrows sigmoidv to float BEFORE the "1 -" subtract,
+    //     which is float arithmetic (RFE.cpp:197-199);
+    //   * pk is k/2 with INTEGER division (RFE.cpp:187).
+    // pow(x,2) is NOT rewritten as x*x: under -ffast-math a compiler may do
+    // exactly that, and that rewrite is a bit-level divergence to be measured
+    // in Step 4, not assumed harmless.
+    const int pk = k_ / 2;
+    const float a = rank_score_sigmoid(posqi, pk);
+    const float b = rank_score_sigmoid(posiq, pk);
+    return (float)(pow((double)a, 2.0) * (double)b);
+  }
+
+ // --------------------------------------------------------------- F2 out --
+  const M& emb() const { return emb_; }
+  std::size_t nnz_emb() const { return emb_.nnz(); }
+  // Number of emb cells whose value is EXACTLY 0.0f. Reported because its
+  // non-zero-ness is what licenses NOT routing this phase through
+  // multiply_and_prune; the parity gate asserts it matches the legacy's count.
+  std::size_t emb_exact_zeros() const {
+    std::size_t c = 0;
+    for (idx_t r = 0; r < (idx_t)n_; ++r)
+      emb_.for_each_in_row(r, [&](idx_t, float v) { if (v == 0.0f) ++c; });
+    return c;
+  }
+  // The legacy's rankKScore (RFE.cpp:644-646), exposed for the parity gate.
+  float rank_kscore_pub(int pos) const {
+    return (float)(1 - (log((double)pos) / log((double)k_)));
+  }
+  std::uint64_t ck_emb() const { return ck_csr(emb_); }
+
+ // --------------------------------------------------------------- F3 out --
+  const M& remb() const { return remb_; }
+  std::size_t nnz_remb() const { return remb_.nnz(); }
+  // Legacy rows that exist but carry NO value. The legacy pre-creates a row for
+  // every q in [0,n) (RFE.cpp:621-624), so remb has n keys; a bare transpose()
+  // has only the rows that receive a value. Reported by the gate so the
+  // difference is measured rather than assumed away.
+  std::size_t remb_rows() const {
+    std::size_t r = 0;
+    for (idx_t q = 0; q < (idx_t)n_; ++q) if (remb_.row_nnz(q) > 0) ++r;
+    return r;
+  }
+  std::uint64_t ck_remb() const { return ck_csr(remb_); }
+
+  // --------------------------------------------------------------- F5 out --
+  const std::vector<std::vector<int>>& sorted_emb() const { return sorted_emb_; }
+  // Normalised effect estimation, one per row, AFTER division by gr_value_.
+  const std::vector<float>& ee() const { return ee_; }
+  // tag_sort's output: the row order, descending by UNNORMALISED ee. This is F6's
+  // outer loop order, so its tie-break is part of the output (see f5 note).
+  const std::vector<int>& sorted_ee() const { return sorted_ee_; }
+  // The divisor, i.e. the maximum UNNORMALISED ee. Exposed so the gate can check
+  // it directly instead of inferring it from the ratio of two ee values.
+  float gr_value() const { return gr_value_; }
+  std::size_t emb_topk_sum_zero_rows() const {
+    std::size_t c = 0;
+    for (int q = 0; q < n_; ++q) if (ee_[(std::size_t)q] == 0.0f) ++c;
+    return c;
+  }
+  // Digests over the F5 state. ee is hashed as float bits; sorted_emb and
+  // sorted_ee as int32, so a tie-break change in EITHER sort changes the digest
+  // even when every ee VALUE is unchanged -- which is the whole risk here.
+  std::uint64_t ck_ee() const {
+    return fnv_bytes(ee_.data(), ee_.size() * sizeof(float));
+  }
+  std::uint64_t ck_sorted_emb() const {
+    std::uint64_t h = 1469598103934665603ULL;
+    for (int q = 0; q < n_; ++q) {
+      const auto& row = sorted_emb_[(std::size_t)q];
+      h = fnv_bytes(row.data(), row.size() * sizeof(int));
+      h ^= (std::uint64_t)row.size();
+      h *= 1099511628211ULL;
+    }
+    return h;
+  }
+  std::uint64_t ck_sorted_ee() const {
+    return fnv_bytes(sorted_ee_.data(), sorted_ee_.size() * sizeof(int));
+  }
+
+ // --------------------------------------------------------------- F6 out --
+  const M& gram() const { return gram_; }
+  std::size_t nnz_gram() const { return gram_.nnz(); }
+  // Gram cells whose value is EXACTLY 0.0f. These are the H8 population: real
+  // candidates (incElems inserted them) that carry a zero value. They must
+  // survive to F7, so the count is reported rather than assumed.
+  std::size_t gram_exact_zeros() const {
+    std::size_t c = 0;
+    for (idx_t r = 0; r < (idx_t)n_; ++r)
+      gram_.for_each_in_row(r, [&](idx_t, float v) { if (v == 0.0f) ++c; });
+    return c;
+  }
+  const std::vector<std::vector<int>>& inc_elems_l() const { return inc_elems_l_; }
+  std::uint64_t ck_gram() const { return ck_csr(gram_); }
+  // Read-only view of the rank lists, for the end-to-end gate. rk_ is the same
+  // object the legacy mutates in place, so this is the same aliasing the legacy
+  // has -- the gate compares it against the reference's own vector.
+  const std::vector<int>& rk_ref() const { return rk_; }
+
+ private:
+  // F1's cost attribution (Step 3 / Step 3c). Phases at the granularity the
+  // legacy's structure actually has: index build (serial), the cell loop, the
+  // CSR build (serial), and sort_ranked_lists. The in-loop split is differential.
+  struct F1Profile {
+    double t_total = 0.0;
+    double t_index = 0.0;    // SERIAL: build_position_index
+    double t_loop = 0.0;     // wall of the parallel region
+    double t_cells_max = 0.0;// CRITICAL PATH inside the loop (max thread)
+    double t_build = 0.0;    // SERIAL: build_from_partial_results
+    double t_sortrows = 0.0; // sort_ranked_lists: stable_sort + self pin
+    long long cells = 0;
+    long long absent = 0;    // position_of returned the l+2 absent marker
+    int threads = 1;
+    bool enabled = false;
+  };
+  F1Profile f1prof_;
+  bool f5sort_stable_ = false;
+
+ public:
+  void set_f1_profile(bool on) { f1prof_.enabled = on; }
+
+  // Step 3 / Block 2: the F5 tie-break negative control. OFF by default, so no
+  // parity gate can ever run the probed algorithm by accident.
+  void set_f5_sort_probe(bool stable) { f5sort_stable_ = stable; }
+  bool f5_sort_probe() const { return f5sort_stable_; }
+
+  const F1Profile& f1_profile() const { return f1prof_; }
+
+ public:
+  // F6's cost attribution (Step 3 / Stage 3a).
+  //
+  // F6 is 66% of the real-data pipeline, and until this existed it was ONE
+  // number. The question this answers is NOT "is F6 slow" -- it is "is F6 slow
+  // because of STRICTNESS or because of IMPLEMENTATION", because the two have
+  // different remedies: the first cannot be fixed (float addition order is
+  // irreducible, see FINDINGS) and the second can.
+  //
+  // The split is deliberately at the boundaries the code already has:
+  //   disc  -- pass 1, the union walk over sorted_emb
+  //   sort  -- RowAcc::finalize_candidates (insertion sort + dedupe)
+  //   acc   -- pass 2, the ordered accumulation (THE STRICT PART)
+  //   emit  -- triplet emission
+  // plus the two serial phases around the parallel region.
+  // (read by the Stage 3a bench; the struct itself is public so the bench can
+  // print the whole record without a dozen accessors)
+  public:
+  struct F6Profile {
+    double t_inv = 0.0;         // serial: build_emb_inverted_by_sorted_ee
+    double t_disc = 0.0;        // pass 1: candidate discovery
+    double t_sort = 0.0;        // finalize_candidates
+    double t_acc = 0.0;         // pass 2: ordered accumulation <- the strictness
+    double t_emit = 0.0;        // triplet emission
+    double t_build = 0.0;       // serial: build_from_partial_results
+    double t_total = 0.0;       // whole f6_gram_and_inc_elems call
+    long long cand_raw = 0;     // candidates WITH multiplicity (union size)
+    long long cand_uniq = 0;    // distinct columns per row (Gram row length)
+    long long inner_iters = 0;  // total pass-2 (q,j) visits
+    long long inv_max = 0;      // largest |inv_of_col_[i]| -- load balance
+    long long inv_min = 0;
+    // Per-phase SUM over threads is CPU work; MAX over threads is the critical
+    // path. With a static row split and unequal rows these diverge badly, and
+    // conflating them is how one ends up with a 833% "percentage". Wall time is
+    // governed by the MAX, so both are reported.
+    double m_disc = 0, m_sort = 0, m_acc = 0, m_emit = 0;
+    int threads = 1;
+    bool enabled = false;
+  };
+  private:
+  F6Profile f6prof_;
+
+ public:
+  // Test seam (Step 3 / Stage 3b, Camada 2). Runs the REAL finalize path on a
+  // synthetic raw multiset and hands back the result, so the corner suite can
+  // assert the two properties the O(k log k) rewrite depends on:
+  //   (1) cols_out is DISTINCT and ASCENDING -> the builder's V4 fast path;
+  //   (2) every vals_out bit-pattern is 0.0f -> no value is carried through
+  //       pass 1. If a future refactor reintroduces a value-carrying candidate
+  //       path, this is what notices, instead of the Gram quietly changing.
+  // Same convention as rank_kscore_pub(): a thin wrapper over the real code,
+  // never a re-implementation of it. int in / int out so the corner suite does
+  // not have to name idx_t.
+  static void probe_candidates(const std::vector<int>& raw,
+                               std::vector<int>& cols_out,
+                               std::vector<float>& vals_out) {
+    RowAcc a;
+    for (const int c : raw) a.add_candidate((idx_t)c);
+    a.finalize_candidates();
+    cols_out.clear();
+    for (const idx_t c : a.cols) cols_out.push_back((int)c);
+    vals_out = a.vals;
+  }
+
+  // Stage 3a toggle. OFF by default so the production path and every parity
+  // gate run the identical code they ran before the instrumentation existed.
+  void set_f6_profile(bool on) { f6prof_.enabled = on; }
+  const F6Profile& f6_profile() const { return f6prof_; }
+
+ public:
+  // F6's per-row accumulator. Two phases on one buffer: `add_candidate` only
+  // widens the column set (pass 1, the union), `add` accumulates a value into an
+  // existing candidate (pass 2). Candidates are kept sorted by an explicit sort
+  // before emission so the builder's V4 fast path sees strictly ascending columns
+  // and has nothing to coalesce -- the same contract F2 relies on.
+  struct RowAcc {
+    std::vector<idx_t> cols;
+    std::vector<float> vals;
+    void clear() { cols.clear(); vals.clear(); }
+    std::size_t size() const { return cols.size(); }
+    // Called BETWEEN pass 1 and pass 2. Sorting alone is not enough: pass 1 takes
+    // a union over q, so the same column is appended once per q that contributes
+    // it. Without a unique, the duplicates would survive as extra cells and
+    // pass 2's binary search would only ever find the FIRST of them, silently
+    // dropping every later q's contribution to that column.
+    //
+    // WHY THERE IS NO VALUE TO SORT (Step 3 / Stage 3b, and the whole point):
+    // pass 1 only ever calls add_candidate, which carried a literal 0.0f. The
+    // previous version therefore shuffled `vals` alongside `cols` purely so it
+    // could COALESCE duplicates by summing -- and 0.0f + 0.0f + ... + 0.0f is
+    // exactly 0.0f in IEEE-754, for every order and every count. The value it
+    // computed was a constant it already knew. So `vals` is not carried through
+    // pass 1 at all, and the sort cannot desynchronise it from `cols`.
+    //
+    // That removes three failure modes at once, and they were not hypothetical:
+    // the insertion sort below was O(k^2) on the RAW candidate count (~829/row
+    // real, measured) and accounted for 77% of F6; a paired (col,val) sort is
+    // the classic place to move one array and forget the other; and a refactor
+    // that let pass 1 carry a real value would silently change the Gram.
+    //
+    // ORDER-SENSITIVITY: none. The output is the distinct ascending column set
+    // with 0.0f values, which is the same set for any correct sort, because the
+    // duplicates being collapsed carried no information. stable_sort is NOT
+    // required and would be a different (slower) algorithm for the same answer.
+    //
+    // CONTRACT: the result is strictly ascending and unique, which is what lets
+    // the builder's V4 fast path run with nothing to coalesce. vals is sized to
+    // match exactly; pass 2's add() indexes it by binary search on cols.
+    void finalize_candidates() {
+      std::sort(cols.begin(), cols.end());
+      cols.erase(std::unique(cols.begin(), cols.end()), cols.end());
+      vals.assign(cols.size(), 0.0f);
+    }
+    void add_candidate(idx_t c) {
+      // Appended unsorted; finalize_candidates() sorts and dedupes. A fresh
+      // column starts at 0.0f -- the legacy's zero-fill -- and that value is
+      // now created in finalize_candidates(), where the distinct set is known,
+      // rather than carried here where there is nothing to carry.
+      cols.push_back(c);
+    }
+    idx_t col(std::size_t s) const { return cols[s]; }
+    float val(std::size_t s) const { return vals[s]; }
+    // Pass 2. Binary search for the candidate (always present: pass 2 iterates
+    // the same sorted_emb lists pass 1 used), then add in CALL ORDER -- the legacy
+    // order for that cell is the order of the q loop, which is sorted_ee.
+    void add(idx_t c, float v) {
+      std::size_t lo = 0, hi = cols.size();
+      while (lo < hi) {
+        const std::size_t mid = (lo + hi) / 2;
+        if (cols[mid] < c) lo = mid + 1; else hi = mid;
+      }
+      if (lo < cols.size() && cols[lo] == c) vals[lo] += v;
+    }
+  };
+
+  // FNV-1a over (row, col, value_bits) -- the canonical cell form.
+  std::uint64_t ck_csr(const M& m) const {
+    std::uint64_t h = 1469598103934665603ULL;   // the golden's literal, see below
+    for (idx_t r = 0; r < (idx_t)n_; ++r) {
+      m.for_each_in_row(r, [&](idx_t c, float v) {
+        std::uint32_t b;
+        std::memcpy(&b, &v, 4);
+        std::uint64_t x = ((std::uint64_t)r << 32) ^ (std::uint64_t)c;
+        h ^= x; h *= 1099511628211ULL;
+        h ^= b; h *= 1099511628211ULL;
+      });
+    }
+    return h;
+  }
+
+  // FNV-1a over the raw bytes, with the offset basis SPELLED THE SAME WAY the
+  // golden's is. The golden (rfe_ref_verbatim.hpp) uses 1469598103934665603 --
+  // 19 digits, which is NOT the canonical 20-digit FNV-1a basis
+  // (14695981039346656037). That does not matter for correctness: a digest is
+  // only ever compared against another digest produced by the SAME function, and
+  // the pins in Data/ and in step0_check.sh were recorded with the golden's
+  // literal. Writing the canonical basis here made ck_rk() disagree with the
+  // Step 0 pin even though every value matched (the gate's position-by-position
+  // check had already passed) -- a digest that is "more correct" but not
+  // comparable is useless as a pin.
+  static std::uint64_t fnv_bytes(const void* p, std::size_t nbytes) {
+    const std::uint8_t* b = static_cast<const std::uint8_t*>(p);
+    std::uint64_t h = 1469598103934665603ULL;   // must equal the golden's literal
+    for (std::size_t i = 0; i < nbytes; ++i) {
+      h ^= b[i];
+      h *= 1099511628211ULL;
+    }
+    return h;
+  }
+
+// ---- position index (replaces the legacy's O(L) getPosition scan) ---------
+  // getPosition(qImg, img) answers "where does img sit in row qImg's list", and
+  // rankNorm calls it as getPosition(img_rl_i, q). The legacy scans the row; this
+  // builds the INVERTED index of the rank lists once per phase and binary
+  // searches it. Step 1's H9 measured 0 mismatches over every (q,i) pair, with the
+  // absent case (legacy returns l+2) reproduced exactly.
+  //
+  // Layout: for each id c, the ascending list of (row, pos) with rk[row][pos]==c.
+  // Built by a serial scan in ascending (row,pos), so each list is already
+  // sorted by row, and a binary search on row finds the entry. The legacy returns
+  // the FIRST match in the ROW it scans, which is the smallest pos for that
+  // (row, id) pair -- satisfied because each (row,id) pair occurs at most once in
+  // a permutation-shaped list; the parity gate covers the duplicate case.
+  void build_position_index() {
+    inv_rows_.assign((std::size_t)n_, {});
+    inv_pos_.assign((std::size_t)n_, {});
+    inv_n_.assign((std::size_t)n_, 0);
+    for (std::size_t row = 0; row < (std::size_t)n_; ++row) {
+      for (int i = 0; i < l_; ++i) {
+        const int c = rk_[(std::size_t)l_ * row + (std::size_t)i];
+        if (c < 0 || c >= (int)n_) continue;      // fail-fast guard, see below
+        inv_rows_[(std::size_t)c].push_back((std::uint32_t)row);
+        inv_pos_[(std::size_t)c].push_back((std::uint32_t)i);
+        ++inv_n_[(std::size_t)c];
+      }
+    }
+  }
+
+  // Returns the legacy's getPosition(q_id, img) result, including l+2 absent.
+  int position_of(idx_t q_id, idx_t img) const {
+    const std::size_t c = (std::size_t)img;
+    const std::vector<std::uint32_t>& rows = inv_rows_[c];
+    // std::lower_bound over the (already ascending) row ids.
+    auto it = std::lower_bound(rows.begin(), rows.end(), (std::uint32_t)q_id);
+    if (it != rows.end() && *it == (std::uint32_t)q_id) {
+      const std::size_t k = (std::size_t)(it - rows.begin());
+      return (int)inv_pos_[c][k] + 1;
+    }
+    return l_ + 2;   // the legacy's absent marker, fed to rankScoreSigmoid
+  }
+
+  // ---- the F2 row accumulator ----------------------------------------------
+  // Open-addressed, linear-probed, sized from the k + k^2 support bound so its
+  // footprint is independent of n. It exists to make the ACCUMULATION ORDER the
+  // legacy's (see f2_create_emb), and for two further reasons the engine's own
+  // kernels cannot cover:
+  //
+  //   * it NEVER drops a value, not even an exact 0.0f. H2 measured 20.7% of
+  //     emb keys as exactly zero and they are structural, so a |v| filter here
+  //     would be a correctness bug, not a precision one;
+  //   * add() is called in the legacy's call sequence, so each cell's partial
+  //     sums are the legacy's. Emitting duplicate records and letting
+  //     build_from_partial_results coalesce would instead inherit the order an
+  //     UNSTABLE std::sort leaves behind (SparseMatrix.hpp:322-336).
+  class EmbAcc {
+   public:
+    static constexpr idx_t EMPTY = (idx_t)-1;
+
+    // capacity: next power of two >= 2*bound, so the load factor stays <= 50%
+    // and linear probing cannot degenerate (the same reasoning the engine's
+    // HashRowAccumulator documents at SparseMatrix.hpp:453-461).
+    void init(std::size_t bound) {
+      std::size_t cap = 8;
+      while (cap < bound * 2 + 2) cap <<= 1;
+      slot_col_.assign(cap, EMPTY);
+      slot_val_.assign(cap, 0.0f);
+      mask_ = cap - 1;
+      used_.reserve(bound + 2);
+      ord_.reserve(bound + 2);
+    }
+
+    void begin() {
+      // Clear only the slots this row actually touched -- O(k^2), not O(cap).
+      for (std::size_t s : used_) slot_col_[s] = EMPTY;
+      used_.clear();
+      ord_.clear();
+    }
+
+    inline void add(idx_t col, float v) {
+      std::size_t h = mix(col) & mask_;
+      while (slot_col_[h] != EMPTY && slot_col_[h] != col) h = (h + 1) & mask_;
+      if (slot_col_[h] == EMPTY) {
+        // First sight of this column. INSERT unconditionally, even when v is
+        // exactly 0.0f -- that is the legacy's incEmb else-branch (RFE.cpp:692)
+        // and it is what H2 measured as load-bearing.
+        slot_col_[h] = col;
+        slot_val_[h] = v;
+        used_.push_back(h);
+        ord_.push_back(h);
+      } else {
+        slot_val_[h] += v;   // float += float, in the legacy's call order
+      }
+    }
+
+    // Ascending column order, so the emitted row is strictly increasing and the
+    // builder's V4 fast path applies with nothing to coalesce.
+    void sort_columns() {
+      std::sort(ord_.begin(), ord_.end(),
+                [this](std::size_t a, std::size_t b) { return slot_col_[a] < slot_col_[b]; });
+    }
+
+    std::size_t size() const { return ord_.size(); }
+    idx_t col(std::size_t i) const { return slot_col_[ord_[i]]; }
+    float val(std::size_t i) const { return slot_val_[ord_[i]]; }
+
+   private:
+    static std::size_t mix(idx_t x) {
+      std::uint64_t h = x;
+      h ^= h >> 16; h *= 0x85ebca6bULL;
+      h ^= h >> 13; h *= 0xc2b2ae35ULL;
+      h ^= h >> 16;
+      return (std::size_t)h;
+    }
+
+    std::vector<idx_t> slot_col_;
+    std::vector<float> slot_val_;
+    std::vector<std::size_t> used_;   // slots touched this row
+    std::vector<std::size_t> ord_;    // slots in emitted (ascending col) order
+    std::size_t mask_ = 0;
+  };
+
+  // The legacy's sort (RFE.cpp:724-767), reproduced.
+  //
+  // DIRECTION -- and this is the bug the first version of this file had, found
+  // by the parity gate, not by reading. The legacy's insertion loop is
+  //
+  //     while (i >= 0 && a[i] < keyA) { a[i+1] = a[i]; ... i--; }
+  //     a[i+1] = keyA;
+  //
+  // which shifts every element STRICTLY SMALLER than the key one slot right and
+  // drops the key where the run of smaller elements began. So SMALLER values end
+  // up LATER: the row comes out DESCENDING, most similar first. The port's
+  // comparator was `a.first < b.first` (ascending), which produced the exact
+  // mirror: the core's row 0 was 190(2.07e-05) 62(2.52e-05) ... where the
+  // legacy's is 0(1) 95(0.0229) 168(0.0156) ... -- the same multiset, reversed.
+  //
+  // STABILITY, once the direction is right, still matters: the loop shifts only
+  // on strict `<`, so it is a STABLE sort, and equal values keep their original
+  // list order. std::stable_sort with the same key and the same input order
+  // therefore yields the same permutation. Measured: 0 exact-value ties on the
+  // pinned row, and the H6 tie-invariance result covers the general case for
+  // ee -- but the self-pin below is NOT a tie question and must be kept.
+  //
+  // The comparator is written as `>` so the direction is visible at the call
+  // site; `std::stable_sort` then produces most-similar-first.
+  void sort_ranked_lists() {
+    // Per-row violation flags. Distinct indices are written from distinct
+    // iterations, so this needs no synchronisation; the throws happen AFTER the
+    // region because throwing from inside an OpenMP parallel region is forbidden
+    // by the standard and libgomp turns it into std::terminate.
+    std::vector<char> bad_sim((std::size_t)n_, 0);
+    std::vector<char> missing_self((std::size_t)n_, 0);
+    #pragma omp parallel
+    {
+      std::vector<std::pair<float, int>> local;
+      #pragma omp for schedule(static)
+      for (long long q = 0; q < (long long)n_; ++q) {
+        local.clear();
+        local.reserve((std::size_t)l_);
+        for (int i = 0; i < l_; ++i) {
+          const int img = rk_[(std::size_t)l_ * q + (std::size_t)i];
+          // Absent cells read the legacy's zero-fill (initSparseMatrix), which is
+          // exactly what get() returns for an absent cell -- same value.
+          const float v = sim_.get((idx_t)q, (idx_t)img);
+          if (!std::isfinite(v)) {
+            // A NaN makes the legacy's `a[i] < keyA` false for every a[i], at
+            // which point its order is not reproduced by any sort. Refuse rather
+            // than silently differ -- but RECORD, do not throw: see the note at
+            // the self-pin below about throwing inside an OpenMP region.
+            bad_sim[(std::size_t)q] = 1;
+            break;
+          }
+          local.emplace_back(v, img);
+        }
+        std::stable_sort(local.begin(), local.end(),
+                         [](const std::pair<float, int>& a,
+                            const std::pair<float, int>& b) { return a.first > b.first; });
+        for (int i = 0; i < l_; ++i)
+          rk_[(std::size_t)l_ * q + (std::size_t)i] = local[(std::size_t)i].second;
+
+        // Self pinned to position 0, unconditionally (RFE.cpp:754-766). This is
+        // NOT a tie question: it is a separate swap applied AFTER the sort. The
+        // legacy's scan reads element i before testing i < l_, so a row without
+        // its own id reads out of bounds; the contract is that self is present.
+        //
+        // THE VIOLATION IS RECORDED, NOT THROWN, HERE. Throwing from inside an
+        // OpenMP parallel region is forbidden by the C++ standard, and libgomp
+        // responds by calling std::terminate -- so a `throw` here would abort the
+        // process instead of failing closed. The corner suite caught this: the
+        // guard fired but the exception never reached the caller. The flag is
+        // written (distinct indices, so no data race) and the throw happens after
+        // the region, where it propagates normally.
+        int self_pos = -1;
+        for (int i = 0; i < l_; ++i) {
+          if (rk_[(std::size_t)l_ * q + (std::size_t)i] == (int)q) { self_pos = i; break; }
+        }
+        if (self_pos < 0) {
+          missing_self[(std::size_t)q] = 1;
+          continue;
+        }
+        if (self_pos > 0) {
+          std::swap(rk_[(std::size_t)l_ * q], rk_[(std::size_t)l_ * q + (std::size_t)self_pos]);
+        }
+      }
+    }
+    // Outside the parallel region, where a throw actually propagates.
+    for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
+      if (bad_sim[q])
+        throw std::runtime_error(
+            "RFE: non-finite similarity in row " + std::to_string(q) +
+            "; the legacy's order is undefined for NaN and would diverge from "
+            "std::stable_sort");
+    }
+    for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
+      if (missing_self[q])
+        throw std::runtime_error(
+            "RFE: rank list row " + std::to_string(q) +
+            " does not contain its own id; the legacy reads out of bounds at this "
+            "point (RFE.cpp:754-756)");
+    }
+  }
+
+  std::vector<int>& rk_;
+  std::size_t n_;
+  int l_, k_, t_;
+  double pa_;
+  M sim_;
+  M emb_;
+  M remb_;
+  // F5 state. sorted_emb_[q] is the KEY order of emb[q] after sortEmb's
+  // descending std::sort (kept, not just its first k, because that order IS the
+  // legacy's output). ee_ holds the NORMALISED values; sorted_ee_ is the row
+  // order by UNNORMALISED ee and becomes F6's outer loop order.
+  std::vector<std::vector<int>> sorted_emb_;
+  std::vector<float> ee_;
+  std::vector<int> sorted_ee_;
+  float gr_value_ = 0.0f;
+  // MX(q,q) = pow(2,30) (RFE.cpp:605). Applied at READ time by F7b rather than
+  // written into gram_, so gram_ stays equal to the ACCUMULATED Gram that F6
+  // gated. Written the way the legacy writes it: pow() with int arguments,
+  // narrowed once to float.
+  const float diag_pin_ = (float)pow(2, 30);
+  // F6 state. gram_ carries the Gram AND doubles as incElems (same support by
+  // construction). inv_of_col_[i] = ascending sorted_ee positions t with
+  // i in sorted_emb[sorted_ee[t]] -- the row-independent q order F6 iterates.
+  M gram_;
+  std::vector<std::vector<std::uint32_t>> inv_of_col_;
+  std::vector<std::vector<int>> inc_elems_l_;
+  std::vector<std::vector<std::uint32_t>> inv_rows_;
+  std::vector<std::vector<std::uint32_t>> inv_pos_;
+  std::vector<std::size_t> inv_n_;
+};
+
+#endif  // RFE_CORE_HPP

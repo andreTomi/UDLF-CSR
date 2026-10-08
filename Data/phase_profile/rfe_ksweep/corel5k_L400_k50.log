@@ -1,0 +1,67 @@
+RFE parity gate -- Step 2, F1 (rankNorm + sort)
+fixture N=5000 L=400 k=50 t=2 pa=0.100 seed=42  (not the pinned fixture)
+source: REAL DATA file /tmp/rk_real/corel5k_L400.txt
+  [BuildV2] Total triplets: 2000000
+  legacy: nnz=494204 ck_rk=0x6458a5a775c23be5
+  core  : nnz=2000000 ck_rk=0x6458a5a775c23be5 ck_sim_dense=0x016867d6169ad93d
+  ok  : F1: nnz == N*L (one written cell per rank-list slot)
+  ok  : F1: every similarity cell matches the legacy bit-exactly
+  expected row0 after sort by value (from the legacy's own cells): 2866(0) 2553(0) 2891(0) 2535(0) 2887(0) 2472(0)
+  legacy  row0 after rankNorm                        : 0(1) 4889(0.735937) 4444(0.722032) 4556(0.699096) 1111(0.674865) 4978(0.658257)
+  core    row0 after f1_rank_norm                   : 0(1) 4889(0.735937) 4444(0.722032) 4556(0.699096) 1111(0.674865) 4978(0.658257)
+  ok  : F1: rank lists match the legacy position by position
+  ok  : F1: self at position 0 in every row (sort pin)
+  ok  : F1: every id in [0,N)
+  ok  : F1: F1 only reorders (row multiset preserved)
+
+-- F2: createEmb --
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2876009
+  legacy emb keys=2876009 | core emb keys=2876009 | mismatched=0 | extra=0
+  exact-zero keys: legacy=72789 core=72789 (H2 says these are load-bearing)
+  ok  : F2: every emb value matches the legacy bit-exactly
+  ok  : F2: emb support (cell count) matches the legacy
+  ok  : F2: no cell the legacy lacks (no spurious insert)
+  ok  : F2: exact-zero cell count matches the legacy (zeros preserved, not filtered)
+
+-- F3: createReverseEmb --
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2876009
+  legacy remb cells=2876009  core remb nnz=2876009  value-diffs=0
+  remb rows: legacy has 0 empty-but-present, core has 5000 non-empty
+  remb cells with no emb[q][col] counterpart: 1106813
+  ok  : F3: every remb value matches the legacy bit-exactly
+  ok  : F3: no remb cell the legacy lacks (no spurious insert)
+  ok  : F3: core remb rows <= N
+  note: empty-row difference is expected and measured above; F4 reads these as 0.0f either way.
+
+-- F4: combineReverseEmb --
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2876009
+  [BuildV2] Total triplets: 2876009
+  emb keys before combine=2876009  after=2876009 (legacy)  value-diffs=0  extra=0
+  post-combine exact-zero keys: 1157641 of 2876009 (40.25%)
+  ok  : F4: every combined emb value matches the legacy bit-exactly
+  ok  : F4: no cell the legacy lacks
+  ok  : F4: the support is UNCHANGED by the combine (keys kept, zeroed)
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2876009
+  [BuildV2] Total triplets: 1751497
+  [BuildV2] Total triplets: 1718368
+  support check on the same input: legacy keys=2876009 | combine() keys=1751497 | merge() keys=1718368
+    legacy keys combine() would DROP=1124512  merge() would DROP=1157641  (values alone cannot show this: 1157641 of 2876009 post-combine cells are exactly 0.0f, and get() reads 0 in both cases)
+  ok  : F4: CSRMatrix::combine DOES drop keys the legacy keeps (dedicated kernel justified)
+  ok  : F4: CSRMatrix::merge ALSO drops them (emission filter drops zeros)
+
+-- F5: sortEmb + effectEstimationEmb --
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 2876009
+  [BuildV2] Total triplets: 2876009
+  ok  : F5: sorted_emb KEY ORDER matches the legacy position by position
+  ok  : F5: sorted_emb row lengths match (support identical)
+  ok  : F5: every ee value matches the legacy bit-exactly
+  ok  : F5: sorted_ee ORDER matches the legacy (unstable tie-break reproduced)
+  positions where a STABLE sort would differ from the legacy order: 4 of 5000
+  grValue=870.380981  (theorem: > 0 always -- a 0 here would refute it)
+  ok  : F5: grValue (the max unnormalised ee) matches the legacy
+  ee pairs with EXACTLY eq

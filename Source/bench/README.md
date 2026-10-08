@@ -61,6 +61,8 @@ Para um port que ainda mora só no bench, o equivalente mínimo é o
 entrada + `CK_FINAL` pinado. É o que o BFSTree tem hoje, e `make test-bfstree` é o
 que o torna verificável por outra pessoa.
 
+| 10 | **pin ABSOLUTO de regime** (X8) | pin de digest **hard** (`ck_gram` = bits crus de float, `ck_sim_dense`, `ck_rk` final) gravado do regime estrito e **asserido** — impresso nao e asseverado. A escada de regimes roda **sobre o pin**, nunca sobre um delta core-vs-referência: sob a mesma flag os dois lados sao perturbados juntos e o delta e invariante (medido no RFE: gate verde nos 4 regimes, `ck_rk` real `0x0db02fef...` sob NFM e `0x8079b48d...` sob PROD). Exercitado em **dado real grande o bastante** — o fixture de N=200 tolera 1 ULP, ALOI N=72000 com 63,52% de zeros exatos nao tolera. Item de **primeiro arco**, nunca auditoria tardia |
+
 ## Armadilhas que custaram runs
 
 1. **CRLF em `.sh` salvo por ferramenta Windows.** Em WSL é erro de sintaxe duro
@@ -81,6 +83,31 @@ que o torna verificável por outra pessoa.
 5. **md5 do suite ≠ md5 do binário.** Suite que imprime a contagem de threads no
    cabeçalho exige `tail -n +2` antes do `md5sum`; suite que imprime tempos por
    fase nunca dá `cmp` de saída inteira — compara-se só a linha de checksum.
+
+6. **Gate de igualdade que compara coleção vazia passa.** Um gate que itera um
+   conjunto vazio reporta `0 divergências` e dá **verde** — passou sem medir
+   nada. Ocorreu duas vezes no arco do RFE (F7), e na pior hora: o gate que
+   existia para pegar pipeline em ordem errada estava ele próprio em ordem
+   errada, reportando sucesso sobre zero células. Regra: todo gate de paridade
+   precisa de **duas** asserções — `mismatches == 0` **e** `compared > 0` — e
+   deve imprimir "comparei N" na mesma linha do "0 divergências". Consertar só
+   a ordem das chamadas deixa a armadilha armada para a fase seguinte; o conserto
+   é **estrutural** (a iteração vazia vira falha). Princípio geral, registrado
+   como X6 em `../tests/FINDINGS.md`.
+7. **Gate relativo é cego a mudança de regime por construção.** Um gate que
+   compara o core contra a referência compilada **com as mesmas flags** não pode
+   detectar que o regime mudou: `-ffast-math` perturba os dois lados
+   identicamente, então `mismatches == 0` persiste enquanto todo valor absoluto
+   derivou. Não é gate mal escrito — é gate cujo instrumento não existe. Medido
+   no RFE (Step 3 / Stage 3c): `test_rfe_parity` imprimiu `RFE PARITY ...: OK`
+   nos **quatro** regimes, com `ck_gram` impresso e nunca asseverado (linha 789),
+   enquanto em ALOI real o `ck_rk` final ia de `0x0db02fefdf6bd62c` (NFM/BENCH)
+   a `0x8079b48d44cbd874` (PROD/PRODC). Conserto estrutural: **pin absoluto do
+   instrumento duro, asseverado, exercitado sobre a escada de regimes em dado
+   real grande o bastante**. Registrado como X8 em `../tests/FINDINGS.md`.
+   Nota de atribuição: aqui o culpado foi **reassociação**, não contração de FMA
+   (`PRODC == PROD`), ao contrário do que o precedente LHRR sugeria — a escada
+   tem de ser medida por método, nunca herdada.
 
 ## Inventário
 

@@ -1,0 +1,195 @@
+RFE parity gate -- Step 2, F1 (rankNorm + sort)
+fixture N=8000 L=400 k=5 t=2 pa=0.100 seed=42  (not the pinned fixture)
+source: REAL DATA file /tmp/rk_real/linnaeus_L400.txt
+  [BuildV2] Total triplets: 3200000
+  legacy: nnz=636006 ck_rk=0x1ba4ad0eb9fa4286
+  core  : nnz=3200000 ck_rk=0x1ba4ad0eb9fa4286 ck_sim_dense=0xdc73c5b907df9bf1
+  ok  : F1: nnz == N*L (one written cell per rank-list slot)
+  ok  : F1: every similarity cell matches the legacy bit-exactly
+  expected row0 after sort by value (from the legacy's own cells): 304(0) 2830(0) 3011(0) 2365(0) 3080(0) 2216(0)
+  legacy  row0 after rankNorm                        : 0(1) 375(0.125) 2955(0.107186) 338(0.0712685) 274(0.0313023) 6839(0.0215026)
+  core    row0 after f1_rank_norm                   : 0(1) 375(0.125) 2955(0.107186) 338(0.0712685) 274(0.0313023) 6839(0.0215026)
+  ok  : F1: rank lists match the legacy position by position
+  ok  : F1: self at position 0 in every row (sort pin)
+  ok  : F1: every id in [0,N)
+  ok  : F1: F1 only reorders (row multiset preserved)
+
+-- F2: createEmb --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  legacy emb keys=111499 | core emb keys=111499 | mismatched=0 | extra=0
+  exact-zero keys: legacy=37303 core=37303 (H2 says these are load-bearing)
+  ok  : F2: every emb value matches the legacy bit-exactly
+  ok  : F2: emb support (cell count) matches the legacy
+  ok  : F2: no cell the legacy lacks (no spurious insert)
+  ok  : F2: exact-zero cell count matches the legacy (zeros preserved, not filtered)
+
+-- F3: createReverseEmb --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  legacy remb cells=111499  core remb nnz=111499  value-diffs=0
+  remb rows: legacy has 0 empty-but-present, core has 8000 non-empty
+  remb cells with no emb[q][col] counterpart: 60597
+  ok  : F3: every remb value matches the legacy bit-exactly
+  ok  : F3: no remb cell the legacy lacks (no spurious insert)
+  ok  : F3: core remb rows <= N
+  note: empty-row difference is expected and measured above; F4 reads these as 0.0f either way.
+
+-- F4: combineReverseEmb --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 111499
+  emb keys before combine=111499  after=111499 (legacy)  value-diffs=0  extra=0
+  post-combine exact-zero keys: 77575 of 111499 (69.57%)
+  ok  : F4: every combined emb value matches the legacy bit-exactly
+  ok  : F4: no cell the legacy lacks
+  ok  : F4: the support is UNCHANGED by the combine (keys kept, zeroed)
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 42667
+  [BuildV2] Total triplets: 33924
+  support check on the same input: legacy keys=111499 | combine() keys=42667 | merge() keys=33924
+    legacy keys combine() would DROP=68832  merge() would DROP=77575  (values alone cannot show this: 77575 of 111499 post-combine cells are exactly 0.0f, and get() reads 0 in both cases)
+  ok  : F4: CSRMatrix::combine DOES drop keys the legacy keeps (dedicated kernel justified)
+  ok  : F4: CSRMatrix::merge ALSO drops them (emission filter drops zeros)
+
+-- F5: sortEmb + effectEstimationEmb --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 111499
+  ok  : F5: sorted_emb KEY ORDER matches the legacy position by position
+  ok  : F5: sorted_emb row lengths match (support identical)
+  ok  : F5: every ee value matches the legacy bit-exactly
+  ok  : F5: sorted_ee ORDER matches the legacy (unstable tie-break reproduced)
+  positions where a STABLE sort would differ from the legacy order: 3916 of 8000
+  grValue=13.6484375  (theorem: > 0 always -- a 0 here would refute it)
+  ok  : F5: grValue (the max unnormalised ee) matches the legacy
+  ee pairs with EXACTLY equal normalised values: 1132805 of 31996000
+  ck_ee=0xdf2c8ae408bc13cd ck_sorted_emb=0x0195dcdfd589cc7a ck_sorted_ee=0x3314992b6fbac59b
+
+-- F6: Gram + incElems (reRankingByCPRR core) --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 595074
+  incElems cells (legacy): 595074  core gram nnz: 595074
+  ok  : F6: every legacy incElems candidate survives in the Gram
+  ok  : F6: the Gram has no candidate the legacy lacks
+  ok  : F6: incElems cell count equals the Gram nnz (same support)
+  ok  : F6: every off-diagonal Gram value matches the legacy bit-exactly
+  off-diagonal Gram cells compared: 587074
+  exact-zero Gram cells: legacy=534532  core=534532  (89.83% of 595074 cells at N=8000 L=400 k=5)
+  ok  : F6: the exact-zero Gram census matches the legacy
+  ok  : F6: incElemsL matches the legacy set for every row
+  ck_gram=0x4721eea0c3e43302
+  REAL pin cfg=linnaeus_L400.txt ck_gram=0x4721eea0c3e43302
+
+-- F7a: reRankingByEmbSim (the t-loop phase) --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 3200000
+  ok  : F7a: rkLists after reRankingByEmbSim matches the legacy position by position
+  rk cells differing after one embRR pass: 0 of 3200000
+
+-- E2E: full pipeline in legacy order (rankNorm + t x embRR + CP) --
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 87802
+  [BuildV2] Total triplets: 87802
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 86252
+  [BuildV2] Total triplets: 86252
+  [BuildV2] Total triplets: 428970
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 111499
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 87802
+  [BuildV2] Total triplets: 87802
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 86252
+  [BuildV2] Total triplets: 86252
+  [BuildV2] Total triplets: 428970
+  F7b isolation: Gram cells differing from the legacy = 0 (zero-valued = 379476, compared = 428970)
+  ok  : F7b: the Gram comparison actually compared cells (not vacuous)
+  ok  : F7b: the Gram at the tail's input point matches the legacy (incl. the pow(2,30) diagonal read)
+  H8: union-prune rows differing=0  |  value-only-prune rows differing=8000  (of 8000; 379476 zero-valued Gram cells compared)
+  ok  : H8: the UNION prune reproduces the legacy's top-L for every row
+  ok  : H8: the prune comparison actually compared Gram cells (not vacuous)
+    PRUNE 8000 400 5 2 0 8000
+  F7b isolation: rkLists differing after the tail alone = 0 of 3200000
+  ok  : F7b: the CPRR tail reproduces the legacy rank lists on a shared input
+  E2E final rkLists: legacy ck_rk=0x3cabc15f423ff04a  core ck_rk=0x3cabc15f423ff04a
+  cells differing: 0 of 3200000  (identical)
+  ok  : E2E: the full pipeline in legacy order reproduces the final rank lists
+
+-- F5: deliberate ee-tie fixtures --
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 4090
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 2190
+  [BuildV2] Total triplets: 2190
+  MANY ties: all rows share one pattern N=200 L=40 k=10 pat= 1 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs=18145 | stable-sort would be wrong in 191/200
+  [BuildV2] Total triplets: 3600
+  [BuildV2] Total triplets: 2755
+  [BuildV2] Total triplets: 2755
+  [BuildV2] Total triplets: 3600
+  [BuildV2] Total triplets: 2648
+  [BuildV2] Total triplets: 2648
+  [BuildV2] Total triplets: 5198
+  [BuildV2] Total triplets: 3600
+  [BuildV2] Total triplets: 2755
+  [BuildV2] Total triplets: 2755
+  [BuildV2] Total triplets: 3600
+  [BuildV2] Total triplets: 2648
+  [BuildV2] Total triplets: 2648
+  FEW ties: 3 patterns over 120 rows N=120 L=30 k= 8 pat= 3 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs= 3160 | stable-sort would be wrong in 80/120
+  [BuildV2] Total triplets: 1600
+  [BuildV2] Total triplets: 2048
+  [BuildV2] Total triplets: 2048
+  [BuildV2] Total triplets: 1600
+  [BuildV2] Total triplets: 1748
+  [BuildV2] Total triplets: 1748
+  [BuildV2] Total triplets: 5278
+  [BuildV2] Total triplets: 1600
+  [BuildV2] Total triplets: 2048
+  [BuildV2] Total triplets: 2048
+  [BuildV2] Total triplets: 1600
+  [BuildV2] Total triplets: 1748
+  [BuildV2] Total triplets: 1748
+  MIXED: 40 patterns over 80 rows    N= 80 L=20 k= 6 pat=40 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs=   34 | stable-sort would be wrong in 11/80
+  [BuildV2] Total triplets: 1200
+  [BuildV2] Total triplets: 595
+  [BuildV2] Total triplets: 595
+  [BuildV2] Total triplets: 1200
+  [BuildV2] Total triplets: 605
+  [BuildV2] Total triplets: 605
+  [BuildV2] Total triplets: 1102
+  [BuildV2] Total triplets: 1200
+  [BuildV2] Total triplets: 595
+  [BuildV2] Total triplets: 595
+  [BuildV2] Total triplets: 1200
+  [BuildV2] Total triplets: 605
+  [BuildV2] Total triplets: 605
+  DENSE: 2 patterns, small N, large k N= 60 L=20 k= 5 pat= 2 | rk diffs=0 | sorted_ee order diffs=0 | ee tied pairs= 1084 | stable-sort would be wrong in 49/60
+  ok  : F5: the 4 deliberate tie fixtures are bit-exact end to end (rk + sorted_ee)
+  totals: ee tied pairs=22423, positions a stable sort would get wrong=331
+  ok  : F5: the tie fixtures really produce ee ties (not a vacuous pass)
+RFE PARITY F1+F2+F3+F4+F5+F6+F7: OK (bit-identical to the legacy)
