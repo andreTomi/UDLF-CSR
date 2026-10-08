@@ -1,0 +1,22 @@
+# Environment manifest for RFE audit freeze
+# Generated: 2026-10-08T00:00:00Z
+
+# Compiler
+g++ --version | head -1
+
+# C++ standard library
+cat /usr/include/c++/*/bits/c++config.h 2>/dev/null | grep _GLIBCXX_RELEASE | head -1
+
+# Git commit
+git rev-parse HEAD
+
+# CPU
+lscpu | grep 'Model name' | head -1
+
+# OMP settings
+echo "OMP_NUM_THREADS=${OMP_NUM_THREADS:-unset}"
+echo "OMP_DYNAMIC=${OMP_DYNAMIC:-unset}"
+echo "OMP_THREAD_LIMIT=${OMP_THREAD_LIMIT:-unset}"
+
+# Git status
+git status --short | wc -l

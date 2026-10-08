@@ -1,0 +1,37 @@
+BINARY mode: N_derived=72000 L=400 k=20 t=2 pa=0.1
+  [BuildV2] Total triplets: 28800000
+  [BuildV2] Total triplets: 5277712
+  [BuildV2] Total triplets: 5277712
+  [BuildV2] Total triplets: 28800000
+  [BuildV2] Total triplets: 4422486
+  [BuildV2] Total triplets: 4422486
+  [BuildV2] Total triplets: 28800000
+  [BuildV2] Total triplets: 4035599
+  [BuildV2] Total triplets: 4035599
+  [BuildV2] Total triplets: 24858666
+RUNPROF threads=12  t_total=10.598
+  f1_rank_norm          1.805 s ( 17.0%)
+  embRR f2 (t-loop)    0.386 s (  3.6%)
+  embRR f3 (t-loop)    0.080 s (  0.8%)
+  embRR f4 (t-loop)    0.146 s (  1.4%)
+  f7a rerank (t-loop)    3.893 s ( 36.7%)
+  embRR FINAL          0.180 s (  1.7%)
+  f5 sortEmb           0.014 s (  0.1%)
+  f5 effectEst         0.011 s (  0.1%)
+  f6 Gram+incElems    3.790 s ( 35.8%)
+  f7b CPRR tail        0.222 s (  2.1%)
+  it0 emb_nnz=5277712 emb_zeros=1779190 f7a_row_visits=2169337368 f7a_merges=28800000  visits/merge=75.32
+  it1 emb_nnz=4422486 emb_zeros=1134174 f7a_row_visits=1833088855 f7a_merges=28800000  visits/merge=63.65
+  final emb_nnz=4035599 f7a_merges_total=57600000
+  PEAK VmHWM by boundary (clear_refs=5 before each phase):
+    after f1           1131.2 MB
+    after t-loop       1465.0 MB
+    after embRR         891.9 MB
+    after f5            882.7 MB
+    after f6 Gram      1489.0 MB
+    after f7b          1489.0 MB
+RUNSEQ file=/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin N=72000 L=400 k=20 t=2 pa=0.1
+  ck_rk   =0xd3284a49828346a0   (E2E / faithful)
+  ck_gram =0x3a2ae97b3e46e5dc   (FINAL, after run())
+  gram_nnz=24858666  rho=0.004795  exact_zeros=11439876 (46.02%)
+  emb_nnz=4035599  emb_exact_zeros=949607 (23.53%)  [FINAL embRR, feeds F5/F6]
