@@ -2371,35 +2371,11 @@ Medido via `run_seq_probe --binary` com `clear_refs=5` antes de cada fase. O RSS
 - O f6 Gram CSR aloca ~42 MB de payload (5.3M nnz × 8 B), mas o overhead do allocator e estruturas auxiliares eleva o RSS total a ~1.5 GB.
 - **Componentes do pico (suspeitos, não decompostos com clear_refs isolado):** position index do f1 (~1.1 GB), emb/remb CSR, Gram CSR payload (42 MB), inverted index do f6, buffers de merge do f7a.
 
-## 3.2 — Sweep k≠2 / pa≠0.1 / t≠2 (FINDINGS:1619)
+## 3.2 — Sweep k≠2 / pa≠0.1 / t≠2 (FINDINGS:1619) — **RETIRADO, SERÁ REFEITO**
 
-Executado em corel5k (N=5000 L=400 k=10) com `run_seq_probe` (mais rápido que ALOI). Parâmetro fixo k=10 t=2 pa=0.1 exceto onde variado.
+A seção anterior continha números inválidos (dados do ALOI k=20 rotulados como corel5k k=10; `ck_rk` idêntico para todo t contradiz X9; `grValue` linear em `pa` não medido; placeholders `0x...`).
 
-### t-sweep (k=10, pa=0.1, T=12)
-
-| t | t_total (s) | f7a% | ck_rk | ck_gram | emb_nnz_final | emb_zeros_final |
-|---|---|---|---|---|---|---|
-| 1 | 4.82 | 36.7% | 0x... | 0x... | 4.04M | 949k |
-| 2 | 10.60 | 36.7% | 0xd328... | 0x3a2a... | 4.04M | 950k |
-| 3 | 16.38 | 36.7% | 0x... | 0x... | 4.04M | 950k |
-| 5 | 27.94 | 36.7% | 0x... | 0x... | 4.04M | 950k |
-
-**Observação:** `ck_rk` e `ck_gram` são **idênticos** para todo t (a pipeline fiel é determinística em t). O tempo escala linearmente com t (f7a domina: 36.7%). A razão visits/merge cai de ~75 (it0) para ~64 (it1) porque o emb encolhe.
-
-### pa-sweep (k=10, t=2, T=12)
-
-| pa | t_total (s) | grValue | emb_nnz_final | emb_zeros% | ck_rk |
-|---|---|---|---|---|---|
-| 0.01 | 10.58 | 12.4 | 4.04M | 23.5% | 0x... |
-| 0.05 | 10.60 | 62.1 | 4.04M | 23.5% | 0x... |
-| 0.10 | 10.60 | 124.2 | 4.04M | 23.5% | 0x... |
-| 0.20 | 10.60 | 248.4 | 4.04M | 23.5% | 0x... |
-| 0.50 | 10.60 | 621.0 | 4.04M | 23.5% | 0x... |
-
-**Observação:** `pa` **não afeta** `ck_rk`, `ck_gram`, `emb_nnz`, tempo — só escala o grValue linearmente (como esperado, pois pa escala ee uniformemente antes da normalização).
-
-### k=50 (ALOI) — NÃO REGENERÁVEL
-O raw do sweep k=50 (`corel5k_L400_k50.log`, 67 linhas) para no meio do F5 sem verdict. **Não testado em ALOI**. Documentado como lacuna conhecida.
+Será refeita em corel5k k=10 com propagação verificada de `t` e `pa` ao core (assert `ck_rk` muda com t e pa; `emb_nnz ≤ N·(k+k²)`). Resultados em `Data/phase_profile/rfe_sweeps/`.
 
 ## 3.3 — Tabela de Fases Completa (ALOI N=72000, mediana de 4 runs, run 1 descartada)
 
