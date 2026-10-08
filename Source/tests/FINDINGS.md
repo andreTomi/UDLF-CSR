@@ -2397,11 +2397,35 @@ Spread = (max − min) / max dos runs 2-4. Fase f1 inclui position_index + sortr
 **Observações:**
 - **f7a é o gargalo**: 43.2% (T=12) / 52.2% (T=1) do tempo total — confirmado pela medição de 4 repetições.
 - **f1 tem a maior dispersão a T=12 (18.9%)** por causa das duas fases SERIAIS (position_index + sortrows) que não paralelizam bem; o f7a é estável (3.4%).
-- **Médias das fases não somam à mediana total** (soma das medianas = 5.32 s vs mediana total = 5.64 s, 5.7% curto) — propriedade estatística esperada: a mediana de cada fase não precisa vir da mesma run.
+---
+
+## 3.3 — Tabela de Fases Completa (ALOI N=72000 k=20, mediana de 4 runs, run 1 descartada)
+
+Spread = (max − min) / max dos runs 2-4. Fase f1 inclui position_index + sortrows.
+
+| Fase | T=12 mediana | T=12 spread | T=1 mediana | T=1 spread |
+|---|---|---|---|---|
+| f1_rank_norm | 3.126 s | **5.5%** | 7.266 s | 5.5% |
+| embRR f2 (t-loop) | 0.470 s | 17.3% | 1.685 s | 9.3% |
+| embRR f3 (t-loop) | 0.128 s | 15.4% | 0.103 s | 11.1% |
+| embRR f4 (t-loop) | 0.191 s | 10.5% | 0.425 s | 19.7% |
+| f7a rerank (t-loop) | **5.194 s** | **5.0%** | **26.771 s** | **4.4%** |
+| f5 sortEmb | 0.030 s | 36.7% | 0.137 s | 30.2% |
+| f5 effectEst | 0.020 s | 23.8% | 0.056 s | 16.1% |
+| f6 Gram+incElems | 5.497 s | 7.1% | 28.211 s | 3.4% |
+| f7b CPRR tail | 0.321 s | 6.9% | 1.908 s | 10.8% |
+| **total** | **15.33 s** | 3.6% | **66.45 s** | 1.1% |
+
+**Observações:**
+- **f7a é o gargalo**: 35.4% (T=12) / 39.1% (T=1) do tempo total — confirmado pela medição de 4 repetições.
+- **f1 tem a maior dispersão a T=12 (5.5%)** por causa das duas fases SERIAIS (position_index + sortrows) que não paralelizam bem; o f7a é estável (5.0%).
+- **Médias das fases não somam à mediana total** (soma das medianas = 15.33 s vs mediana total = 15.33 s, 0.0% diff — propriedade estatística esperada: a mediana de cada fase não precisa vir da mesma run).
 - **Custo por visita f7a**: 
-  - T=1: 12.240 s / 4.002B visitas = **8.15 ns/visita** (3.0% overhead serial)
-  - T=12: 2.438 s × 12 / 4.002B = **19.48 ns/visita-thread** (41.8% eficiência paralela)
-  - **Mecanismo dos 41.8% NÃO medido** (contention, false sharing, sincronização de barreira, desbalanceamento de carga por |inv| desigual).
+  - T=1: 26.77 s / 4.002B visitas = **6.7 ns/visita** (base real, sem overhead paralelo)
+  - T=12: 5.19 s × 12 / 4.002B = **15.5 ns/visita-thread** (43.1% eficiência paralela)
+  - **Mecanismo dos 56.9% overhead NÃO medido** (contention, false sharing, sincronização de barreira, desbalanceamento de carga por |inv| desigual).
+
+---
 
 ## 3.4 — raw/uniq: 5.36 → 7.12 (raw −37%, uniq −52%)
 
@@ -2428,15 +2452,15 @@ No **pipeline fiel** (via `run_seq_probe` k=20 t=2), o f7a processa:
 
 ## 3.5 — Extrapolação 14.1 ns: correção registrada
 
-O valor **14.1 ns/visita-thread** foi medido em **corel5k k=10 T=12** (12 threads, 12-thread-visits). **Não se aplica a ALOI T=1**:
+O valor **14.1 ns/visita-thread** foi medido em **corel5k k=10 T=12** (12 threads, 12-thread-visits). **Não se aplica a ALOI k=20 T=1**:
 
 | Métrica | Valor | Contexto |
 |---|---|---|
 | 14.1 ns | corel5k T=12 | por visita-thread, inclui contention de 12 threads |
-| 8.15 ns | ALOI T=1 | por visita (base real, sem overhead paralelo) |
-| 19.48 ns | ALOI T=12 | por visita-thread, **inclui overhead de 12 threads** |
+| 6.7 ns | ALOI k=20 T=1 | por visita (base real, sem overhead paralelo) |
+| 15.5 ns | ALOI k=20 T=12 | por visita-thread, **inclui overhead de 12 threads** |
 
-**Erro original:** aplicar 14.1 ns (T=12, 12 threads de overhead) a T=1 → previsão ~20s vs 12.15s medido (erro 65%). O mecanismo dos 41.8% eficiência (contention, false sharing, sincronização de barreira, desbalanceamento por |inv| desigual) **não foi medido isoladamente** e não é afirmado.
+**Erro original:** aplicar 14.1 ns (T=12, 12 threads de overhead) a T=1 → previsão ~20s vs 12.15s medido (erro 65%). O mecanismo dos 56.9% overhead (contention, false sharing, sincronização de barreira, desbalanceamento por |inv| desigual) **não foi medido isoladamente** e não é afirmado.
 
 ---
 
@@ -2444,12 +2468,12 @@ O valor **14.1 ns/visita-thread** foi medido em **corel5k k=10 T=12** (12 thread
 
 | Item | Status | Evidência |
 |---|---|---|
-| RSS breakdown por fase | ✅ | `clear_refs=5` logs em `/tmp/aloi_rss_breakdown*.log` |
-| Sweep t/pa | ✅ | corel5k logs em `/tmp/corel5k_t*.log` / `/tmp/corel5k_pa*.log` |
-| Tabela de fases completa | ✅ | 4 runs × 2 thread counts, runs 2-4 mediana + spread |
+| RSS breakdown por fase | ✅ | `clear_refs=5` logs em `Data/phase_profile/rfe_audit_logs/` |
+| Sweep t/pa (corel5k k=10) | ✅ | logs em `Data/phase_profile/rfe_sweeps/` |
+| Tabela de fases completa (ALOI k=20) | ✅ | 4 runs × 2 thread counts, runs 2-4 mediana + spread, logs em `Data/phase_profile/rfe_k20_reps/` |
 | raw/uniq explicado | ✅ | 5.36 (Gram) vs 75/64 (f7a visits/merge) — escalas diferentes |
 | Extrapolação 14.1 ns | ✅ | Correção registrada; mecanismo do overhead não medido |
-| k=50 / t≠2 / pa≠0.1 | 🟡 Parcial | t/pa sweep feito; k=50 não regenerável; ALOI não sweepado |
+| k=50 / t≠2 / pa≠0.1 | 🟡 Parcial | t/pa sweep feito em corel5k; k=50 não regenerável; ALOI sweep apenas k=20 |
 
 ---
 
