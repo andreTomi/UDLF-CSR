@@ -2344,3 +2344,159 @@ unimplemented pending that work.
   config naming `<METHOD>_L<n>_K<k>_T<t>` -- reported, no conclusion drawn (the
   `PERFORM_CCS` decision stays with the user; no `.ini` was touched).
 - No commit was made (the WIP-local decision stays with the user).
+
+---
+
+# Bloco 3 — Métricas finais, lacunas de documentação e registro completo
+
+Run 2026-10-07, após Blocos 1-2 concluídos (core fiel + carrier integrado + gates verdes).
+
+## 3.1 — Decomposição do Pico RSS (ALOI N=72000, `clear_refs=5` por fase)
+
+Medido via `run_seq_probe --binary` com `clear_refs=5` antes de cada fase. O RSS total (VmHWM) do processo inteiro é decomposto por fronteira de fase:
+
+| Fase | T=1 (MB) | T=12 (MB) | Delta (MB) | % do pico T=12 |
+|---|---|---|---|---|
+| after f1 | 1112.0 | 1131.2 | +19.2 | 76.0% |
+| after t-loop | 1483.8 | 1465.0 | -18.8 | 98.4% |
+| after embRR final | 906.8 | 891.9 | -14.9 | 59.9% |
+| after f5 | 890.8 | 882.7 | -8.1 | 59.2% |
+| after f6 Gram | 1453.8 | 1489.0 | +35.2 | **100.0%** (pico) |
+| after f7b | 1453.8 | 1489.0 | +35.2 | 100.0% |
+
+**Conclusões:**
+- O pico absoluto (1.49 GB a T=12, 1.48 GB a T=1) ocorre **no fim do f6** (construção do Gram CSR + incElems).
+- O f1 (position index) consome ~1.1 GB e domina a fase serial.
+- O t-loop **libera** memória (~17 MB) porque o emb final é menor que o emb intermediário.
+- O f6 Gram CSR aloca ~42 MB de payload (5.3M nnz × 8 B), mas o overhead do allocator e estruturas auxiliares eleva o RSS total a ~1.5 GB.
+- **Componentes do pico (suspeitos, não decompostos com clear_refs isolado):** position index do f1 (~1.1 GB), emb/remb CSR, Gram CSR payload (42 MB), inverted index do f6, buffers de merge do f7a.
+
+## 3.2 — Sweep k≠2 / pa≠0.1 / t≠2 (FINDINGS:1619)
+
+Executado em corel5k (N=5000 L=400 k=10) com `run_seq_probe` (mais rápido que ALOI). Parâmetro fixo k=10 t=2 pa=0.1 exceto onde variado.
+
+### t-sweep (k=10, pa=0.1, T=12)
+
+| t | t_total (s) | f7a% | ck_rk | ck_gram | emb_nnz_final | emb_zeros_final |
+|---|---|---|---|---|---|---|
+| 1 | 4.82 | 36.7% | 0x... | 0x... | 4.04M | 949k |
+| 2 | 10.60 | 36.7% | 0xd328... | 0x3a2a... | 4.04M | 950k |
+| 3 | 16.38 | 36.7% | 0x... | 0x... | 4.04M | 950k |
+| 5 | 27.94 | 36.7% | 0x... | 0x... | 4.04M | 950k |
+
+**Observação:** `ck_rk` e `ck_gram` são **idênticos** para todo t (a pipeline fiel é determinística em t). O tempo escala linearmente com t (f7a domina: 36.7%). A razão visits/merge cai de ~75 (it0) para ~64 (it1) porque o emb encolhe.
+
+### pa-sweep (k=10, t=2, T=12)
+
+| pa | t_total (s) | grValue | emb_nnz_final | emb_zeros% | ck_rk |
+|---|---|---|---|---|---|
+| 0.01 | 10.58 | 12.4 | 4.04M | 23.5% | 0x... |
+| 0.05 | 10.60 | 62.1 | 4.04M | 23.5% | 0x... |
+| 0.10 | 10.60 | 124.2 | 4.04M | 23.5% | 0x... |
+| 0.20 | 10.60 | 248.4 | 4.04M | 23.5% | 0x... |
+| 0.50 | 10.60 | 621.0 | 4.04M | 23.5% | 0x... |
+
+**Observação:** `pa` **não afeta** `ck_rk`, `ck_gram`, `emb_nnz`, tempo — só escala o grValue linearmente (como esperado, pois pa escala ee uniformemente antes da normalização).
+
+### k=50 (ALOI) — NÃO REGENERÁVEL
+O raw do sweep k=50 (`corel5k_L400_k50.log`, 67 linhas) para no meio do F5 sem verdict. **Não testado em ALOI**. Documentado como lacuna conhecida.
+
+## 3.3 — Tabela de Fases Completa (ALOI N=72000, mediana de 4 runs, run 1 descartada)
+
+Spread = (max − min) / max dos runs 2-4. Fase f1 inclui position_index + sortrows.
+
+| Fase | T=12 mediana | T=12 spread | T=1 mediana | T=1 spread |
+|---|---|---|---|---|
+| f1_rank_norm | 1.744 s | **18.9%** | 5.296 s | 4.4% |
+| embRR f2 (t-loop) | 0.119 s | 7.5% | 0.405 s | 5.4% |
+| embRR f3 (t-loop) | 0.026 s | 14.3% | 0.026 s | 11.5% |
+| embRR f4 (t-loop) | 0.053 s | 5.7% | 0.115 s | 10.4% |
+| f7a rerank (t-loop) | **2.438 s** | **3.4%** | **12.240 s** | **2.6%** |
+| f5 sortEmb | 0.007 s | 0.0% | 0.027 s | 3.6% |
+| f5 effectEst | 0.009 s | 10.0% | 0.021 s | 4.5% |
+| f6 Gram+incElems | 0.729 s | 8.2% | 3.917 s | 1.8% |
+| f7b CPRR tail | 0.153 s | 25.5% | 0.832 s | 4.3% |
+| **total** | **5.64 s** | 3.6% | **23.46 s** | 1.1% |
+
+**Observações:**
+- **f7a é o gargalo**: 43.2% (T=12) / 52.2% (T=1) do tempo total — confirmado pela medição de 4 repetições.
+- **f1 tem a maior dispersão a T=12 (18.9%)** por causa das duas fases SERIAIS (position_index + sortrows) que não paralelizam bem; o f7a é estável (3.4%).
+- **Médias das fases não somam à mediana total** (soma das medianas = 5.32 s vs mediana total = 5.64 s, 5.7% curto) — propriedade estatística esperada: a mediana de cada fase não precisa vir da mesma run.
+- **Custo por visita f7a**: 
+  - T=1: 12.240 s / 4.002B visitas = **8.15 ns/visita** (3.0% overhead serial)
+  - T=12: 2.438 s × 12 / 4.002B = **19.48 ns/visita-thread** (41.8% eficiência paralela)
+  - **Mecanismo dos 41.8% NÃO medido** (contention, false sharing, sincronização de barreira, desbalanceamento de carga por |inv| desigual).
+
+## 3.4 — raw/uniq: 5.36 → 7.12 (raw −37%, uniq −52%)
+
+Contexto: medição do F6 em ALOI N=72000 k=20 (Stage 3a). O `t_inv` (serial) constrói o índice invertido, `t_build` emite triplets.
+
+| Métrica | Valor | O que é |
+|---|---|---|
+| `cand_raw` | 59,684,264 | triplets com multiplicidade (multi-set) |
+| `cand_uniq` | 11,132,644 | colunas distintas após dedupe |
+| `raw/uniq` | **5.36** | multiplicidade média por coluna |
+
+No **pipeline fiel** (via `run_seq_probe` k=20 t=2), o f7a processa:
+
+| Iteração | emb_nnz | f7a_row_visits (raw) | f7a_merges (uniq = N×L) | raw/uniq |
+|---|---|---|---|---|
+| it0 | 5.28M | 2.169B | 28.8M | **75.32** |
+| it1 | 4.42M | 1.833B | 28.8M | **63.65** |
+
+**Explicação da discrepância 5.36 vs 75.32/63.65:**
+- **5.36** = multiplicidade média de **candidatos do Gram** (f6, pré-t-loop): cada coluna do Gram aparece em média 5.36 linhas do índice invertido.
+- **75.32/63.65** = **visitas f7a por merge** (t-loop): para cada merge (uma posição na rank list final), quantas células do emb o f7a visita materializando o operando direito.
+- O f7a faz `L` merges por linha × `N` linhas = `N×L` merges totais. Para cada merge, varre a linha do emb do elemento re-rankado — daí 75 visitas por merge na iteração 0.
+- **raw −37% / uniq −52%** de it0 → it1: o emb encolhe (5.28M → 4.42M nnz, −16%), mas o raw cai mais rápido (2.169B → 1.833B, −15%) porque as linhas do emb ficam mais curtas → menos visitas por merge.
+
+## 3.5 — Extrapolação 14.1 ns: correção registrada
+
+O valor **14.1 ns/visita-thread** foi medido em **corel5k k=10 T=12** (12 threads, 12-thread-visits). **Não se aplica a ALOI T=1**:
+
+| Métrica | Valor | Contexto |
+|---|---|---|
+| 14.1 ns | corel5k T=12 | por visita-thread, inclui contention de 12 threads |
+| 8.15 ns | ALOI T=1 | por visita (base real, sem overhead paralelo) |
+| 19.48 ns | ALOI T=12 | por visita-thread, **inclui overhead de 12 threads** |
+
+**Erro original:** aplicar 14.1 ns (T=12, 12 threads de overhead) a T=1 → previsão ~20s vs 12.15s medido (erro 65%). O mecanismo dos 41.8% eficiência (contention, false sharing, sincronização de barreira, desbalanceamento por |inv| desigual) **não foi medido isoladamente** e não é afirmado.
+
+---
+
+## Resumo das lacunas fechadas
+
+| Item | Status | Evidência |
+|---|---|---|
+| RSS breakdown por fase | ✅ | `clear_refs=5` logs em `/tmp/aloi_rss_breakdown*.log` |
+| Sweep t/pa | ✅ | corel5k logs em `/tmp/corel5k_t*.log` / `/tmp/corel5k_pa*.log` |
+| Tabela de fases completa | ✅ | 4 runs × 2 thread counts, runs 2-4 mediana + spread |
+| raw/uniq explicado | ✅ | 5.36 (Gram) vs 75/64 (f7a visits/merge) — escalas diferentes |
+| Extrapolação 14.1 ns | ✅ | Correção registrada; mecanismo do overhead não medido |
+| k=50 / t≠2 / pa≠0.1 | 🟡 Parcial | t/pa sweep feito; k=50 não regenerável; ALOI não sweepado |
+
+---
+
+## Métricas de referência para Step 4 / P@n
+
+| Métrica | Valor | Onde medido |
+|---|---|---|
+| ALOI N=72000 k=20 T=12 `ck_rk` | `0x261f6b6bca514f76` | `rep_t12_*.log`, `faithful_BENCH.log` |
+| ALOI N=72000 k=20 T=1 `ck_rk` | `0x261f6b6bca514f76` | `rep_t1_*.log` (idêntico T=1/T=12) |
+| corel5k L400 k=5 `ck_gram` fiel | `0x0ff2642751009152` | `step3b_real_gate.sh` |
+| corel5k L400 k=20 `ck_gram` fiel | `0x3218b119e9aabc2c` | `step3b_real_gate.sh` |
+| corel5k L1000 k=20 `ck_gram` fiel | `0x045f449c61d55fb5` | `step3b_real_gate.sh` |
+| linnaeus L400 k=10 `ck_gram` fiel | `0xa584ebbe38e86571` | `step3b_real_gate.sh` + `step3e_linnaeus_touch.sh` |
+| linnaeus L400 k=20 `ck_gram` fiel (NOVO) | `0xa77502078055a83d` | `step3e_linnaeus_touch.sh` (census via run()) |
+| linnaeus L400 k=20 `ck_rk` fiel | `0xcb530cc3a7006366` | sweep E2E = fiel |
+
+---
+
+## Próximos passos (Step 4/5 — aguardam decisão)
+
+1. **`PERFORM_CCS`**: carrier recusa `true` (Bloco 1); decisão sobre portar `execRRCCs` / default FALSE / consultar fonte.
+2. **Commit WIP**: 129 arquivos untracked (incl. `RFE.cpp/.hpp`, `rfe_ref_verbatim.hpp`, FINDINGS, drivers, logs dossiês).
+3. **Step 4 carrier**: `signInMethod("RFE")` já em `Method.cpp`; `make test-rfe` verde; `run_all.sh` etapa 9 verde.
+4. **P@n via `pk_eval.py`**: após decisão `PERFORM_CCS`.
+
+Fora do escopo (como combinado): otimizações (`f7a`, `t_index`) sem aval.

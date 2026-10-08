@@ -21,12 +21,33 @@ static std::vector<int> load(const char* path, int N, int L) {
   fclose(f); return rk;
 }
 
+static std::vector<int> load_binary(const char* path, int L, long long& N_out) {
+  std::vector<int> rk;
+  std::FILE* f = std::fopen(path, "rb");
+  if (!f) { std::printf("cannot open %s\n", path); std::exit(2); }
+  std::fseek(f, 0, SEEK_END);
+  long long bytes = std::ftell(f);
+  std::fseek(f, 0, SEEK_SET);
+  long long cells = bytes / 4;
+  if (cells % L != 0) { std::printf("file cells (%lld) not multiple of L=%d\n", cells, L); std::exit(5); }
+  N_out = cells / L;
+  rk.resize((std::size_t)cells);
+  if (std::fread(rk.data(), 1, (std::size_t)bytes, f) != (std::size_t)bytes) { std::printf("short read\n"); std::exit(5); }
+  std::fclose(f);
+  return rk;
+}
+
 int main(int argc, char** argv) {
   const char* path = argv[1];
   const int N = atoi(argv[2]), L = atoi(argv[3]), k = atoi(argv[4]), t = atoi(argv[5]);
   const double pa = argc > 6 ? atof(argv[6]) : 0.1;
-  std::vector<int> rk = load(path, N, L);
-  RFECore core(rk, (std::size_t)N, (std::size_t)L, k, t, pa);
+  const bool binary = argc > 7 && std::string(argv[7]) == "--binary";
+  long long N_derived = 0;
+  std::vector<int> rk = binary ? load_binary(path, L, N_derived) : load(path, N, L);
+  if (binary) {
+    std::printf("BINARY mode: N_derived=%lld L=%d k=%d t=%d pa=%g\n", N_derived, L, k, t, pa);
+  }
+  RFECore core(rk, binary ? (std::size_t)N_derived : (std::size_t)N, (std::size_t)L, k, t, pa);
   // "short" mode runs the pre-t-loop sequence on purpose, so the two pipelines
   // can be told apart on the SAME data. It exists to be compared against, never
   // to be shipped -- run() is the only entry point the product uses (X9).
