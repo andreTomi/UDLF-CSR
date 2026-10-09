@@ -1958,7 +1958,7 @@ inline float RFECore::sim_embycc(int k1, int k2) const {
   return sum;
 }
 
-void RFECore::f8a_create_edges_ccs() {
+inline void RFECore::f8a_create_edges_ccs() {
   edges_ccs_.clear();
   edges_ccs_.reserve((std::size_t)n_ * (std::size_t)k_);
   std::vector<char> bad_conf((std::size_t)n_, 0);
@@ -2008,7 +2008,7 @@ void RFECore::f8a_create_edges_ccs() {
       throw std::runtime_error("RFE: non-finite conf in row " + std::to_string(q) + " -- legacy order undefined");
 }
 
-double RFECore::f8b_init_th_cc() {
+inline double RFECore::f8b_init_th_cc() {
   // Mirror legacy's initEdgesCCs automatic rule (RFE.cpp:348-355):
   // th_cc = (avg of ee over sorted_ee order) / 2
   // Legacy uses FLOAT accumulation for bit-exactness.
@@ -2030,7 +2030,7 @@ double RFECore::f8b_init_th_cc() {
   return th_cc_;
 }
 
-long long RFECore::f8c_edge_prefix() {
+inline long long RFECore::f8c_edge_prefix() {
   // Legacy's processCCs (RFE.cpp:348-363): takes first ceil(E * th_cc) edges
   // where E = edges_ccs_.size() and th_cc is the fraction (typically ~0.5).
   // The loop condition is: if (i >= E * th_cc) break; i++; so it runs ceil(E*th_cc) times.
@@ -2043,7 +2043,7 @@ long long RFECore::f8c_edge_prefix() {
   return m;
 }
 
-void RFECore::f8d_process_ccs() {
+inline void RFECore::f8d_process_ccs() {
   f8_cc_label_.assign((std::size_t)n_, 0);
   for (std::size_t i = 0; i < (std::size_t)n_; ++i) f8_cc_label_[(std::size_t)i] = (int)i;
 
@@ -2073,7 +2073,7 @@ void RFECore::f8d_process_ccs() {
   }
 }
 
-void RFECore::f8e_compute_ccs_emb() {
+inline void RFECore::f8e_compute_ccs_emb() {
   std::vector<int> label_list;
   label_list.reserve((std::size_t)n_);
   std::vector<char> is_root((std::size_t)n_, 0);
@@ -2178,7 +2178,7 @@ void RFECore::f8e_compute_ccs_emb() {
   }
 }
 
-void RFECore::f8f_compute_embs_by_ccs() {
+inline void RFECore::f8f_compute_embs_by_ccs() {
   // ncc = number of non-singleton components = number of valid dense indices
   int ncc = 0;
   for (int idx : label_to_idx_) if (idx >= 0) ++ncc;
