@@ -2179,10 +2179,24 @@ inline void RFECore::f8e_compute_ccs_emb() {
 }
 
 inline void RFECore::f8f_compute_embs_by_ccs() {
-  // ncc = number of non-singleton components = number of valid dense indices
+  // Precondition (Etapa 6b item 2): f8e must have run. label_to_idx_ and
+  // inv_ccemb_ are both assigned to size N at the END of f8e_compute_ccs_emb;
+  // if f8f is called first they are still empty and the accumulation below would
+  // silently read an empty inv_ccemb_ (every embycc row zero) instead of failing.
+  if (label_to_idx_.size() != (std::size_t)n_ ||
+      inv_ccemb_.size() != (std::size_t)n_) {
+    throw std::runtime_error(
+        "RFE: f8f_compute_embs_by_ccs called before f8e_compute_ccs_emb "
+        "(label_to_idx_/inv_ccemb_ not sized N)");
+  }
+  // ncc = number of dense CC columns = number of DISTINCT ROOTS recorded in
+  // label_to_idx_ (singletons INCLUDED: f8e assigns a dense index to every root
+  // it collects; a singleton's embycc column is simply all-zero because ccemb
+  // skips members.size() <= 1). The former `if (ncc == 0) return;` was dead code
+  // -- for n >= 1 there is always >= 1 root -- and its comment wrongly said
+  // "non-singleton components".
   int ncc = 0;
   for (int idx : label_to_idx_) if (idx >= 0) ++ncc;
-  if (ncc == 0) return;
 
   if (f8_embycc_sparse_) {
     // Two-pass CSR construction with proper accumulation:
