@@ -2500,3 +2500,207 @@ O valor **14.1 ns/visita-thread** foi medido em **corel5k k=10 T=12** (12 thread
 4. **P@n via `pk_eval.py`**: após decisão `PERFORM_CCS`.
 
 Fora do escopo (como combinado): otimizações (`f7a`, `t_index`) sem aval.
+
+---
+
+## Port CC (PERFORM_CCS) -- Etapa 0 (baseline) e Etapa 1 (referência + goldens)
+
+Data: 08/10/2026. Ambiente: WSL2 Debian, g++ 14.2.0, 12 threads, build estrito
+`-O2 -ffp-contract=off -fopenmp`.
+
+### H10 -- CONFIRMADA
+A extensão CC pendente na working tree (scripts Python one-shot) deixava
+`rfe_ref_verbatim.hpp` não compilável: classe `RFERef` sem `};`,
+`simEmb(int,int)` inexistente, membros `edgesCCs_/rcc_/icc_/th_cc_` não
+declarados. O predicado aplicado, `(int)(E*th_cc_)`, e `th_cc_` em float
+divergiam do legado (`((int)E)*th_cc` em double; `th_cc` é double). Ação: bloco
+reescrito literalmente a partir de `RFE.cpp` (só shims S2/S3/S5 + casts de
+índice); scripts apagados da raiz.
+
+### H13 -- CONFIRMADA
+`Source/src/Methods/hpp/RFE.hpp` (carrier) não compila como commitado: o
+segundo bloco `private:` redeclara `k,t,l,pa,performCCs,signInMethod` e faltam
+`<random>,<cstdio>,<algorithm>` (`std::mt19937`). `check_rfe_guard` falha nos
+dois regimes (strict e fast-math). Correção fica para a Etapa 9, junto com a
+leitura de `PARAM_RFE_TH_CC`.
+
+### H11 -- CONFIRMADA (directed, no golden)
+E=104 (n=26, k=5, linhas cíclicas), th=1/3: bound double =
+34.666666666666664 -> 35 arestas processadas; a variante truncada
+`(int)(E*th)` selecionaria 34. Replay independente (DSU próprio + mesmo
+predicado) reproduz `icc`/`rcc` exatamente, no caminho fracionário e no
+automático (th_cc=0 -> th_out=0.5, 52 processadas).
+
+### H14 -- CONFIRMADA
+`unionCCs` com `std::inserter` apontando para o próprio intervalo-fonte
+comporta-se como união verdadeira de conjuntos, com sobrevivência do rótulo do
+lado q: sequência dirigida (cadeia, estrela, merges cruzados, merge de dois
+componentes grandes) bate com DSU independente a cada passo. ASan+UBSan limpos
+no golden inteiro (o UB é formal; na prática libstdc++ não invalida iteradores
+de `std::set`).
+
+### H16 -- CONFIRMADA (fixtures)
+`embycc` sem valores negativos nem não-finitos nos 11 casos do golden. A
+premissa das variantes esparsas da Etapa 6 vale nos fixtures; o port ainda vai
+adicionar asserts de sinal/finitude com fallback para o denso.
+
+### Baseline (Etapa 0) -- gates no HEAD, antes do port
+- `test_rfe_parity`: OK (pins F1 `ck_rk=0x3465e556d414ca79`,
+  `ck_matrix=0x8afb15dd0502c7cb`); md5 do transcript idêntico em t=1..12:
+  `e3ef356f52d6565f5afde63af69a34c2`.
+- `test_rfe_corner`: 18 checks, 0 failures.
+- `test_map` / `test_csr_ops`: ALL PASSED; `test_csr_ops` md5
+  `b6a4f54ec7dc0e9c9b251254597ea215` idêntico em t=1..12.
+- Após a extensão da referência: parity/corner inalterados (mesmo md5) e
+  ASan+UBSan limpos nos três binários (parity, corner, cc_golden).
+
+### Etapa 1 -- referência estendida + goldens gravados
+- `Source/tests/rfe_ref_verbatim.hpp`: adicionados `execRRCCs`,
+  `doCCsEmbedding`, `createEdgesCCS`, `processCCs`, `initEdgesCCs`,
+  `unionCCs`, `sameCC`, `computeCCsEmb`, `computeEmbsByCCs`, `sortCCEmb`,
+  `reRankingByCCs` literais + seam público + membros CC (`th_cc_` double;
+  `rcc_/icc_/ccemb_/embycc_` são `std::map` também no legado -- a ordem de
+  iteração de `ccemb_` É a ordem de escrita de `reRankingByCCs`).
+- `Source/tests/test_rfe_cc_golden.cpp`: novo gate. 11 casos
+  (fixtures `Data/fixtures/cc` x th_cc auto/0.05/0.5/1.0/2.0, k=2..100, k=l,
+  CC gigante) com digests por estágio (rk_pre, edges, icc, ccemb,
+  sorted_ccemb, embycc, matriz densa, incElems, rk final), REPRO duplo por
+  caso, H11/H14 directed e asserts H16. Log:
+  `Data/phase_profile/rfe_cc/golden_v1.log` ("RFE CC GOLDEN: OK", 0 falhas).
+- Estatísticas medidas (giram as premissas da Etapa 6): colisões de células
+  entre CCs 0..459 por caso; `absent(l+2)` 0..2780; ties adjacentes em
+  `ccemb` até 251; th_cc automático 0.11..0.30; nCC>=2 entre 5 e 148.
+
+### Etapa 2 (F8a) -- re-derivação da embedding pós-CPRR: VERDE
+`Source/tests/test_rfe_cc_parity.cpp` (novo gate, ligado no `run_all.sh`):
+6 casos (cc_structured, cc_degenerate, cc_k2, cc_k20, cc_k100, cíclico
+sintético) x 5 comparações (sorted_emb comprimento+ordem, valores de emb via
+`get()`, ee bit-a-bit, ordem de sorted_ee) — tudo idêntico entre o core
+(`run()` + f2..f5 de novo) e a referência (`run()` +
+`hyper_rr_embedding()`+`effec_estimation()`). Confirma que o f2..f5 do core
+reiniciam o estado por completo sobre o `rk_` pós-f7b (premissa T1 do plano).
+- Estatísticas relevantes para a Etapa 6: em `cc_structured`, `embycc` tem
+  25500 entradas das quais 20674 (81%) são zeros exatos — a variante CSR
+  sem filtro numérico carregaria só 4826 valores.
+- Log: `Data/phase_profile/rfe_cc/cc_parity_etapa2.log`.
+
+### Etapa 3 (F8b) -- arestas + th_cc + prefixo: VERDE, variante B escolhida
+- `RFECore` ganhou `f8a_create_edges_ccs` (conf `(simEmb·ee[q])·ee[nn]` float
+  via merge H5, `std::sort(rbegin,rend)` lexico-decrescente), `f8b_init_th_cc`
+  (regra automática em float sobre `sorted_ee`, alargada p/ double) e
+  `f8c_edge_prefix` (forma fechada `min(E, ceil(((int)E)·th))`), com o
+  construtor aceitando `th_cc` (double, default 0.0).
+- Gate (`test_rfe_cc_parity.cpp`): 11 casos × 11 checks = **121 ok, 0 FAIL**,
+  incluindo as duas variantes (A e B) contra a referência, `th_cc` bit-a-bit,
+  prefixo igual ao laço do legado, e casos com th fixo {0.05, 0.5, 1.0, 2.0},
+  fracionário (1/3, forma do H11) e automático. Invariância de threads:
+  transcript md5 único `a16d6d81a1a73dde4dcd592c466f2751` em T=1/2/4/12.
+- Variantes medidas (`Data/phase_profile/rfe_cc/etapa3_bench.md`): B vence
+  2.6x (ALOI T12: 155.3ms vs 401.3ms) e 4.1x (corel5k T12), digest idêntico
+  em todos os modos/threads → **B é o default**; sort serial adiado com
+  números. `bench_rfe_f8a.cpp` fica como instrumento da Etapa 10.
+- Regressões: TU check, parity F1–F7b (md5 `e3ef356f...` inalterado) e o
+  golden CC continuam verdes.
+
+### H19 -- NOVA, MEDIDA: `validate_input` recusa o dataset ALOI de produção
+- Fatos: no arquivo `udlf_rk_aloi_N72000_L400.bin`, **552/72000 rows** têm o
+  self fora do índice 0 (primeiras: 190, 207, 393, 730, 1490..); **0 rows
+  estão sem self** (o self existe em todas, em outra posição). Bate com o
+  censo documentado no `bench_rfe_census` ("self at 0 in only 71.448/72k").
+- Consequência: `core.run()` com H4 lança
+  `RFE: row 190 does not have self at index 0` no ALOI — nenhum `run()`
+  completo passa no ALOI real no HEAD. O legado aguenta (o self-scan do
+  kernel sort encontra o self em qualquer posição e o fixa em 0; todo fase
+  seguinte encontra self em 0). A pré-condição de entrada é portanto MAIS
+  estrita que o contrato do legado.
+- Status: **RESOLVIDA em 08/10/2026 pela opção (a)** (decisão do usuário;
+  (b) rejeitada como padrão porque MOVER o self mudaria `posqi`/`posiq` em
+  `rankNorm` e portanto a saída inteira — deixaria de ser a saída do legado).
+  Ver "Resolução" abaixo. Enquanto a decisão pendurava, `bench_rfe_f8a`
+  executava a sequência do `run()` sem o `validate`.
+
+#### Resolução H19 (opção a) -- o que foi feito e medido
+- **A1 (varredura)**: único pressuposto "self em 0" de entrada ==
+  `validate_input` (era `RFECore.hpp:1029`). Os kernels do F1 (~`sort_ranked_lists`)
+  e do F7b (self-pin) BUSCAM o self em qualquer posição e recusam apenas self
+  AUSENTE (`missing_self` → throw fora da região OpenMP). `diag_pin_` é por
+  célula (`img == q`). Nenhum outro leitor de `rk_[l*q]` sem deslocamento.
+- **A2 (código)**: `validate_input` agora exige "linha CONTÉM o próprio id"
+  (qualquer posição); recusas de id fora de `[0,n)` e duplicado mantidas duras;
+  self AUSENTE ainda recusa com mensagem nova. Contagem + log greppável em
+  toda execução: `RKSELF_OFF0 rows=N off0=M (accepted; legacy pins self during
+  the F1 sort)`; contador exposto por `self_off0()`.
+- **A3 (fixtures)**: `gen_cc_fixtures.py` gera `cc_selfoff_early` (self em 1,
+  500/500), `cc_selfoff_late` (self em L−1, 500/500), `cc_selfoff_mixed`
+  (alternado; 500/500) a partir da MESMA base de `cc_structured` (swap de
+  slot 0 com p — multiset de ids idêntico). Invariantes asserted no gerador
+  (off0=500, no_self=0). `cc_structured.bin` regenerado byte-idêntico
+  (md5 `b75ab7b9ceb8faf9cf864b3e5b557082` antes e depois).
+- **A4 (gate)**: `Source/tests/test_rfe_selfoff0.cpp` — **23 ok / 0 FAIL**:
+  3 recusas duras (self ausente, OOR, duplicado) + paridade F1 (ck_rk + diff
+  célula a célula n×n) e paridade do `run()` final (ck_rk + rk cell-by-cell)
+  core vs RFERef nos 3 fixtures deslocados + cíclico deslocado, todos bit
+  idênticos; `RKSELF_OFF0` == construção do fixture (500/500, 32/32).
+  ASan+UBSan limpos. md5 de transcript único `6b5594cadcc4a7a96edaeb6131e6bf62`
+  em T=1/12. Wire no `run_all.sh`.
+- **A5 (CC)**: fixtures deslocados entraram na tabela do gate CC (Etapas 2-4
+  rodam sobre input deslocado — 210 ok / 0 FAIL) e no golden (pins gravados).
+  **Pendência vinculada**: a comparação do `rk` final "com CCs" sobre esses
+  fixtures fecha na Etapa 8/9 (o gate ainda não cobre o rk final CC).
+- **A6 (lacuna DECLARADA — ALOI vs legado uma vez)**: a máquina tem 7,7 GiB
+  de RAM (5,7 disponíveis); o legado denso no ALOI precisa de
+  72000²×4 = **20,7 GB** só para `matrix` (+ emb/remb/gram). **Inviável aqui**
+  — nenhum digest legado-denso-ALOI existe ou existirá nesta máquina. Receita
+  para quem tiver ≥32 GiB: rodar `RFERef::run()` + `exec_rr_ccs()` sobre
+  `/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin` num binário dedicado
+  (mesmos flags), gravar ck_rk/ck_matrix e os digests CC. Até lá, a paridade
+  de produção é sustentada por: fixtures sintéticos deslocados (A4) + execuções
+  reais do core no ALOI (`RKPIPE`/`RKSELF` nos logs de perfil).
+- **A7**: (b) só como pré-processador explícito, opt-in, rotulado "não equivale
+  ao legado" — nunca comportamento do core.
+
+### Etapa 5 (F8e) -- ccemb + sorted_ccemb: VERDE, variantes A/A mantidas
+- `RFECore::f8e_compute_ccs_emb()`: membros por rótulo em id crescente
+  (só CCs ≥2 membros), soma float na ordem legado (membro ascendente × chave
+  ascendente) com `0.0f`-primeiro idêntico ao `curemb[key]+v`, flush ascendente
+  (a sequência de entrada do sort) e `sortCCEmb` com o `>` estrito. Variantes:
+  **accum A (denso+carimpo, default)** vs **B (hash)**; **sort A (completo,
+  default)** vs **B (rápido top-m com fallback)**.
+- Gate (seção Etapa 5): 3 combinações de variante contra a referência —
+  conteúdo `ccemb` (chaves + bits) idêntico nas duas acumulações com sort
+  completo; `sorted_ccemb` **completo** para A, **prefixo-m** para B; nenhum
+  rótulo extra. **336 ok / 0 FAIL** (14 casos × 24); md5 de transcript único
+  `87b7c1911c5e5a33aff645f84fabaad2` em T=1/2/4/12; ASan+UBSan limpos.
+- Medição (`Data/phase_profile/rfe_cc/etapa5_bench.md`): accum A vence o hash
+  (ALOI 18,9 vs 23,0ms; digests iguais); sort B só 2% mais rápido em ALOI
+  (fallback 0,3%) e muda o contrato do rabo → **A/A mantidas como defaults**
+  (empate → mais simples).
+- **Probe C (engine) -- divergência MEDIDA**: filtro `|v|>1e-9` descartaria
+  até 31% das chaves de ccemb (zeros estruturais); inverter a ordem dos
+  membros mudou 54/90 chaves num CC — soma float sensível à ordem. O engine é
+  descartado como variante por divergência medida (não assumida). A chamada de
+  engine em si não foi replicada: os dois mecanismos de divergência foram
+  quantificados diretamente no gate; se a opção de engine reabrir na Etapa 10,
+  o probe de chamada completa fica registrado como pendência.
+- Regressões: TU, parity F1–F7b (57 ok), golden (14 casos), selfoff0 (23 ok)
+  verdes. Pendência conhecida: rk final "com CCs" em fixtures deslocados →
+  Etapa 8/9.
+
+- `RFECore::f8d_process_ccs()`: itera o prefixo em ordem (serial por design —
+  a ordem define os rótulos), com seletor de variante: **A literal**
+  (`map<int,set>` + `set_union` com inserter na própria fonte, fiel ao
+  RFE.cpp:369) e **B DSU** (path compression; rótulo do lado q sobrevive por
+  construção). Saída `f8_cc_label()` (o `icc`).
+- Gate (seção Etapa 4 do `test_rfe_cc_parity`): `icc` por objeto e agrupamento
+  `rcc` idênticos à referência para AS DUAS variantes, nos 14 casos (inclui os
+  3 fixtures deslocados, th fixo/fracionário/automático e cíclicos).
+  **210 ok / 0 FAIL**; md5 de transcript único
+  `86d68eb747d7098e65c03e9592622342` em T=1/2/4/12; ASan+UBSan limpos.
+- Medição (`Data/phase_profile/rfe_cc/etapa4_bench.md`): **B vence 116× em
+  ALOI (3,7ms vs 429,7ms)** e 63× em corel5k, digests de rótulo idênticos →
+  **B é o default**; A segue acessível para teste diferencial.
+- Regressões: TU, parity F1–F7b (57 ok) e golden (14 casos) verdes.
+
+
+
+

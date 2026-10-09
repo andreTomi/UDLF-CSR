@@ -1,0 +1,84 @@
+  ok  : refuses self absent from the row
+  ok  : refuses id out of [0,n)
+  ok  : refuses duplicate id in a row
+CASE cc_selfoff_early n=500 l=100 k=10 off0_expected=500
+  [BuildV2] Total triplets: 50000
+    F1 ck_rk legacy=0xab2dbd6b2417add1 core=0xab2dbd6b2417add1
+  ok  : F1: ck_rk identical on self-displaced input
+  ok  : F1: every matrix cell matches the legacy (n*n diff)
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21167
+  [BuildV2] Total triplets: 21167
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18591
+  [BuildV2] Total triplets: 18591
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17188
+  [BuildV2] Total triplets: 17188
+  [BuildV2] Total triplets: 47522
+  ok  : RKSELF_OFF0 counter == the fixture's displaced rows
+    final ck_rk legacy=0xea8400d202d610be core=0xea8400d202d610be
+  ok  : run(): final rk digest identical (self pinned by the F1 sort)
+  ok  : run(): every final rank cell matches the legacy
+CASE cc_selfoff_late n=500 l=100 k=10 off0_expected=500
+  [BuildV2] Total triplets: 50000
+    F1 ck_rk legacy=0xb8ea42c002454909 core=0xb8ea42c002454909
+  ok  : F1: ck_rk identical on self-displaced input
+  ok  : F1: every matrix cell matches the legacy (n*n diff)
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 22493
+  [BuildV2] Total triplets: 22493
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 19832
+  [BuildV2] Total triplets: 19832
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17768
+  [BuildV2] Total triplets: 17768
+  [BuildV2] Total triplets: 46964
+  ok  : RKSELF_OFF0 counter == the fixture's displaced rows
+    final ck_rk legacy=0x15182368e9e8b3dd core=0x15182368e9e8b3dd
+  ok  : run(): final rk digest identical (self pinned by the F1 sort)
+  ok  : run(): every final rank cell matches the legacy
+CASE cc_selfoff_mixed n=500 l=100 k=10 off0_expected=500
+  [BuildV2] Total triplets: 50000
+    F1 ck_rk legacy=0xf919158586f9cb31 core=0xf919158586f9cb31
+  ok  : F1: ck_rk identical on self-displaced input
+  ok  : F1: every matrix cell matches the legacy (n*n diff)
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21778
+  [BuildV2] Total triplets: 21778
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 19101
+  [BuildV2] Total triplets: 19101
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17084
+  [BuildV2] Total triplets: 17084
+  [BuildV2] Total triplets: 46230
+  ok  : RKSELF_OFF0 counter == the fixture's displaced rows
+    final ck_rk legacy=0x2d6d88a086a298e8 core=0x2d6d88a086a298e8
+  ok  : run(): final rk digest identical (self pinned by the F1 sort)
+  ok  : run(): every final rank cell matches the legacy
+CASE cyclic_disp3 n=32 l=8 k=4 off0_expected=32
+  [BuildV2] Total triplets: 256
+    F1 ck_rk legacy=0xe6e5aace47165783 core=0xe6e5aace47165783
+  ok  : F1: ck_rk identical on self-displaced input
+  ok  : F1: every matrix cell matches the legacy (n*n diff)
+RKSELF_OFF0 rows=32 off0=32 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 256
+  [BuildV2] Total triplets: 224
+  [BuildV2] Total triplets: 224
+  [BuildV2] Total triplets: 256
+  [BuildV2] Total triplets: 224
+  [BuildV2] Total triplets: 224
+  [BuildV2] Total triplets: 256
+  [BuildV2] Total triplets: 224
+  [BuildV2] Total triplets: 224
+  [BuildV2] Total triplets: 416
+  ok  : RKSELF_OFF0 counter == the fixture's displaced rows
+    final ck_rk legacy=0xe6e5aace47165783 core=0xe6e5aace47165783
+  ok  : run(): final rk digest identical (self pinned by the F1 sort)
+  ok  : run(): every final rank cell matches the legacy
+RFE SELF-OFF0 (H19): OK (refusals hard, displaced parity bit-identical, RKSELF_OFF0 truthful)

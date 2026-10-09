@@ -30,9 +30,8 @@
  *
  * Config contract (Validator + Test/config/*.ini): PARAM_RFE_K, PARAM_RFE_T,
  * PARAM_RFE_L, PARAM_RFE_PA, PARAM_RFE_PERFORM_CCS, PARAM_RFE_RERANK_BY_EMB,
- * PARAM_RFE_EXPORT_EMBEDDINGS, PARAM_RFE_EMBEDDINGS_PATH, PARAM_RFE_CCS_PATH.
- * The legacy also has PARAM_RFE_TH_CC (threshold for CC) which is read but
- * not used since execRRCCs is not ported.
+ * PARAM_RFE_EXPORT_EMBEDDINGS, PARAM_RFE_EMBEDDINGS_PATH, PARAM_RFE_CCS_PATH,
+ * PARAM_RFE_TH_CC (threshold for CC, used in execRRCCs).
  */
 #ifndef RFE_METHOD_HPP
 #define RFE_METHOD_HPP
@@ -42,6 +41,9 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <random>
+#include <cstdio>
+#include <algorithm>
 
 #include "Method.hpp"
 #include "MethodFactory.hpp"
@@ -83,6 +85,7 @@ protected:
     t = config.get<int>("PARAM_RFE_T");
     l = static_cast<uint32_t>(config.get<int>("PARAM_RFE_L"));
     pa = config.get<double>("PARAM_RFE_PA");
+    th_cc = config.get<double>("PARAM_RFE_TH_CC");
     performCCs = config.get<bool>("PARAM_RFE_PERFORM_CCS");
 
     // Legacy also has rerankByEmb / exportEmbeddings / paths -- not ported.
@@ -117,7 +120,7 @@ protected:
     // DataProvider stride == l (rkLists width == l, no L_MULT)
     dataProvider.setL(l);
 
-    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS refused if true)");
+    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS supported)");
   }
 
 private:
@@ -147,7 +150,8 @@ private:
   int t = 2;
   uint32_t l = 400;
   double pa = 0.1;
-  bool performCCs = false;
+  double th_cc = 0.0;
+  bool performCCs = false;  // PARAM_RFE_PERFORM_CCS (legacy RFE.cpp:43)
 
   static MethodRegister<RFE> signInMethod;
 
@@ -167,8 +171,8 @@ private:
     for (size_t i = 0; i < total; ++i)
       rk[i] = static_cast<int>((*rkLists)[i]);
 
-    // RFECore constructor validates performCCs (throws if true)
-    RFECore core(rk, static_cast<size_t>(n), stride, k, t, pa, performCCs);
+    // RFECore constructor validates performCCs
+    RFECore core(rk, static_cast<size_t>(n), stride, k, t, pa, performCCs, th_cc);
 
     // X9: carrier calls EXACTLY core.run() -- do NOT re-spell the sequence
     core.run();
@@ -182,14 +186,6 @@ private:
 
   void postprocess() override {}
 
-private:
-  int k = 20;
-  int t = 2;
-  uint32_t l = 400;
-  double pa = 0.1;
-  bool performCCs = false;
-
-  static MethodRegister<RFE> signInMethod;
-};
+}; // class RFE
 
 #endif // RFE_METHOD_HPP

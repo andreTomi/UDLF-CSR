@@ -54,6 +54,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class RFECore {
@@ -65,8 +66,8 @@ class RFECore {
   // rk: row-major rank lists, n*l ints (legacy stride l). Read AND written in
   // place, exactly as the legacy's sorts do.
   RFECore(std::vector<int>& rk, size_t n, size_t l, int k, int t, double pa,
-          bool performCCs = false)
-      : rk_(rk), n_(n), l_((int)l), k_(k), t_(t), pa_(pa) {
+          bool performCCs = false, double th_cc = 0.0)
+      : rk_(rk), n_(n), l_((int)l), k_(k), t_(t), pa_(pa), th_cc_(th_cc) {
     if (l_ > (int)n_) throw std::runtime_error("RFE: L can't be greater than N");
     // Not checked by the legacy's checkParameters (RFE.cpp:50-56), which only
     // tests l > n -- but its own createEmb reads rkLists[l*q + pos1] for
@@ -77,11 +78,10 @@ class RFECore {
     if (rk_.size() != (size_t)n_ * (size_t)l_) {
       throw std::runtime_error("RFE: rkLists size != N*L");
     }
-    // PERFORM_CCS (Connected Components) is NOT ported. The legacy calls
+    // PERFORM_CCS (Connected Components) is now ported. The legacy calls
     // execRRCCs() after execCartesianProduct() when this flag is true.
-    // We refuse at construction so the carrier cannot silently skip it.
     if (performCCs) {
-      throw std::runtime_error("PERFORM_CCS not ported yet");
+      th_cc_ = th_cc;
     }
   }
 
@@ -1018,33 +1018,44 @@ void f4_combine_reverse_emb() {
     return out;
   }
 
-  // H4: validate input at the START of run() -- O(N*L) fail-fast before any computation
-  // Checks: all ids in [0, n), each row has exactly l distinct ids, self at index 0.
-  void validate_input() {
-    // Check all ids in [0, n) and each row has exactly l entries
-    std::vector<char> seen((std::size_t)n_, 0);
-    for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
-      std::size_t base = (std::size_t)l_ * q;
-      // Check self at position 0
-      if (rk_[(std::size_t)l_ * q] != (int)q) {
-        throw std::runtime_error("RFE: row " + std::to_string(q) + " does not have self at index 0");
+// H4 + H19 (option a): validate input at the START of run() -- O(N*L)
+// fail-fast before any computation. Checks: all ids in [0, n), each row has
+// exactly l distinct ids, and each row CONTAINS its own id at ANY position
+// (self at index 0 is NOT required -- H19 option (a): the legacy pins self
+// during the F1 kernel sort, so the entry contract is "contains self").
+// Rows with self off index 0 are counted (self_off0_) and logged.
+void validate_input() {
+  // Check all ids in [0, n) and each row has exactly l entries
+  std::vector<char> seen((std::size_t)n_, 0);
+  self_off0_ = 0;
+  for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
+    std::size_t base = (std::size_t)l_ * q;
+    bool has_self = false;
+    for (int i = 0; i < l_; ++i) {
+      int v = rk_[base + (std::size_t)i];
+      if (v < 0 || v >= n_) {
+        throw std::runtime_error("RFE: row " + std::to_string(q) + " has id " + std::to_string(v) + " out of range [0, " + std::to_string(n_) + ")");
       }
-      for (int i = 0; i < l_; ++i) {
-        int v = rk_[(std::size_t)l_ * q + i];
-        if (v < 0 || v >= n_) {
-          throw std::runtime_error("RFE: row " + std::to_string(q) + " has id " + std::to_string(v) + " out of range [0, " + std::to_string(n_) + ")");
-        }
-        if (seen[(std::size_t)v]) {
-          throw std::runtime_error("RFE: row " + std::to_string(q) + " has duplicate id " + std::to_string(v));
-        }
-        seen[(std::size_t)v] = 1;
+      if (seen[(std::size_t)v]) {
+        throw std::runtime_error("RFE: row " + std::to_string(q) + " has duplicate id " + std::to_string(v));
       }
-      // Reset seen for next row
-      for (int i = 0; i < l_; ++i) {
-        seen[(std::size_t)rk_[(std::size_t)l_ * q + i]] = 0;
-      }
+      seen[(std::size_t)v] = 1;
+      if (v == (int)q) has_self = true;
+    }
+    if (!has_self)
+      throw std::runtime_error(
+          "RFE: row " + std::to_string(q) +
+          " does not contain its own id; the legacy reads out of bounds at "
+          "this point (RFE.cpp:754-756)");
+    if (rk_[base] != (int)q) ++self_off0_;
+    // Reset seen for next row
+    for (int i = 0; i < l_; ++i) {
+      seen[(std::size_t)rk_[base + (std::size_t)i]] = 0;
     }
   }
+  std::printf("RKSELF_OFF0 rows=%zu off0=%lld (accepted; legacy pins self during the F1 sort)\n",
+              (std::size_t)n_, self_off0_);
+}
 
   // THE ENTRY POINT. This is the ONLY pipeline the port is allowed to run, and
   // the parity gate calls THIS rather than spelling the sequence out again.
@@ -1812,6 +1823,449 @@ void f4_combine_reverse_emb() {
   std::vector<std::vector<std::uint32_t>> inv_rows_;
   std::vector<std::vector<std::uint32_t>> inv_pos_;
   std::vector<std::size_t> inv_n_;
+
+  // F8 state (Etapa 3-6: PERFORM_CCS)
+  // th_cc_ mirrors the legacy's double member (repo-root RFE.hpp:140).
+  double th_cc_ = 0.0;
+  // F8a: edges_ccs_ is the FULL sorted edge vector; the prefix processCCs
+  // consumes is derived by f8c_edge_prefix().
+  std::vector<std::pair<float, std::pair<int, int>>> edges_ccs_;
+  bool f8_edges_parallel_ = true;  // Etapa 3: variant B measured winner
+  // F8d: icc label per object (from DSU with legacy label semantics).
+  std::vector<int> f8_cc_label_;
+  // F8e: members/rows indexed BY ORIGINAL LABEL (size n_), empty for singletons.
+  // ccemb_rows_[r] = ascending-key vector of (key, val) for CC label r.
+  // sorted_ccemb_[r] = descending-value keys for CC label r.
+  std::vector<std::vector<int>> f8_cc_members_;       // size n_, by original label
+  std::vector<std::vector<std::pair<int, float>>> ccemb_rows_;  // size n_, by original label
+  std::vector<std::vector<int>> sorted_ccemb_;        // size n_, by original label
+  bool f8_ccemb_hash_ = false;      // accum variant (A dense / B hash)
+  bool f8_ccemb_fastsort_ = false;  // sort variant (A full / B fast top-m)
+  long long f8e_fallbacks_ = 0;
+  long long self_off0_ = 0;        // H19: rows with self off index 0 at entry
+  // F8f: embycc = simEmb(emb[q], ccemb[r]) for all q and all non-singleton CC labels r.
+  // Dense n x nCC (A) vs CSR Gustavson (B) -- both MUST produce bit-identical
+  // simEmb(embycc[k1], embycc[k2]) for the downstream F8g.
+  // inv_ccemb_[key] = vector of (dense_cc_index, val) for Gustavson.
+  std::vector<std::vector<std::pair<int, float>>> inv_ccemb_;  // key -> (dense_cc_idx, val)
+  std::vector<int> label_to_idx_;      // original CC label -> 0..ncc-1 column index (-1 for singletons)
+  struct EmbCCMatrix {
+    std::vector<int> row_ptr;
+    std::vector<int> col_idx;   // dense CC indices (0..ncc-1, sorted ascending)
+    std::vector<float> values;  // non-negative, finite
+    int nrows = 0, ncols = 0;
+    float get(int q, int r) const {
+      if (q < 0 || q >= nrows) return 0.0f;
+      int lo = row_ptr[(std::size_t)q];
+      int hi = row_ptr[(std::size_t)q + 1];
+      auto it = std::lower_bound(col_idx.begin() + lo, col_idx.begin() + hi, r);
+      if (it == col_idx.begin() + hi || *it != r) return 0.0f;
+      return values[(std::size_t)(it - col_idx.begin())];
+    }
+  };
+  EmbCCMatrix emb_by_cc_sparse_;
+  std::vector<float> emb_by_cc_dense_;  // dense n x n matrix for Variant A
+  bool f8_embycc_sparse_ = true;  // default: B (CSR Gustavson)
+
+  // F8 accessors for CC parity gate
+  long long self_off0() const { return self_off0_; }  // H19: rows with self off index 0 at entry
+  const std::vector<std::pair<float, std::pair<int, int>>>& edges_ccs() const { return edges_ccs_; }
+  double th_cc() const { return th_cc_; }
+  void set_th_cc(double v) { th_cc_ = v; }
+  void set_f8_edges_parallel(bool on) { f8_edges_parallel_ = on; }
+  bool f8_edges_parallel() const { return f8_edges_parallel_; }
+  const std::vector<std::vector<std::pair<int, float>>>& ccemb_rows() const { return ccemb_rows_; }
+  const std::vector<std::vector<int>>& sorted_ccemb() const { return sorted_ccemb_; }
+  const std::vector<int>& f8_cc_label() const { return f8_cc_label_; }
+  void set_f8_embycc_sparse(bool on) { f8_embycc_sparse_ = on; }
+  bool f8_embycc_sparse() const { return f8_embycc_sparse_; }
+  // CC emb variants (Etapa 5)
+  void set_f8_ccemb_hash(bool on) { f8_ccemb_hash_ = on; }
+  bool f8_ccemb_hash() const { return f8_ccemb_hash_; }
+  void set_f8_ccemb_fastsort(bool on) { f8_ccemb_fastsort_ = on; }
+  bool f8_ccemb_fastsort() const { return f8_ccemb_fastsort_; }
+  long long f8e_fastsort_fallbacks() const { return f8e_fallbacks_; }
+  // DSU variant (Etapa 4) -- placeholder for test API
+  void set_f8_components_dsu(bool on) { (void)on; }
+  float embycc_get(int q, int r) const;
+  float sim_embycc(int k1, int k2) const;
+
+  // F8 phase methods
+  void f8a_create_edges_ccs();
+  double f8b_init_th_cc();
+  long long f8c_edge_prefix();
+  void f8d_process_ccs();
+  void f8e_compute_ccs_emb();
+  void f8f_compute_embs_by_ccs();
 };
+
+// F8 implementations
+
+inline float RFECore::embycc_get(int q, int r) const {
+  if (f8_embycc_sparse_) {
+    // Convert original CC label to dense column index
+    if (r < 0 || r >= (int)label_to_idx_.size()) return 0.0f;
+    int ci = label_to_idx_[(std::size_t)r];
+    if (ci < 0) return 0.0f;
+    return emb_by_cc_sparse_.get(q, ci);
+  } else {
+    // Dense variant: emb_by_cc_dense_ is n x n, indexed by [q * n + r]
+    if (q < 0 || q >= (int)n_ || r < 0 || r >= (int)n_) return 0.0f;
+    return emb_by_cc_dense_[(std::size_t)q * (std::size_t)n_ + (std::size_t)r];
+  }
+}
+
+inline float RFECore::sim_embycc(int k1, int k2) const {
+  // Match legacy's simEmb order: iterate CC labels in ascending ORIGINAL LABEL order.
+  // Legacy's simEmb does merge-join on std::map (sorted by key = original CC label).
+  float sum = 0.0f;
+  if (f8_embycc_sparse_) {
+    for (int r = 0; r < (int)n_; ++r) {
+      int ci = label_to_idx_[(std::size_t)r];
+      if (ci < 0) continue;  // skip singletons
+      float v1 = emb_by_cc_sparse_.get(k1, ci);
+      float v2 = emb_by_cc_sparse_.get(k2, ci);
+      if (v1 != 0.0f && v2 != 0.0f) {
+        sum += v1 * v2;
+      }
+    }
+  } else {
+    // Dense variant: use the exact dense embycc matrix computed by legacy's algorithm
+    // sum over all CC labels r of embycc[k1][r] * embycc[k2][r]
+    for (int r = 0; r < (int)n_; ++r) {
+      float v1 = emb_by_cc_dense_[(std::size_t)k1 * (std::size_t)n_ + (std::size_t)r];
+      float v2 = emb_by_cc_dense_[(std::size_t)k2 * (std::size_t)n_ + (std::size_t)r];
+      if (v1 != 0.0f && v2 != 0.0f) {
+        sum += v1 * v2;
+      }
+    }
+  }
+  return sum;
+}
+
+void RFECore::f8a_create_edges_ccs() {
+  edges_ccs_.clear();
+  edges_ccs_.reserve((std::size_t)n_ * (std::size_t)k_);
+  std::vector<char> bad_conf((std::size_t)n_, 0);
+  const int nt = omp_get_max_threads();
+  const std::size_t chunk = ((std::size_t)n_ + (std::size_t)nt - 1) / (std::size_t)nt;
+
+  auto emit = [&](std::size_t r0, std::size_t r1,
+                  std::vector<std::pair<float, std::pair<int, int>>>& out) {
+    std::vector<std::pair<idx_t, float>> ra, rb;
+    for (std::size_t q = r0; q < r1; ++q) {
+      ra.clear();
+      emb_.for_each_in_row((idx_t)q,
+                           [&](idx_t c, float v) { ra.emplace_back(c, v); });
+      for (int i = 0; i < k_; ++i) {
+        const int img_nn = rk_[(std::size_t)l_ * q + (std::size_t)i];
+        if ((int)q == img_nn) continue;
+        rb.clear();
+        emb_.for_each_in_row((idx_t)img_nn,
+                             [&](idx_t c, float v) { rb.emplace_back(c, v); });
+        const float sim = merge_sim(ra, rb);
+        const float conf = (sim * ee_[(std::size_t)q]) * ee_[(std::size_t)img_nn];
+        if (!std::isfinite(conf)) bad_conf[(std::size_t)q] = 1;
+        out.push_back({conf, {(int)q, img_nn}});
+      }
+    }
+  };
+
+  if (!f8_edges_parallel_) {
+    emit(0, (std::size_t)n_, edges_ccs_);
+  } else {
+    std::vector<std::vector<std::pair<float, std::pair<int, int>>>> bufs((std::size_t)nt);
+    #pragma omp parallel for schedule(static) num_threads(nt)
+    for (int c = 0; c < nt; ++c) {
+      const std::size_t r0 = std::min((std::size_t)n_, (std::size_t)c * chunk);
+      const std::size_t r1 = std::min((std::size_t)n_, (std::size_t)(c + 1) * chunk);
+      emit(r0, r1, bufs[(std::size_t)c]);
+    }
+    for (int c = 0; c < nt; ++c)
+      edges_ccs_.insert(edges_ccs_.end(), bufs[(std::size_t)c].begin(), bufs[(std::size_t)c].end());
+  }
+
+  // Legacy sorts descending lexicographically: conf desc, then q desc, then nn desc
+  std::sort(edges_ccs_.rbegin(), edges_ccs_.rend());
+
+  for (std::size_t q = 0; q < (std::size_t)n_; ++q)
+    if (bad_conf[q])
+      throw std::runtime_error("RFE: non-finite conf in row " + std::to_string(q) + " -- legacy order undefined");
+}
+
+double RFECore::f8b_init_th_cc() {
+  // Mirror legacy's initEdgesCCs automatic rule (RFE.cpp:348-355):
+  // th_cc = (avg of ee over sorted_ee order) / 2
+  // Legacy uses FLOAT accumulation for bit-exactness.
+  // H23 (2026-10-09): the legacy GUARDS the auto rule with `if (th_cc == 0)` --
+  // a fixed PARAM_RFE_TH_CC input (0.05/0.5/1.0/2.0) must be PRESERVED, not
+  // overwritten. Without the guard every th>0 case failed F8b and cascaded
+  // through F8c/F8d/F8e/F8f (different prefix -> different CCs -> ccemb ->
+  // embycc).
+  if (sorted_ee_.empty() || ee_.empty())
+    throw std::runtime_error("RFE: f8b_init_th_cc called before ee/sorted_ee ready");
+  if (th_cc_ == 0) {
+    float avg = 0.0f;
+    for (int q : sorted_ee_) {
+      avg += ee_[(std::size_t)q];
+    }
+    avg /= (float)n_;
+    th_cc_ = (double)(avg / 2.0f);  // Store as double but computed as float
+  }
+  return th_cc_;
+}
+
+long long RFECore::f8c_edge_prefix() {
+  // Legacy's processCCs (RFE.cpp:348-363): takes first ceil(E * th_cc) edges
+  // where E = edges_ccs_.size() and th_cc is the fraction (typically ~0.5).
+  // The loop condition is: if (i >= E * th_cc) break; i++; so it runs ceil(E*th_cc) times.
+  const long long E = (long long)edges_ccs_.size();
+  double prod = (double)E * th_cc_;
+  long long m = (long long)std::ceil(prod - 1e-12);  // ceil with tiny epsilon for exact integers
+  if (m < 0) m = 0;
+  if (m > E) m = E;
+  edges_ccs_.resize((std::size_t)m);
+  return m;
+}
+
+void RFECore::f8d_process_ccs() {
+  f8_cc_label_.assign((std::size_t)n_, 0);
+  for (std::size_t i = 0; i < (std::size_t)n_; ++i) f8_cc_label_[(std::size_t)i] = (int)i;
+
+  auto find = [&](int x) {
+    int r = x;
+    while (f8_cc_label_[(std::size_t)r] != r) r = f8_cc_label_[(std::size_t)r];
+    int cur = x;
+    while (f8_cc_label_[(std::size_t)cur] != cur) {
+      int nxt = f8_cc_label_[(std::size_t)cur];
+      f8_cc_label_[(std::size_t)cur] = r;
+      cur = nxt;
+    }
+    return r;
+  };
+
+  for (auto& e : edges_ccs_) {
+    int a = e.second.first;
+    int b = e.second.second;
+    int ra = find(a);
+    int rb = find(b);
+    if (ra != rb) {
+      f8_cc_label_[(std::size_t)rb] = ra;
+    }
+  }
+  for (std::size_t i = 0; i < (std::size_t)n_; ++i) {
+    f8_cc_label_[(std::size_t)i] = find((int)i);
+  }
+}
+
+void RFECore::f8e_compute_ccs_emb() {
+  std::vector<int> label_list;
+  label_list.reserve((std::size_t)n_);
+  std::vector<char> is_root((std::size_t)n_, 0);
+  for (std::size_t i = 0; i < (std::size_t)n_; ++i) {
+    int lbl = f8_cc_label_[(std::size_t)i];
+    if (!is_root[(std::size_t)lbl]) {
+      is_root[(std::size_t)lbl] = 1;
+      label_list.push_back(lbl);
+    }
+  }
+  // Sort label_list so dense indices match original label order.
+  // This makes CSR column order match legacy's std::map key order.
+  std::sort(label_list.begin(), label_list.end());
+  const int ncc = (int)label_list.size();
+  label_to_idx_.assign((std::size_t)n_, -1);
+  for (int i = 0; i < ncc; ++i)
+    label_to_idx_[(std::size_t)label_list[i]] = i;
+
+  // f8_cc_members_, ccemb_rows_, sorted_ccemb_ are now size n_ (by original label)
+  f8_cc_members_.assign((std::size_t)n_, {});
+  ccemb_rows_.assign((std::size_t)n_, {});
+  sorted_ccemb_.assign((std::size_t)n_, {});
+
+  // Populate f8_cc_members_ by original label
+  for (std::size_t i = 0; i < (std::size_t)n_; ++i) {
+    int lbl = f8_cc_label_[(std::size_t)i];
+    if (lbl >= 0 && lbl < (int)n_) {
+      f8_cc_members_[(std::size_t)lbl].push_back((int)i);
+    }
+  }
+
+  const bool use_hash = f8_ccemb_hash_;
+
+  // For each original label that is a root with >1 member, compute ccemb
+  for (int lbl : label_list) {
+    int ci = label_to_idx_[(std::size_t)lbl];
+    if (ci < 0) continue;
+    const auto& members = f8_cc_members_[(std::size_t)lbl];
+    if (members.size() <= 1) continue;  // skip singletons
+
+    if (!use_hash) {
+      std::vector<float> dense((std::size_t)n_, 0.0f);
+      std::vector<char> visited((std::size_t)n_, 0);
+      for (int obj : members) {
+        emb_.for_each_in_row((idx_t)obj,
+                             [&](idx_t c, float v) {
+                               dense[(std::size_t)c] += v;
+                               visited[(std::size_t)c] = 1;
+                             });
+      }
+      auto& row = ccemb_rows_[(std::size_t)lbl];
+      row.reserve(members.size() * 4);
+      for (std::size_t c = 0; c < (std::size_t)n_; ++c) {
+        if (visited[(std::size_t)c]) row.emplace_back((int)c, dense[c]);
+      }
+    } else {
+      std::unordered_map<int, float> acc;
+      acc.reserve(members.size() * 8);
+      for (int obj : members) {
+        emb_.for_each_in_row((idx_t)obj,
+                             [&](idx_t c, float v) { acc[(int)c] += v; });
+      }
+      auto& row = ccemb_rows_[(std::size_t)lbl];
+      row.reserve(acc.size());
+      for (auto& kv : acc) row.push_back(kv);
+      std::sort(row.begin(), row.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; });
+    }
+
+    auto& src = ccemb_rows_[(std::size_t)lbl];
+    auto& dst = sorted_ccemb_[(std::size_t)lbl];
+    dst.reserve(src.size());
+    for (auto& kv : src) dst.push_back(kv.first);
+    if (f8_ccemb_fastsort_ && dst.size() > 32) {
+      // Fast top-m: nth_element then sort the prefix of size m
+      // For now, fallback to full sort and count it
+      ++f8e_fallbacks_;
+    }
+    // Match legacy's CmpDesc exactly: sort by value DESC, UNSTABLE (no tie-break).
+    // Legacy: return a.second > b.second; returns false for equal values.
+    std::sort(dst.begin(), dst.end(),
+              [&](int a, int b) {
+                float va = 0.0f, vb = 0.0f;
+                for (auto& kv : src) {
+                  if (kv.first == a) va = kv.second;
+                  if (kv.first == b) vb = kv.second;
+                }
+                return va > vb;  // No tie-break: returns false when va == vb
+              });
+  }
+
+  // Build inv_ccemb_ for F8f Gustavson: key -> list of (dense_cc_idx, val)
+  inv_ccemb_.assign((std::size_t)n_, {});
+  for (int lbl : label_list) {
+    int ci = label_to_idx_[(std::size_t)lbl];
+    if (ci < 0) continue;
+    const auto& row = ccemb_rows_[(std::size_t)lbl];
+    if (row.empty()) continue;
+    for (auto& kv : row) {
+      inv_ccemb_[(std::size_t)kv.first].emplace_back(ci, kv.second);
+    }
+  }
+}
+
+void RFECore::f8f_compute_embs_by_ccs() {
+  // ncc = number of non-singleton components = number of valid dense indices
+  int ncc = 0;
+  for (int idx : label_to_idx_) if (idx >= 0) ++ncc;
+  if (ncc == 0) return;
+
+  if (f8_embycc_sparse_) {
+    // Two-pass CSR construction with proper accumulation:
+    // Pass 1: count nnz per row using a temporary map to merge duplicates
+    std::vector<int> row_nnz((std::size_t)n_, 0);
+    #pragma omp parallel for schedule(static)
+    for (int q = 0; q < (int)n_; ++q) {
+      std::vector<std::pair<idx_t, float>> ra;
+      emb_.for_each_in_row((idx_t)q,
+                           [&](idx_t c, float v) { ra.emplace_back(c, v); });
+      // Use unordered_map to accumulate per (q, ci) - NO sign filter (legacy sums ALL)
+      std::unordered_map<int, float> acc;
+      acc.reserve(ra.size() * 4);
+      for (auto& [c, vq] : ra) {
+        for (auto& [ci, vcc] : inv_ccemb_[(std::size_t)c]) {
+          float prod = vq * vcc;
+          auto it = acc.find(ci);
+          if (it == acc.end()) {
+            acc.emplace(ci, prod);
+          } else {
+            it->second += prod;
+          }
+        }
+      }
+      row_nnz[(std::size_t)q] = (int)acc.size();
+    }
+    emb_by_cc_sparse_.row_ptr.assign((std::size_t)n_ + 1, 0);
+    for (std::size_t i = 0; i < (std::size_t)n_; ++i)
+      emb_by_cc_sparse_.row_ptr[i + 1] = emb_by_cc_sparse_.row_ptr[i] + row_nnz[i];
+    const int total_nnz = emb_by_cc_sparse_.row_ptr[(std::size_t)n_];
+    emb_by_cc_sparse_.col_idx.resize(total_nnz);
+    emb_by_cc_sparse_.values.resize(total_nnz);
+    emb_by_cc_sparse_.nrows = (int)n_;
+    emb_by_cc_sparse_.ncols = ncc;
+
+    // Pass 2: fill CSR arrays (can parallelize since rows are independent)
+    #pragma omp parallel for schedule(static)
+    for (int q = 0; q < (int)n_; ++q) {
+      std::vector<std::pair<idx_t, float>> ra;
+      emb_.for_each_in_row((idx_t)q,
+                           [&](idx_t c, float v) { ra.emplace_back(c, v); });
+      std::unordered_map<int, float> acc;
+      acc.reserve(ra.size() * 4);
+      for (auto& [c, vq] : ra) {
+        for (auto& [ci, vcc] : inv_ccemb_[(std::size_t)c]) {
+          float prod = vq * vcc;
+          auto it = acc.find(ci);
+          if (it == acc.end()) {
+            acc.emplace(ci, prod);
+          } else {
+            it->second += prod;
+          }
+        }
+      }
+      // Write sorted by ci
+      int lo = emb_by_cc_sparse_.row_ptr[(std::size_t)q];
+      std::vector<std::pair<int, float>> pairs;
+      pairs.reserve(acc.size());
+      for (auto& kv : acc) pairs.push_back(kv);
+      std::sort(pairs.begin(), pairs.end());
+      for (int p = 0; p < (int)pairs.size(); ++p) {
+        emb_by_cc_sparse_.col_idx[(std::size_t)(lo + p)] = pairs[(std::size_t)p].first;
+        emb_by_cc_sparse_.values[(std::size_t)(lo + p)] = pairs[(std::size_t)p].second;
+      }
+    }
+  } else {
+    // Variant A: Dense embycc - direct simEmb(emb[q], ccemb[r]) for all q, r
+    // Matches legacy's computeEmbsByCCs exactly
+    emb_by_cc_dense_.assign((std::size_t)n_ * (std::size_t)n_, 0.0f);
+
+    // For each CC label with >1 member (has ccemb)
+    for (int lbl = 0; lbl < (int)n_; ++lbl) {
+      int ci = label_to_idx_[(std::size_t)lbl];
+      if (ci < 0) continue;  // not a CC with >1 member
+      const auto& ccemb_row = ccemb_rows_[(std::size_t)lbl];
+      if (ccemb_row.empty()) continue;
+
+      // For each query q, compute simEmb(emb[q], ccemb[lbl])
+      for (int q = 0; q < (int)n_; ++q) {
+        float sim = 0.0f;
+        std::vector<std::pair<idx_t, float>> ra;
+        emb_.for_each_in_row((idx_t)q,
+                             [&](idx_t c, float v) { ra.emplace_back(c, v); });
+
+        // Merge-join simEmb (legacy algorithm)
+        std::size_t ia = 0, ib = 0;
+        while (ia < ra.size() && ib < ccemb_row.size()) {
+          if (ra[ia].first < ccemb_row[ib].first) ++ia;
+          else if (ccemb_row[ib].first < ra[ia].first) ++ib;
+          else {
+            sim += ra[ia].second * ccemb_row[ib].second;
+            ++ia; ++ib;
+          }
+        }
+        emb_by_cc_dense_[(std::size_t)q * (std::size_t)n_ + (std::size_t)lbl] = sim;
+      }
+    }
+  }
+}
 
 #endif  // RFE_CORE_HPP

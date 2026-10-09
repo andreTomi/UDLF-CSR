@@ -1,0 +1,407 @@
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_degenerate n=200 l=40 k=10 t=2
+RKSELF_OFF0 rows=200 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 9919
+  [BuildV2] Total triplets: 9919
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 8530
+  [BuildV2] Total triplets: 8530
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 7872
+  [BuildV2] Total triplets: 7872
+  [BuildV2] Total triplets: 34702
+  [BuildV2] Total triplets: 6369
+  [BuildV2] Total triplets: 6369
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_k2 n=500 l=100 k=2 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1498
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_k20 n=500 l=100 k=20 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 42796
+  [BuildV2] Total triplets: 42796
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 40594
+  [BuildV2] Total triplets: 40594
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 38980
+  [BuildV2] Total triplets: 38980
+  [BuildV2] Total triplets: 50382
+  [BuildV2] Total triplets: 34626
+  [BuildV2] Total triplets: 34626
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_k100 n=500 l=100 k=100 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 129434
+  [BuildV2] Total triplets: 82245
+  [BuildV2] Total triplets: 82245
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_selfoff_early n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21167
+  [BuildV2] Total triplets: 21167
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18591
+  [BuildV2] Total triplets: 18591
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17188
+  [BuildV2] Total triplets: 17188
+  [BuildV2] Total triplets: 47522
+  [BuildV2] Total triplets: 14802
+  [BuildV2] Total triplets: 14802
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_selfoff_late n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 22493
+  [BuildV2] Total triplets: 22493
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 19832
+  [BuildV2] Total triplets: 19832
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17768
+  [BuildV2] Total triplets: 17768
+  [BuildV2] Total triplets: 46964
+  [BuildV2] Total triplets: 15327
+  [BuildV2] Total triplets: 15327
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cc_selfoff_mixed n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21778
+  [BuildV2] Total triplets: 21778
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 19101
+  [BuildV2] Total triplets: 19101
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17084
+  [BuildV2] Total triplets: 17084
+  [BuildV2] Total triplets: 46230
+  [BuildV2] Total triplets: 14890
+  [BuildV2] Total triplets: 14890
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cyclic n=26 l=5 k=5 t=2
+RKSELF_OFF0 rows=26 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 442
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+CASE cyclic n=26 l=5 k=5 t=2
+RKSELF_OFF0 rows=26 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 442
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+RFE CC PARITY (Etapas 2-4): OK (bit-identical to the legacy)

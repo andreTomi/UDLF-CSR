@@ -1,0 +1,561 @@
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 64 CCs
+    [C-probe] keys_abs_le_1e-9=842/2744 (engine filter would drop); reversed-member bit-diffs=5 of 51 keys
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=1 of 47 CCs
+    [C-probe] keys_abs_le_1e-9=514/1545 (engine filter would drop); reversed-member bit-diffs=0 of 34 keys
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 32 CCs
+    [C-probe] keys_abs_le_1e-9=511/1871 (engine filter would drop); reversed-member bit-diffs=5 of 51 keys
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 5 CCs
+    [C-probe] keys_abs_le_1e-9=0/500 (engine filter would drop); reversed-member bit-diffs=54 of 90 keys
+CASE cc_structured n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 21093
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 18535
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 17064
+  [BuildV2] Total triplets: 46970
+  [BuildV2] Total triplets: 14670
+  [BuildV2] Total triplets: 14670
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 5 CCs
+    [C-probe] keys_abs_le_1e-9=0/500 (engine filter would drop); reversed-member bit-diffs=54 of 90 keys
+CASE cc_degenerate n=200 l=40 k=10 t=2
+RKSELF_OFF0 rows=200 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 9919
+  [BuildV2] Total triplets: 9919
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 8530
+  [BuildV2] Total triplets: 8530
+  [BuildV2] Total triplets: 8000
+  [BuildV2] Total triplets: 7872
+  [BuildV2] Total triplets: 7872
+  [BuildV2] Total triplets: 34702
+  [BuildV2] Total triplets: 6369
+  [BuildV2] Total triplets: 6369
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=1 of 27 CCs
+    [C-probe] keys_abs_le_1e-9=495/1479 (engine filter would drop); reversed-member bit-diffs=2 of 45 keys
+CASE cc_k2 n=500 l=100 k=2 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1498
+  [BuildV2] Total triplets: 1166
+  [BuildV2] Total triplets: 1166
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=148 of 148 CCs
+    [C-probe] keys_abs_le_1e-9=27/384 (engine filter would drop); reversed-member bit-diffs=0 of 2 keys
+CASE cc_k20 n=500 l=100 k=20 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 42796
+  [BuildV2] Total triplets: 42796
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 40594
+  [BuildV2] Total triplets: 40594
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 38980
+  [BuildV2] Total triplets: 38980
+  [BuildV2] Total triplets: 50382
+  [BuildV2] Total triplets: 34626
+  [BuildV2] Total triplets: 34626
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 15 CCs
+    [C-probe] keys_abs_le_1e-9=107/1397 (engine filter would drop); reversed-member bit-diffs=61 of 115 keys
+CASE cc_k100 n=500 l=100 k=100 t=2
+RKSELF_OFF0 rows=500 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 85513
+  [BuildV2] Total triplets: 129434
+  [BuildV2] Total triplets: 82245
+  [BuildV2] Total triplets: 82245
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=3 of 5 CCs
+    [C-probe] keys_abs_le_1e-9=399/881 (engine filter would drop); reversed-member bit-diffs=72 of 197 keys
+CASE cc_selfoff_early n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21167
+  [BuildV2] Total triplets: 21167
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 18591
+  [BuildV2] Total triplets: 18591
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17188
+  [BuildV2] Total triplets: 17188
+  [BuildV2] Total triplets: 47522
+  [BuildV2] Total triplets: 14802
+  [BuildV2] Total triplets: 14802
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 60 CCs
+    [C-probe] keys_abs_le_1e-9=763/2727 (engine filter would drop); reversed-member bit-diffs=6 of 70 keys
+CASE cc_selfoff_late n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 22493
+  [BuildV2] Total triplets: 22493
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 19832
+  [BuildV2] Total triplets: 19832
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17768
+  [BuildV2] Total triplets: 17768
+  [BuildV2] Total triplets: 46964
+  [BuildV2] Total triplets: 15327
+  [BuildV2] Total triplets: 15327
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 53 CCs
+    [C-probe] keys_abs_le_1e-9=709/2649 (engine filter would drop); reversed-member bit-diffs=4 of 34 keys
+CASE cc_selfoff_mixed n=500 l=100 k=10 t=2
+RKSELF_OFF0 rows=500 off0=500 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 21778
+  [BuildV2] Total triplets: 21778
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 19101
+  [BuildV2] Total triplets: 19101
+  [BuildV2] Total triplets: 50000
+  [BuildV2] Total triplets: 17084
+  [BuildV2] Total triplets: 17084
+  [BuildV2] Total triplets: 46230
+  [BuildV2] Total triplets: 14890
+  [BuildV2] Total triplets: 14890
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=0 of 21 CCs
+    [C-probe] keys_abs_le_1e-9=228/1373 (engine filter would drop); reversed-member bit-diffs=9 of 54 keys
+CASE cyclic n=26 l=5 k=5 t=2
+RKSELF_OFF0 rows=26 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 442
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=1 of 1 CCs
+    [C-probe] keys_abs_le_1e-9=8/21 (engine filter would drop); reversed-member bit-diffs=0 of 21 keys
+CASE cyclic n=26 l=5 k=5 t=2
+RKSELF_OFF0 rows=26 off0=0 (accepted; legacy pins self during the F1 sort)
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 130
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 442
+  [BuildV2] Total triplets: 234
+  [BuildV2] Total triplets: 234
+  ok  : F8a: sorted_emb row lengths match (support identical)
+  ok  : F8a: sorted_emb KEY ORDER matches position by position
+  ok  : F8a: every emb value matches the legacy bit-exactly
+  ok  : F8a: every ee value matches the legacy bit-exactly
+  ok  : F8a: sorted_ee ORDER matches the legacy
+  ok  : F8b: th_cc bit-identical (auto rule and fixed input)
+  ok  : F8b[A]: edge count matches the legacy
+  ok  : F8b[A]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b[B]: edge count matches the legacy
+  ok  : F8b[B]: edge vector identical (conf BITS + pairs, order)
+  ok  : F8b: prefix length == legacy loop count
+  ok  : F8d[A]: icc labels identical (per object)
+  ok  : F8d[A]: rcc grouping identical (sets per label)
+  ok  : F8d[B]: icc labels identical (per object)
+  ok  : F8d[B]: rcc grouping identical (sets per label)
+  ok  : F8e[A-full]: no core rows outside the reference CC labels
+  ok  : F8e[A-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-full]: sorted_ccemb FULLY identical
+  ok  : F8e[Bhash-full]: no core rows outside the reference CC labels
+  ok  : F8e[Bhash-full]: ccemb content identical (keys + float bits)
+  ok  : F8e[Bhash-full]: sorted_ccemb FULLY identical
+  ok  : F8e[A-fast]: no core rows outside the reference CC labels
+  ok  : F8e[A-fast]: ccemb content identical (keys + float bits)
+  ok  : F8e[A-fast]: sorted_ccemb prefix-m identical
+    [A-fast] fastsort fallbacks=1 of 1 CCs
+    [C-probe] keys_abs_le_1e-9=8/25 (engine filter would drop); reversed-member bit-diffs=0 of 25 keys
+RFE CC PARITY (Etapas 2-5): OK (bit-identical to the legacy)

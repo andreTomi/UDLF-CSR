@@ -3,7 +3,8 @@
 // The RFE legacy core, VERBATIM, as the bit-exact reference for the CSR port.
 //
 // Provenance (do not paraphrase): every algorithm body below is the repo-root
-// RFE.cpp (RFE.cpp:34-218, 450-461, 469-489, 514-561, 583-661, 677-715, 717-833)
+// RFE.cpp (RFE.cpp:34-218, 225-237, 311-451, 450-461, 469-510, 514-561,
+// 583-661, 677-715, 717-833)
 // with ONLY the framework glue replaced by shims. Each shim is marked "SHIM" and
 // listed below. Nothing is reordered, no expression is "simplified", and no
 // loop bound is changed -- the reference must stay literal so the pins it
@@ -29,12 +30,17 @@
 //   S5  std::cout progress prints -> suppressed. They carry no state.
 //   S6  `exit(1)` in checkParameters -> throws std::runtime_error. The
 //       condition itself is kept verbatim.
-//   S7  The fusion / connected-components / embedding-export half of the class
-//       is NOT here. It is OUT OF SCOPE for this port (deferred, see the
-//       plan) and it is not on the path below. runUdlMethod below calls the
-//       core only; the legacy calls execRRCCs()/execRRByEmbCCs() behind
-//       performCCs / (rerankByEmb || exportEmbeddings), and this harness pins
-//       those flags to false.
+//   S7  The fusion and embedding-export halves of the class are NOT here. They
+//       are OUT OF SCOPE for this port (deferred) and are not on the path
+//       below. The CONNECTED-COMPONENTS half (execRRCCs, RFE.cpp:225-451, plus
+//       sortCCEmb at 491-510) WAS added to this reference for the PERFORM_CCS
+//       port: reproduced verbatim at the bottom under the same shim
+//       discipline, gated by Source/tests/test_rfe_cc_golden.cpp. NOTE: an
+//       earlier working-tree attempt (one-shot Python append scripts, since
+//       deleted) applied the processCCs predicate as (int)(E*th_cc) and typed
+//       th_cc as float; both are WRONG vs the legacy and are re-copied here
+//       literally (predicate ((int)E)*th_cc in double; th_cc is double, per
+//       repo-root RFE.hpp:140). Hypothesis H11 pins the predicate.
 //
 // The core reproduced here is exactly the in-scope pipeline:
 //
@@ -56,7 +62,9 @@
 //   * reRankingByCPRR does incElems.resize(n) with NO clear (RFE.cpp:557),
 //     while reRankingByCCs does clear() (RFE.cpp:416). Harmless only because
 //     CPRR is the first user. Kept verbatim.
-//   * initEdgesCCs() mutates the member th_cc (RFE.cpp:353). Out of scope.
+//   * initEdgesCCs() mutates the member th_cc (RFE.cpp:353). In scope since the
+//     CC extension: the CC harness constructs a FRESH RFERef per
+//     fixture x th_cc case, so the mutation cannot leak between cases.
 //
 // Build posture: the pins this harness records are an -O2, no-fast-math
 // contract, exactly like gate_bfstree.sh. -ffp-contract=off is DEFENSIVE here,
@@ -310,6 +318,35 @@ public:
   int k() const { return k_; }
   int t() const { return t_; }
   double pa() const { return pa_; }
+
+  // ---- CC seam (the legacy's private execRRCCs et al., exposed for the gate) --
+  // One-line wrappers only; every body below is the legacy's, verbatim.
+  void exec_rr_ccs() { execRRCCs(); }
+  void create_edges_ccs() { createEdgesCCS(); }
+  void process_ccs() { processCCs(); }
+  void init_edges_ccs() { initEdgesCCs(); }
+  void compute_ccs_emb() { computeCCsEmb(); }
+  void compute_embs_by_ccs() { computeEmbsByCCs(); }
+  void reranking_by_ccs() { reRankingByCCs(); }
+  // H14 seam: unionCCs/sameCC exposed so the gate can drive directed graphs
+  // (chain, star, reversed edge) against an independent DSU.
+  void union_ccs(int o1, int o2) { unionCCs(o1, o2); }
+  bool same_cc(int o1, int o2) { return sameCC(o1, o2); }
+  // th_cc comes from PARAM_RFE_TH_CC in the legacy (repo-root RFE.hpp:140,
+  // double). The harness sets it before exec_rr_ccs(); 0.0 selects the
+  // legacy's automatic average path (initEdgesCCs, RFE.cpp:348-355).
+  void set_th_cc(double v) { th_cc_ = v; }
+  double th_cc() const { return th_cc_; }
+
+  // Read-only views for the CC gate's stage digests.
+  const std::vector<std::pair<float, std::pair<int, int>>>& edges_ccs() const {
+    return edgesCCs_;
+  }
+  const std::map<int, std::set<int>>& rcc() const { return rcc_; }
+  const std::map<int, int>& icc() const { return icc_; }
+  const std::map<int, std::map<int, float>>& ccemb() const { return ccemb_; }
+  const std::vector<std::vector<int>>& sorted_ccemb() const { return sorted_ccemb_; }
+  const std::map<int, std::map<int, float>>& embycc() const { return embycc_; }
 
  private:
   // ---- RFE.cpp:180-193 ----------------------------------------------------
@@ -752,6 +789,248 @@ public:
 
   float& MX(int i, int j) { return matrix_[(std::size_t)n_ * (std::size_t)i + (std::size_t)j]; }  // SHIM S2
   float MX(int i, int j) const { return matrix_[(std::size_t)n_ * (std::size_t)i + (std::size_t)j]; }  // SHIM S2
+
+  // =========================================================================
+  // CC (Connected Components) -- execRRCCs (RFE.cpp:225-230) and every phase
+  // it reaches, VERBATIM from RFE.cpp:225-451 and 491-510. Shim notes: member
+  // names carry the trailing underscore like the rest of this class; th_cc_ is
+  // the legacy's double member (repo-root RFE.hpp:140) defaulting to 0.0 and
+  // settable through set_th_cc (the legacy reads PARAM_RFE_TH_CC from config);
+  // progress prints suppressed (S5). Everything expensive or dubious is KEPT,
+  // because the pins must be the legacy's, defects included: the
+  // set_union-inserter writing into its own source range (RFE.cpp:369), the
+  // `for (auto t : edgesCCs)` tuple copy, the two full copies of each ccemb map
+  // per reRankingByCCs iteration, the double arithmetic of newSim rounded to
+  // float on assignment, and the O(L) getPosition.
+  // =========================================================================
+
+  // ---- RFE.cpp:225-230 -- execRRCCs -----------------------------------------
+  void execRRCCs() {
+    do_hyper_rr_embedding();
+    do_hyper_effec_estimation();
+    doCCsEmbedding();
+    reRankingByCCs();
+  }
+
+  // ---- RFE.cpp:232-237 -- doCCsEmbedding ------------------------------------
+  void doCCsEmbedding() {
+    createEdgesCCS();
+    processCCs();
+    computeCCsEmb();
+    computeEmbsByCCs();
+  }
+
+  // ---- RFE.cpp:311-328 -- createEdgesCCS ------------------------------------
+  // NOTE: no clear() before push_back -- verbatim; the legacy calls this once
+  // per path. confValue associates left-to-right: (simEmb * ee[q]) * ee[nn],
+  // all float. The sort is lexicographic DESCENDING over (conf, q, nn).
+  void createEdgesCCS() {
+    for (int q = 0; q < n_; q++) {
+      for (int i = 0; i < k_; i++) {
+        int img_nn = rkLists_[(std::size_t)l_ * q + (std::size_t)i];
+        if (q == img_nn) {  // skip query
+          continue;
+        }
+        float confValue = (simEmb(emb_[q], emb_[img_nn]) * ee_[(std::size_t)q] *
+                           ee_[(std::size_t)img_nn]);
+        std::pair<int, int> img_pair = {q, img_nn};
+        std::pair<float, std::pair<int, int>> tup = {confValue, img_pair};
+        edgesCCs_.push_back(tup);
+      }
+    }
+    // Using simple sort() function to sort
+    std::sort(edgesCCs_.rbegin(), edgesCCs_.rend());
+  }
+
+  // ---- RFE.cpp:330-344 -- processCCs ----------------------------------------
+  // The bound is ((int)E) * th_cc in DOUBLE (the cast binds to size(), not to
+  // the product) -- do not "simplify" it into (int)(E*th_cc): H11 pins that the
+  // two can select different prefixes.
+  void processCCs() {
+    initEdgesCCs();
+    int i = 0;
+    for (auto t : edgesCCs_) {
+      if (i >= ((int)edgesCCs_.size() * th_cc_)) {
+        break;
+      }
+      std::pair<int, int> img_pair = t.second;
+      if (!(sameCC(img_pair.first, img_pair.second))) {
+        unionCCs(img_pair.first, img_pair.second);
+      }
+      i++;
+    }
+  }
+
+  // ---- RFE.cpp:346-363 -- initEdgesCCs --------------------------------------
+  void initEdgesCCs() {
+    // CC Threshold
+    if (th_cc_ == 0) {
+      float avg = 0;
+      for (int q : sorted_ee_) {
+        avg += ee_[(std::size_t)q];
+      }
+      avg = avg / n_;
+      th_cc_ = avg / 2;
+    }
+    // CCs Structures
+    rcc_.clear();
+    icc_.clear();
+    for (int q = 0; q < n_; q++) {
+      rcc_[(std::size_t)q] = std::set<int>{q};
+      icc_[(std::size_t)q] = q;
+    }
+  }
+
+  // ---- RFE.cpp:365-375 -- unionCCs ------------------------------------------
+  // r1 (the label of the o1/q side) survives and becomes the ccemb key; the
+  // iteration order of reRankingByCCs over ccemb is therefore load-bearing.
+  // The inserter writes into rcc_[r1] WHILE rcc_[r1] is itself one of the
+  // source ranges (RFE.cpp:369) -- formally UB, practically the set-union of
+  // two node-based sets (no iterator invalidation). KEPT; H14 pins the
+  // observed behaviour against an independent DSU.
+  void unionCCs(int o1, int o2) {
+    int r1 = icc_[(std::size_t)o1];
+    int r2 = icc_[(std::size_t)o2];
+
+    std::set_union(rcc_[(std::size_t)r2].cbegin(), rcc_[(std::size_t)r2].cend(),
+                   rcc_[(std::size_t)r1].cbegin(), rcc_[(std::size_t)r1].cend(),
+                   std::inserter(rcc_[(std::size_t)r1], rcc_[(std::size_t)r1].cend()));
+    for (auto o : rcc_[(std::size_t)r2]) {
+      icc_[(std::size_t)o] = r1;
+    }
+
+    rcc_.erase((std::size_t)r2);
+  }
+
+  // ---- RFE.cpp:377-379 -- sameCC --------------------------------------------
+  bool sameCC(int o1, int o2) {
+    return (icc_[(std::size_t)o1] == icc_[(std::size_t)o2]);
+  }
+
+  // ---- RFE.cpp:381-398 -- computeCCsEmb -------------------------------------
+  // Only CCs with >1 member enter. The sum is float, over members in ASCENDING
+  // id order (std::set), and within each member over ascending key order
+  // (std::map). Keys whose final value is exactly 0.0f are structural: the map
+  // keeps every key any member carried. sorted_ccemb's keys are EMBEDDING
+  // OBJECTS, not CC members.
+  void computeCCsEmb() {
+    ccemb_.clear();
+    for (auto it1 : rcc_) {
+      int r = it1.first;
+      std::set<int> d = it1.second;
+      if (d.size() > 1) {
+        std::map<int, float> curemb;
+        for (auto o : rcc_[(std::size_t)r]) {
+          for (auto it2 : emb_[o]) {
+            int key = it2.first;
+            curemb[key] = curemb[key] + emb_[o][key];  // original
+          }
+        }
+        ccemb_[(std::size_t)r] = curemb;
+      }
+    }
+    sortCCEmb();
+  }
+
+  // ---- RFE.cpp:400-413 -- computeEmbsByCCs ----------------------------------
+  // DENSE over every CC label: curCCEmb[r] = simEmb(emb[q], ccemb[r]) for all
+  // q and all r, including exact zeros. `qemb` and `ccd` are copies -- verbatim
+  // (auto by value at RFE.cpp:403, 407).
+  void computeEmbsByCCs() {
+    embycc_.clear();
+    for (int q = 0; q < n_; q++) {
+      auto qemb = emb_[q];
+      std::map<int, float> curCCEmb;
+      for (auto it : ccemb_) {
+        int r = it.first;
+        auto ccd = it.second;
+        float vccemb = simEmb(qemb, ccd);  // original
+        curCCEmb[r] = vccemb;
+      }
+      embycc_[q] = curCCEmb;
+    }
+  }
+
+  // ---- RFE.cpp:491-510 -- sortCCEmb -----------------------------------------
+  // Same shape as sortEmb: std::sort UNSTABLE with the strict-`>` comparator
+  // over a vector built in ascending key order (libstdc++-specific tie order).
+  // sorted_ccemb_.resize(n) does NOT clear a previous run -- verbatim (safe:
+  // the legacy calls this once per path; the harness uses a fresh RFERef per
+  // case).
+  void sortCCEmb() {
+    sorted_ccemb_.resize((std::size_t)n_);
+    for (auto iterator : ccemb_) {
+      int q = iterator.first;
+      std::vector<std::pair<int, float>> A;
+      for (auto& it : ccemb_[(std::size_t)q]) A.push_back(it);
+      std::sort(A.begin(), A.end(), CmpDesc());
+      for (auto& it : A) {
+        sorted_ccemb_[(std::size_t)q].push_back(it.first);
+      }
+    }
+  }
+
+  // ---- RFE.cpp:415-451 -- reRankingByCCs ------------------------------------
+  // newSim is DOUBLE arithmetic -- sqrt of an int product (-> ::sqrt(double)),
+  // division by the unsigned getPosition -- rounded to float only on the
+  // assignment. Writes are plain assignments: when several CCs write the same
+  // (k1,k2) cell, the LAST CC in ascending-label order wins. getPosition reads
+  // the rank lists POST-f7b and returns l+2 for an absent item. Unlike CPRR's
+  // Gram this phase has NO diagonal pin; untouched cells read the zero-fill
+  // and the tail sorts them as ordinary zeros.
+  void reRankingByCCs() {
+    incElems_.clear();
+    incElemsL_.clear();
+    incElems_.resize((std::size_t)n_);
+    incElemsL_.resize((std::size_t)n_);
+
+    init_sparse_matrix();
+    for (auto it : ccemb_) {
+      int r = it.first;
+      std::map<int, float> d = it.second;
+      for (int i = 0; i < std::min(k_, ((int)d.size())); i++) {
+        int k1 = sorted_ccemb_[(std::size_t)r][(std::size_t)i];
+        for (int j = 0; j < std::min(k_, ((int)d.size())); j++) {
+          int k2 = sorted_ccemb_[(std::size_t)r][(std::size_t)j];
+          float newSim = (1 + sqrt((i + 1) * (j + 1)) *
+                                  simEmb(embycc_[(std::size_t)k1],
+                                         embycc_[(std::size_t)k2])) /
+                         getPosition((unsigned int)k1, (unsigned int)k2);
+          MX(k1, k2) = newSim;
+          incElems_[(std::size_t)k1].insert(k2);
+        }
+      }
+    }
+
+    for (int q = 0; q < n_; q++) {
+      for (int i = 0; i < l_; i++) {
+        int img_i = rkLists_[(std::size_t)l_ * q + i];
+        incElemsL_[(std::size_t)q].insert(img_i);
+      }
+    }
+
+    for (int q = 0; q < n_; q++) {
+      std::set<int> result;
+      std::set_difference(incElems_[(std::size_t)q].cbegin(),
+                          incElems_[(std::size_t)q].cend(),
+                          incElemsL_[(std::size_t)q].cbegin(),
+                          incElemsL_[(std::size_t)q].cend(),
+                          std::inserter(result, result.cend()));
+      kernel_sort_ranked_lists_extra(q, result);
+    }
+  }
+
+  // ---- CC data members (legacy RFE.hpp:116-140 types; underscore suffix) ----
+  // rcc_/icc_/ccemb_/embycc_ are std::map in the legacy too: the ascending-key
+  // iteration of ccemb_ IS reRankingByCCs' CC order (hence its write-conflict
+  // order), so a vector would be a semantic change, not a shim.
+  std::vector<std::pair<float, std::pair<int, int>>> edgesCCs_;
+  std::map<int, std::set<int>> rcc_;
+  std::map<int, int> icc_;
+  double th_cc_ = 0.0;
+  std::map<int, std::map<int, float>> ccemb_;
+  std::vector<std::vector<int>> sorted_ccemb_;
+  std::map<int, std::map<int, float>> embycc_;
 };
 
 #endif  // RFE_REF_VERBATIM_HPP

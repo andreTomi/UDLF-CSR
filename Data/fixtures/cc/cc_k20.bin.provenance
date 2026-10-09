@@ -1,0 +1,8 @@
+DERIVED dataset
+label      = cc_k20
+source     = gaussian_mixture
+source_md5 = 6cb416cebfd3b1fac3aa45058a6c3197
+N          = 500
+L          = 100
+transform  = gaussian mixture -> cosine sim -> rank lists
+output_md5 = d2873e007978dd053ee3dc446308dd66

@@ -26,7 +26,7 @@
 # NOTE: paths are hardcoded to the WSL mount of this repo; invoke as
 # `bash Source/tests/run_all.sh` (shell variables inside the file are fine).
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-cd /mnt/c/Users/andre/Documents/phd/UDLF-CSR/UDLF-CSR || exit 1
+cd /mnt/c/Users/andre/Documents/phd/side_projects/UDLF-CSR/UDLF-CSR || exit 1
 
 echo "=== Building..."
 g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_multiply_and_prune.cpp -o /tmp/test_map || exit 1
@@ -238,3 +238,27 @@ if grep -q -e "ERROR: AddressSanitizer" -e "runtime error:" /tmp/rfe_san1.out /t
 fi
 echo "=== RFE ASan/UBSan: OK ==="
 echo "=== RFE framework gates: OK ==="
+
+echo "=== RFE CC golden (reference pins for the PERFORM_CCS port) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
+    -I Source/tests Source/tests/test_rfe_cc_golden.cpp -o /tmp/test_rfe_cc_golden || exit 1
+/tmp/test_rfe_cc_golden > /tmp/rfe_cc_golden.out 2>&1 || { tail -40 /tmp/rfe_cc_golden.out; exit 1; }
+grep -v BuildV2 /tmp/rfe_cc_golden.out
+grep -q "RFE CC GOLDEN: OK" /tmp/rfe_cc_golden.out || { echo "RFE CC golden FAILED"; exit 1; }
+echo "=== RFE CC golden: OK ==="
+
+echo "=== RFE CC parity (Etapas 2-6: F8a + F8b + F8d + F8e + F8f) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
+    -I Source/tests Source/tests/test_rfe_cc_parity.cpp -o /tmp/test_rfe_cc_parity || exit 1
+/tmp/test_rfe_cc_parity > /tmp/rfe_cc_par.out 2>&1 || { tail -40 /tmp/rfe_cc_par.out; exit 1; }
+grep -v BuildV2 /tmp/rfe_cc_par.out
+grep -q "RFE CC PARITY (Etapas 2-6): OK" /tmp/rfe_cc_par.out || { echo "RFE CC parity FAILED"; exit 1; }
+echo "=== RFE CC parity: OK ==="
+
+echo "=== RFE self-off0 gate (H19 option (a): self present at ANY position) ==="
+g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
+    -I Source/tests Source/tests/test_rfe_selfoff0.cpp -o /tmp/test_rfe_selfoff0 || exit 1
+/tmp/test_rfe_selfoff0 > /tmp/rfe_selfoff0.out 2>&1 || { tail -40 /tmp/rfe_selfoff0.out; exit 1; }
+grep -v BuildV2 /tmp/rfe_selfoff0.out
+grep -q "RFE SELF-OFF0 (H19): OK" /tmp/rfe_selfoff0.out || { echo "RFE self-off0 FAILED"; exit 1; }
+echo "=== RFE self-off0 gate: OK ==="

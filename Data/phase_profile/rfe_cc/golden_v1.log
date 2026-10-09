@@ -1,0 +1,80 @@
+CASE cc_degenerate n=200 l=40 k=10 t=2 th_in=0
+  rk_pre=0x298e1d8c6db4bc66  edges E=1800 digest=0xbd70d52ed416001e
+  th_out=0.296389818 icc=0x38d3e9a7388b4a6a ncc=61 ncc_ge2=18 sizes>=47,12,12,10,10,8,8,7,
+  ccemb nnz=1499 zeros=482 adjacent_ties=234 digest=0x03717211668c4455 sorted_ccemb=0x5d06ab70bf54571e
+  embycc nnz=3600 zeros=753 neg=0 nonf=0 digest=0x94eac3906bfe4ddb
+  cells writes=1800 coll_cells=74 absent_lplus2=158 rows=139
+  matrix=0x1debe8e90b12e151 incElems nnz=1715 inc=0xac3378ccbe3a643d rk_fin=0x181b0ef2ee125afd
+CASE cc_structured n=500 l=100 k=10 t=2 th_in=0
+  rk_pre=0x940fbf1ae898f464  edges E=4500 digest=0x119e11d5efebdd68
+  th_out=0.263036758 icc=0x19ed399b4ddf27b7 ncc=190 ncc_ge2=51 sizes>=18,15,15,14,14,13,12,12,
+  ccemb nnz=3044 zeros=673 adjacent_ties=157 digest=0x5b2ed737f0e8f4d4 sorted_ccemb=0x2fb2ab870c5cd0b0
+  embycc nnz=25500 zeros=20674 neg=0 nonf=0 digest=0xc0e5086b5c2cc003
+  cells writes=5100 coll_cells=274 absent_lplus2=0 rows=408
+  matrix=0x62ce5863b2ea74e9 incElems nnz=4818 inc=0xd523e0e8108ca7f5 rk_fin=0x23a87c3e6749029c
+CASE cc_structured n=500 l=100 k=10 t=2 th_in=2
+  rk_pre=0x940fbf1ae898f464  edges E=4500 digest=0x119e11d5efebdd68
+  th_out=2 icc=0x7a875f8353e25706 ncc=5 ncc_ge2=5 sizes>=110,106,103,91,90,
+  ccemb nnz=500 zeros=0 adjacent_ties=0 digest=0x1101061c44765057 sorted_ccemb=0xaf56f648bcefd911
+  embycc nnz=2500 zeros=2000 neg=0 nonf=0 digest=0x6449058d4c4b337e
+  cells writes=500 coll_cells=0 absent_lplus2=5 rows=50
+  matrix=0x609a7c61cac5f35f incElems nnz=500 inc=0x031c586b10a9f85f rk_fin=0x3147527aafd74642
+CASE cc_th_cc_0 n=500 l=100 k=10 t=2 th_in=0
+  rk_pre=0x8e10d22192012f5a  edges E=4500 digest=0xb0716ac8182d4638
+  th_out=0.283990771 icc=0x2b25dff9a169786a ncc=144 ncc_ge2=38 sizes>=38,29,27,24,21,21,19,18,
+  ccemb nnz=2450 zeros=436 adjacent_ties=109 digest=0x0ab51f9efb467467 sorted_ccemb=0xcc4a7a967a11d497
+  embycc nnz=19000 zeros=15437 neg=0 nonf=0 digest=0xe578a7309f0a6c8a
+  cells writes=3800 coll_cells=211 absent_lplus2=3 rows=311
+  matrix=0x4db5d9f83ecb8304 incElems nnz=3569 inc=0x60fa318254b0e256 rk_fin=0xdb312f45fdfd7e92
+CASE cc_th_cc_05 n=500 l=100 k=10 t=2 th_in=0.05
+  rk_pre=0x8e10d22192012f5a  edges E=4500 digest=0xb0716ac8182d4638
+  th_out=0.05 icc=0x9e94a9579ba1c68a ncc=407 ncc_ge2=48 sizes>=5,5,5,5,5,4,4,4,
+  ccemb nnz=1990 zeros=516 adjacent_ties=156 digest=0xf588e698e7ee2511 sorted_ccemb=0xcdf0b0c95b013d8f
+  embycc nnz=24000 zeros=19598 neg=0 nonf=0 digest=0x057c962fd9491a2d
+  cells writes=4800 coll_cells=459 absent_lplus2=0 rows=363
+  matrix=0x8e06146afa58a5ce incElems nnz=4329 inc=0xd4279b782dcf0e8a rk_fin=0xfcd6bda60db7f532
+CASE cc_th_cc_50 n=500 l=100 k=10 t=2 th_in=0.5
+  rk_pre=0x8e10d22192012f5a  edges E=4500 digest=0xb0716ac8182d4638
+  th_out=0.5 icc=0x5862a5c384b5330b ncc=49 ncc_ge2=7 sizes>=97,97,89,86,64,23,2,1,
+  ccemb nnz=618 zeros=30 adjacent_ties=6 digest=0x4f2fc4a7920451b9 sorted_ccemb=0x9d29c4beb0969605
+  embycc nnz=3500 zeros=2825 neg=0 nonf=0 digest=0xb9336230abadc4d2
+  cells writes=700 coll_cells=0 absent_lplus2=2 rows=70
+  matrix=0x6d0cd734d59a8703 incElems nnz=700 inc=0x013e887e3572c8f7 rk_fin=0x68c9a0676635b41f
+CASE cc_th_cc_100 n=500 l=100 k=10 t=2 th_in=1
+  rk_pre=0x8e10d22192012f5a  edges E=4500 digest=0xb0716ac8182d4638
+  th_out=1 icc=0x296a03c3a6ce8780 ncc=5 ncc_ge2=5 sizes>=104,104,102,97,93,
+  ccemb nnz=500 zeros=0 adjacent_ties=0 digest=0xc3a3d2b6a5708e7e sorted_ccemb=0xf212af2001b92391
+  embycc nnz=2500 zeros=2000 neg=0 nonf=0 digest=0xd31968d1c9f2052e
+  cells writes=500 coll_cells=0 absent_lplus2=2 rows=50
+  matrix=0x86bd8dbde1307cd6 incElems nnz=500 inc=0xb4c19011cfc2c77f rk_fin=0xefdcf0f8f63b055b
+CASE cc_k2 n=500 l=100 k=2 t=2 th_in=0
+  rk_pre=0xd1d3c14a125ebcca  edges E=500 digest=0x5a6d35fc62bcf928
+  th_out=0.5 icc=0x581230eff58e0fc4 ncc=291 ncc_ge2=148 sizes>=5,5,5,4,4,4,4,4,
+  ccemb nnz=384 zeros=27 adjacent_ties=205 digest=0xa374bd9307eb6e1f sorted_ccemb=0x0605a69e568b8e36
+  embycc nnz=74000 zeros=73643 neg=0 nonf=0 digest=0x03f4a3ffb0b92d0c
+  cells writes=592 coll_cells=0 absent_lplus2=0 rows=296
+  matrix=0xd289c39d36147b8f incElems nnz=592 inc=0x9292dbaa65318713 rk_fin=0x7868648498450fca
+CASE cc_k20 n=500 l=100 k=20 t=2 th_in=0
+  rk_pre=0xf8cf7c6811813901  edges E=9500 digest=0xfedafcd5a99667ca
+  th_out=0.226232961 icc=0x7da984122a31617d ncc=185 ncc_ge2=6 sizes>=72,67,64,59,57,2,1,1,
+  ccemb nnz=600 zeros=3 adjacent_ties=0 digest=0x03f1b6efc907a131 sorted_ccemb=0x65bb83744fde686b
+  embycc nnz=3000 zeros=2388 neg=0 nonf=0 digest=0x413d487d1445d00f
+  cells writes=2400 coll_cells=9 absent_lplus2=23 rows=117
+  matrix=0x1353f9396785b1a6 incElems nnz=2391 inc=0x7f47cbc40114de91 rk_fin=0xb1235b8c47bb449c
+CASE cc_k50 n=500 l=100 k=50 t=2 th_in=0
+  rk_pre=0x1643ac38dc110582  edges E=24500 digest=0xf35caf33d61c4c82
+  th_out=0.111619703 icc=0x090def72bc23dd11 ncc=328 ncc_ge2=5 sizes>=38,36,35,34,34,1,1,1,
+  ccemb nnz=463 zeros=1 adjacent_ties=0 digest=0x69ec781b423387b1 sorted_ccemb=0xa7fe5eb36c3490bc
+  embycc nnz=2500 zeros=2020 neg=0 nonf=0 digest=0x53afd9be66e2d5d9
+  cells writes=12500 coll_cells=0 absent_lplus2=0 rows=250
+  matrix=0x0f88acb7acbea986 incElems nnz=12500 inc=0x05073ba7a98f40e3 rk_fin=0x5f93e236d29de0ba
+CASE cc_k100 n=500 l=100 k=100 t=2 th_in=0
+  rk_pre=0x866623eae133501e  edges E=49500 digest=0x7b7d0a5b47d1c8c8
+  th_out=0.197567344 icc=0xf079f366f165a679 ncc=216 ncc_ge2=5 sizes>=60,60,57,57,55,1,1,1,
+  ccemb nnz=917 zeros=418 adjacent_ties=251 digest=0xfff2d76ebebd573d sorted_ccemb=0x245c21faeaa2e8b7
+  embycc nnz=2500 zeros=2001 neg=0 nonf=0 digest=0x61e9e245c825ff17
+  cells writes=50000 coll_cells=90 absent_lplus2=2780 rows=484
+  matrix=0xa81e77bece59d97c incElems nnz=49910 inc=0xcef48a886e3a5168 rk_fin=0x4cc0ec96189bb32a
+H11 fractional: E=104 th=0.33333333333333331 bound=34.666666666666664 bound_trunc=34 processed=35
+H11 auto: th_out=0.5 E=104 processed=52
+RFE CC GOLDEN: OK

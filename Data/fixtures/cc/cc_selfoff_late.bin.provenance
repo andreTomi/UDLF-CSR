@@ -1,0 +1,8 @@
+DERIVED dataset
+label      = cc_selfoff_late
+source     = gaussian_mixture+swap0to_late
+source_md5 = e5a9081d1649b45cd6815004a9e52ad9
+N          = 500
+L          = 100
+transform  = gaussian mixture -> cosine sim -> rank lists
+output_md5 = efa55578d296abd9dc55853f51235526
