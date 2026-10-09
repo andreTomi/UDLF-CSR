@@ -78,11 +78,14 @@ class RFECore {
     if (rk_.size() != (size_t)n_ * (size_t)l_) {
       throw std::runtime_error("RFE: rkLists size != N*L");
     }
-    // PERFORM_CCS (Connected Components) is now ported. The legacy calls
-    // execRRCCs() after execCartesianProduct() when this flag is true.
-    if (performCCs) {
-      th_cc_ = th_cc;
-    }
+    // H27 (Etapa provisória / Section 1): the flag is STORED, not acted on here.
+    // The CC stages exist as callable seams (F8a-F8f) but run() does NOT yet
+    // wire the full F8g/F8h + integration sequence, so honouring the flag would
+    // emit different rank lists than the legacy. run() refuses it loudly (see
+    // the throw at its top); the carrier's "supported" claim is likewise false
+    // until Etapa 9. Removal is the Etapa 9 acceptance criterion (grep == 0).
+    // th_cc_ is already initialised in the member-init list (: th_cc_(th_cc)).
+    performCCs_ = performCCs;
   }
 
 // ------------------------------------------------------------------ F1 --
@@ -1068,10 +1071,19 @@ void validate_input() {
   //
   // Mirrors RFE::runUdlMethod() (RFE.cpp:102-124) restricted to the in-scope
   // core. The legacy's tail -- if (performCCs) execRRCCs(); and
-  // if (rerankByEmb || exportEmbeddings) execRRByEmbCCs(); -- is NOT ported, so
-  // this method REFUSES those configs at construction rather than skipping them
-  // here and silently emitting different rank lists.
+  // if (rerankByEmb || exportEmbeddings) execRRByEmbCCs(); -- is NOT fully
+  // ported. RERANK_BY_EMB / EXPORT_EMBEDDINGS are refused by the carrier's
+  // preprocess() (RFE.hpp:92-96). PERFORM_CCS is refused HERE, at the top of
+  // run(), rather than being skipped: silently ignoring it would emit different
+  // rank lists than the legacy. Etapa 9 replaces this throw with the real
+  // post-f7b CC sequence.
   void run() {
+    // Section 1 (H27): refuse the un-integrated CC flag LOUDLY before any work.
+    if (performCCs_) {
+      throw std::runtime_error(
+          "RFE: PERFORM_CCS em integracao, ver Etapa 9 -- recusado para nao "
+          "emitir rkLists diferentes do legado");
+    }
     // H4: validate input at the START of run() -- O(N*L) fail-fast before any computation
     validate_input();
 
@@ -1827,6 +1839,9 @@ void validate_input() {
   // F8 state (Etapa 3-6: PERFORM_CCS)
   // th_cc_ mirrors the legacy's double member (repo-root RFE.hpp:140).
   double th_cc_ = 0.0;
+  // H27 (Section 1): the CC flag is stored so run() can refuse it (Etapa 9 will
+  // consume it for the real post-f7b CC sequence and drop the throw).
+  bool performCCs_ = false;
   // F8a: edges_ccs_ is the FULL sorted edge vector; the prefix processCCs
   // consumes is derived by f8c_edge_prefix().
   std::vector<std::pair<float, std::pair<int, int>>> edges_ccs_;

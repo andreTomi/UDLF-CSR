@@ -179,6 +179,35 @@ int main() {
     refusal("duplicate id in a row", dup, N0, L0, 4, "duplicate id");
   }
 
+  // ---- surface 1b: PERFORM_CCS is REFUSED loudly (Section 1 / H27) ---------
+  //     The flag is stored and run() throws at its top; it must NOT be skipped.
+  //     Control: the SAME valid input with performCCs=false must NOT throw.
+  {
+    std::vector<int> base = cyclic_displaced(N0, L0, 0);  // valid, self present
+    try {
+      RFECore core(base, (std::size_t)N0, (std::size_t)L0, 4, 2, pa,
+                   /*performCCs=*/true, /*th_cc=*/0.0);
+      core.run();
+      std::printf("  FAIL: performCCs=true: run() did NOT refuse\n");
+      ++g_fail;
+    } catch (const std::runtime_error& e) {
+      const bool hit =
+          std::string(e.what()).find("Etapa 9") != std::string::npos;
+      if (!hit) std::printf("    got: %s\n", e.what());
+      expect(hit, "run() refuses performCCs=true (provisional, Etapa 9)");
+    }
+    // Control: identical input, flag off -> run() completes, no throw.
+    try {
+      RFECore core(base, (std::size_t)N0, (std::size_t)L0, 4, 2, pa,
+                   /*performCCs=*/false, /*th_cc=*/0.0);
+      core.run();
+      expect(true, "performCCs=false on the same input runs without throwing");
+    } catch (const std::runtime_error& e) {
+      std::printf("  FAIL: performCCs=false threw: %s\n", e.what());
+      ++g_fail;
+    }
+  }
+
   // ---- surface 2: parity on self-displaced input (both directions) --------
   const int t = 2;
   {
