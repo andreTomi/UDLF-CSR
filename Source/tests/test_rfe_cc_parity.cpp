@@ -23,6 +23,7 @@
 #include "Methods/hpp/RFECore.hpp"
 #include "rfe_ref_verbatim.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -232,6 +233,45 @@ void run_case(const Case& c) {
     std::printf("    prefix: legacy-loop=%lld core-closed-form=%lld\n", m_ref,
                 m_core);
   expect(m_ref == m_core, "F8b: prefix length == legacy loop count");
+
+  // ---- H30 (Etapa 6b item 3): closed form EXACT, no epsilon -----------------
+  // The legacy loop processes edges while i < (int)E * th, i.e. ceil(E*th). An
+  // epsilon is WRONG: a bound just above an integer (34.00000000000001) must
+  // consume 35 edges, but ceil(prod - 1e-12) returns 34. Replay the loop as
+  // ground truth and compare; also show a th where the old epsilon diverges.
+  {
+    auto legacy_loop = [](long long E, double th) {
+      long long i = 0;
+      for (long long tt = 0; tt < E; ++tt) {
+        if (i >= (double)((int)E) * th) break;
+        ++i;
+      }
+      return i;
+    };
+    bool sweep_ok = true;
+    const long long E = 100;
+    for (int j = 0; j <= 2000; ++j) {
+      const double th = (double)j / 2000.0 * 0.6;  // 0 .. 0.6, crosses integers
+      const long long want = legacy_loop(E, th);
+      const long long got = RFECore::f8_prefix_closed_form(E, th);
+      if (want != got) {
+        if (sweep_ok)
+          std::printf("    H30 sweep: j=%d th=%.17g loop=%lld closed=%lld\n", j,
+                      th, want, got);
+        sweep_ok = false;
+      }
+    }
+    expect(sweep_ok, "F8b[H30]: closed form == legacy loop across a th sweep");
+    // Directed: th one ulp above 0.34 -> E*th just above 34 -> 35 edges.
+    const double th_crit = std::nextafter(0.34, 1.0);
+    const long long directed_loop = legacy_loop(E, th_crit);
+    const long long directed = RFECore::f8_prefix_closed_form(E, th_crit);
+    if (directed != 35)
+      std::printf("    H30 directed: th=%.17g loop=%lld closed=%lld (want 35)\n",
+                  th_crit, directed_loop, directed);
+    expect(directed == directed_loop && directed == 35,
+           "F8b[H30]: bound just above 34 consumes 35 edges (not 34)");
+  }
 
   // ---- Etapa 4 (F8d): components -------------------------------------------
   // ref.process_ccs() already ran in the Etapa-3 block above; its icc/rcc are

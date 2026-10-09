@@ -1842,9 +1842,12 @@ void validate_input() {
   // H27 (Section 1): the CC flag is stored so run() can refuse it (Etapa 9 will
   // consume it for the real post-f7b CC sequence and drop the throw).
   bool performCCs_ = false;
-  // F8a: edges_ccs_ is the FULL sorted edge vector; the prefix processCCs
-  // consumes is derived by f8c_edge_prefix().
+  // F8a: edges_ccs_ is the FULL sorted edge vector (never truncated -- the
+  // reference's processCCs iterates by value and breaks, it does not resize).
+  // f8c_edge_prefix() derives the prefix count processCCs consumes and stores
+  // it in f8_prefix_m_; f8d_process_ccs() unions only that prefix.
   std::vector<std::pair<float, std::pair<int, int>>> edges_ccs_;
+  long long f8_prefix_m_ = -1;  // prefix count from f8c; -1 = f8c not run yet
   bool f8_edges_parallel_ = true;  // Etapa 3: variant B measured winner
   // F8d: icc label per object (from DSU with legacy label semantics).
   std::vector<int> f8_cc_label_;
@@ -1887,6 +1890,23 @@ void validate_input() {
   const std::vector<std::pair<float, std::pair<int, int>>>& edges_ccs() const { return edges_ccs_; }
   double th_cc() const { return th_cc_; }
   void set_th_cc(double v) { th_cc_ = v; }
+  // H30 (Etapa 6b item 3): EXACT closed form of the legacy's processCCs prefix.
+  // The legacy loop (RFE.cpp:348-363 / ref:849-862) is:
+  //   int i = 0; for (auto t : edgesCCs_) { if (i >= E * th_cc) break; ... i++; }
+  // so it processes exactly ceil(E * th_cc) edges (E = size). NO epsilon: a
+  // bound of 34.00000000000001 must consume 35 edges (ceil == 35), and the old
+  // `-1e-12` wrongly returned 34. Public+static so the gate can test it in
+  // isolation against a replay of the legacy loop for arbitrary (E, th).
+  static long long f8_prefix_closed_form(long long E, double th) {
+    if (E <= 0) return 0;
+    if (th <= 0.0) return 0;
+    double prod = (double)E * th;
+    long long m = (long long)std::ceil(prod);
+    if (m < 0) m = 0;
+    if (m > E) m = E;
+    return m;
+  }
+  long long f8_prefix() const { return f8_prefix_m_; }
   void set_f8_edges_parallel(bool on) { f8_edges_parallel_ = on; }
   bool f8_edges_parallel() const { return f8_edges_parallel_; }
   const std::vector<std::vector<std::pair<int, float>>>& ccemb_rows() const { return ccemb_rows_; }
@@ -2031,19 +2051,26 @@ inline double RFECore::f8b_init_th_cc() {
 }
 
 inline long long RFECore::f8c_edge_prefix() {
-  // Legacy's processCCs (RFE.cpp:348-363): takes first ceil(E * th_cc) edges
-  // where E = edges_ccs_.size() and th_cc is the fraction (typically ~0.5).
-  // The loop condition is: if (i >= E * th_cc) break; i++; so it runs ceil(E*th_cc) times.
+  // H30 (Etapa 6b item 3): exact closed form, NO epsilon, NO truncation. The
+  // reference's processCCs iterates by value and breaks on the bound -- it never
+  // resizes edgesCCs_ -- so we store the prefix COUNT and leave the full vector
+  // intact. f8d unions only the first f8_prefix_m_ edges. (The old code did
+  // `ceil(prod - 1e-12)` then `resize(m)`: the epsilon under-counted a bound of
+  // 34.00000000000001 to 34 instead of 35, and the resize truncated the accessor.)
   const long long E = (long long)edges_ccs_.size();
-  double prod = (double)E * th_cc_;
-  long long m = (long long)std::ceil(prod - 1e-12);  // ceil with tiny epsilon for exact integers
-  if (m < 0) m = 0;
-  if (m > E) m = E;
-  edges_ccs_.resize((std::size_t)m);
+  const long long m = f8_prefix_closed_form(E, th_cc_);
+  f8_prefix_m_ = m;
   return m;
 }
 
 inline void RFECore::f8d_process_ccs() {
+  // H30 (Etapa 6b item 3): f8c stores the prefix COUNT (it no longer truncates
+  // edges_ccs_). f8d must union exactly the first f8_prefix_m_ edges. If f8c has
+  // not run, refuse rather than silently unioning the FULL vector.
+  if (f8_prefix_m_ < 0) {
+    throw std::runtime_error(
+        "RFE: f8d_process_ccs called before f8c_edge_prefix (no prefix count)");
+  }
   f8_cc_label_.assign((std::size_t)n_, 0);
   for (std::size_t i = 0; i < (std::size_t)n_; ++i) f8_cc_label_[(std::size_t)i] = (int)i;
 
@@ -2059,7 +2086,9 @@ inline void RFECore::f8d_process_ccs() {
     return r;
   };
 
-  for (auto& e : edges_ccs_) {
+  const long long m = std::min<long long>(f8_prefix_m_, (long long)edges_ccs_.size());
+  for (long long i = 0; i < m; ++i) {
+    auto& e = edges_ccs_[(std::size_t)i];
     int a = e.second.first;
     int b = e.second.second;
     int ra = find(a);

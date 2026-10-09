@@ -134,8 +134,11 @@ int main(int argc, char** argv) {
   // State: edges from the last f8a call (identical across modes by digest).
   // Serial phase by design (edge order defines labels), so threads do not
   // affect it; measured on one thread's wall time regardless of setting.
-  // NOTE: th_cc_ is still 0.0 here; the FIRST f8d call initializes it through
-  // f8b (auto rule), so the prefix is printed AFTER each call, never before.
+  // H30 (Etapa 6b item 3): f8c no longer truncates edges_ccs_ -- it STORES the
+  // prefix count in f8_prefix_m_, which f8d consumes. So f8b (auto th_cc) and
+  // f8c run ONCE here before the loop; f8d now requires that prefix to exist.
+  core.f8b_init_th_cc();
+  core.f8c_edge_prefix();
   for (int mode = 0; mode <= 1; ++mode) {
     core.set_f8_components_dsu(mode == 1);
     std::vector<double> samples;
@@ -151,9 +154,9 @@ int main(int argc, char** argv) {
       h *= 1099511628211ULL;
     }
     const double mn = *std::min_element(samples.begin(), samples.end());
-    std::printf("F8D mode=%c prefix=%zu th=%.9g labels=%zu digest=0x%016llx "
+    std::printf("F8D mode=%c prefix=%lld th=%.9g labels=%zu digest=0x%016llx "
                 "median=%.3fms min=%.3fms\n",
-                mode == 1 ? 'B' : 'A', core.f8c_edge_prefix(),
+                mode == 1 ? 'B' : 'A', core.f8_prefix(),
                 core.th_cc(), core.f8_cc_label().size(),
                 (unsigned long long)h, median(samples), mn);
   }
