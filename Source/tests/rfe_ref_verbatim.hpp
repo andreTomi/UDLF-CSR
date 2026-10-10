@@ -1031,6 +1031,10 @@ public:
   std::map<int, std::map<int, float>> ccemb_;
   std::vector<std::vector<int>> sorted_ccemb_;
   std::map<int, std::map<int, float>> embycc_;
+
+public:
+  // Debug accessors (temporary)
+  const std::vector<int>& rkLists() const { return rkLists_; }
 };
 
 #endif  // RFE_REF_VERBATIM_HPP

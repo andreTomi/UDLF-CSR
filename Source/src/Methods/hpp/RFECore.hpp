@@ -2611,12 +2611,11 @@ inline void RFECore::f8g_rerank_cells() {
   f8g_pos_absent_ = 0;
 
   // Ensure dense embycc matrix is available for EXACT legacy compatibility.
-  // The sparse Variant B (Gustavson) drops structural zeros and diverges from
-  // the reference's map-based simEmb on diagonals. The dense Variant A uses
-  // the exact legacy algorithm and is bit-identical. Build it on-demand from
-  // the sparse matrix (O(n * ncc), fine for gate fixtures n<=500).
+  // The sparse Variant B diverges on diagonals due to missing structural zeros.
+  // The dense Variant A uses the exact legacy algorithm and is bit-identical.
+  // Build it on-demand from the sparse matrix (O(n * ncc), fine for gate fixtures n<=500).
   if (emb_by_cc_dense_.size() != nn * nn) {
-    emb_by_cc_dense_.assign(nn * nn, 0.0f);
+    emb_by_cc_dense_.assign(nn * nn, 0.0f);  // Initialize ALL to 0.0f (structural zeros)
     // Build inverse mapping: dense CC index (0..ncc-1) -> original label
     std::vector<int> dense_to_original;
     dense_to_original.reserve(label_to_idx_.size());
@@ -2627,7 +2626,8 @@ inline void RFECore::f8g_rerank_cells() {
         dense_to_original[dense] = orig;
       }
     }
-    // Populate dense n x n matrix from sparse EmbCCMatrix
+    // Populate dense n x n matrix from sparse EmbCCMatrix (non-zero values only)
+    // Zeros remain as structural zeros (matching reference's map which stores all CC labels)
     for (int q = 0; q < (int)n_; ++q) {
       int lo = emb_by_cc_sparse_.row_ptr[(std::size_t)q];
       int hi = emb_by_cc_sparse_.row_ptr[(std::size_t)q + 1];
@@ -2640,6 +2640,18 @@ inline void RFECore::f8g_rerank_cells() {
             emb_by_cc_dense_[(std::size_t)q * nn + (std::size_t)orig_label] = val;
           }
         }
+      }
+    }
+  }
+
+  // Precompute non-zero column indices for each row (ascending order)
+  // for two-pointer merge in dot product (matches reference's map intersection).
+  std::vector<std::vector<int>> nnz_cols(nn);
+  for (int q = 0; q < (int)n_; ++q) {
+    const std::size_t base = (std::size_t)q * nn;
+    for (std::size_t r = 0; r < nn; ++r) {
+      if (emb_by_cc_dense_[base + r] != 0.0f) {
+        nnz_cols[(std::size_t)q].push_back((int)r);
       }
     }
   }
@@ -2673,28 +2685,37 @@ inline void RFECore::f8g_rerank_cells() {
       const auto& sc = sorted_ccemb_[(std::size_t)r];
       const int lim = std::min(k_, (int)sc.size());
       {
-        // Use dense embycc matrix for EXACT legacy compatibility (Variant A).
-          // The sparse Variant B diverges on diagonals due to missing structural zeros.
-          // Dense matrix is n x n indexed by original CC labels (0..n-1).
-          for (int j = 0; j < lim; ++j) {
-            const int k2 = sc[(std::size_t)j];
-            if (k2 < 0 || k2 >= (int)n_) continue;
-            // Dense dot product: sum_r emb_by_cc_dense_[k1 * n + r] * emb_by_cc_dense_[k2 * n + r]
-            double sim = 0.0;
-            const std::size_t base1 = (std::size_t)k1 * nn;
-            const std::size_t base2 = (std::size_t)k2 * nn;
-            for (std::size_t r = 0; r < nn; ++r) {
-              float v1 = emb_by_cc_dense_[base1 + r];
-              float v2 = emb_by_cc_dense_[base2 + r];
-              sim += (double)v1 * (double)v2;
+        for (int j = 0; j < lim; ++j) {
+          const int k2 = sc[(std::size_t)j];
+          if (k2 < 0 || k2 >= (int)n_) continue;
+          // Dense dot product over ALL ncc CC label columns (not just non-zero).
+          // The reference's simEmb iterates over map intersection which includes
+          // structural zeros (0.0f * 0.0f = 0.0f). We iterate over all ncc CC labels
+          // by counting valid entries in label_to_idx_ (where value >= 0).
+          float sim = 0.0f;
+          int ncc = 0;
+          for (int idx : label_to_idx_) if (idx >= 0) ++ncc;
+          for (int dense_ci = 0; dense_ci < ncc; ++dense_ci) {
+            int orig_label = -1;
+            // Find original label for this dense index
+            for (int orig = 0; orig < (int)label_to_idx_.size(); ++orig) {
+              if (label_to_idx_[(std::size_t)orig] == dense_ci) {
+                orig_label = orig;
+                break;
+              }
             }
-            const unsigned int pos = (unsigned int)position_of((idx_t)k1, (idx_t)k2);
-            if (pos == (unsigned int)(l_ + 2)) ++absent;
-            const double newSim =
-                (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
-            f8g_matrix_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
-            f8g_inc_elems_[(std::size_t)k1].insert(k2);
+            if (orig_label < 0) continue;
+            float v1 = emb_by_cc_dense_[(std::size_t)k1 * nn + (std::size_t)orig_label];
+            float v2 = emb_by_cc_dense_[(std::size_t)k2 * nn + (std::size_t)orig_label];
+            sim += v1 * v2;  // float accumulation matches reference's simEmb
           }
+          const unsigned int pos = (unsigned int)position_of((idx_t)k1, (idx_t)k2);
+          if (pos == (unsigned int)(l_ + 2)) ++absent;
+          const double newSim =
+              (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
+          f8g_matrix_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
+          f8g_inc_elems_[(std::size_t)k1].insert(k2);
+        }
       }
     }
   }
