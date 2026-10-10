@@ -2319,68 +2319,89 @@ inline void RFECore::f8f_compute_embs_by_ccs() {
   for (int idx : label_to_idx_) if (idx >= 0) ++ncc;
 
   if (f8_embycc_sparse_) {
-    // Two-pass CSR construction with proper accumulation:
-    // Pass 1: count nnz per row using a temporary map to merge duplicates
+    // H33 (Etapa 6b item 6): dense per-THREAD accumulator indexed by DENSE CC idx
+    // (0..ncc-1) with a per-row STAMP -- replaces the per-row unordered_map (both
+    // the hash overhead and H21's thread_local htab bug). Accumulation order is
+    // UNCHANGED: for a fixed ci the products arrive in ascending key c (ra is
+    // ascending) exactly as the map version iterated, so the float sum is
+    // bit-identical. First touch ASSIGNS (== the reference's map emplace); later
+    // touches accumulate. No `==0.0f` visited test -- the stamp IS the membership.
     std::vector<int> row_nnz((std::size_t)n_, 0);
-    #pragma omp parallel for schedule(static)
-    for (int q = 0; q < (int)n_; ++q) {
+    // Pass 1 (parallel): count distinct dense-CC indices per row via the stamp.
+    // No float math, no hashing -- just membership bookkeeping.
+    #pragma omp parallel
+    {
+      std::vector<int> stamp((std::size_t)ncc, 0);
       std::vector<std::pair<idx_t, float>> ra;
-      emb_.for_each_in_row((idx_t)q,
-                           [&](idx_t c, float v) { ra.emplace_back(c, v); });
-      // Use unordered_map to accumulate per (q, ci) - NO sign filter (legacy sums ALL)
-      std::unordered_map<int, float> acc;
-      acc.reserve(ra.size() * 4);
-      for (auto& [c, vq] : ra) {
-        for (auto& [ci, vcc] : inv_ccemb_[(std::size_t)c]) {
-          float prod = vq * vcc;
-          auto it = acc.find(ci);
-          if (it == acc.end()) {
-            acc.emplace(ci, prod);
-          } else {
-            it->second += prod;
-          }
-        }
+      int cur = 0;
+      #pragma omp for schedule(static)
+      for (int q = 0; q < (int)n_; ++q) {
+        ++cur;
+        ra.clear();
+        emb_.for_each_in_row((idx_t)q, [&](idx_t c, float v) { ra.emplace_back(c, v); });
+        int cnt = 0;
+        for (auto& [c, vq] : ra)
+          for (auto& [ci, vcc] : inv_ccemb_[(std::size_t)c])
+            if (stamp[(std::size_t)ci] != cur) { stamp[(std::size_t)ci] = cur; ++cnt; }
+        row_nnz[(std::size_t)q] = cnt;
       }
-      row_nnz[(std::size_t)q] = (int)acc.size();
     }
     emb_by_cc_sparse_.row_ptr.assign((std::size_t)n_ + 1, 0);
     for (std::size_t i = 0; i < (std::size_t)n_; ++i)
       emb_by_cc_sparse_.row_ptr[i + 1] = emb_by_cc_sparse_.row_ptr[i] + row_nnz[i];
     const int total_nnz = emb_by_cc_sparse_.row_ptr[(std::size_t)n_];
-    emb_by_cc_sparse_.col_idx.resize(total_nnz);
-    emb_by_cc_sparse_.values.resize(total_nnz);
+    emb_by_cc_sparse_.col_idx.resize((std::size_t)total_nnz);
+    emb_by_cc_sparse_.values.resize((std::size_t)total_nnz);
     emb_by_cc_sparse_.nrows = (int)n_;
     emb_by_cc_sparse_.ncols = ncc;
 
-    // Pass 2: fill CSR arrays (can parallelize since rows are independent)
-    #pragma omp parallel for schedule(static)
-    for (int q = 0; q < (int)n_; ++q) {
+    // H16 flag collected OUTSIDE any single row and thrown AFTER the region (X7:
+    // no exception escapes an OpenMP region). Negative/non-finite is impossible
+    // from the math (non-negative embeddings) but guarded so a regression fails
+    // loudly instead of silently propagating into F8g.
+    long long h16_bad = 0;
+    // Pass 2 (parallel): accumulate into the dense buffer, sort touched ascending
+    // (the engine's (row,col) contract), write the CSR row.
+    #pragma omp parallel reduction(+:h16_bad)
+    {
+      std::vector<float> acc((std::size_t)ncc, 0.0f);
+      std::vector<int> stamp((std::size_t)ncc, 0);
+      std::vector<int> touched;
+      touched.reserve(1024);
       std::vector<std::pair<idx_t, float>> ra;
-      emb_.for_each_in_row((idx_t)q,
-                           [&](idx_t c, float v) { ra.emplace_back(c, v); });
-      std::unordered_map<int, float> acc;
-      acc.reserve(ra.size() * 4);
-      for (auto& [c, vq] : ra) {
-        for (auto& [ci, vcc] : inv_ccemb_[(std::size_t)c]) {
-          float prod = vq * vcc;
-          auto it = acc.find(ci);
-          if (it == acc.end()) {
-            acc.emplace(ci, prod);
-          } else {
-            it->second += prod;
+      int cur = 0;
+      #pragma omp for schedule(static)
+      for (int q = 0; q < (int)n_; ++q) {
+        ++cur;
+        ra.clear();
+        emb_.for_each_in_row((idx_t)q, [&](idx_t c, float v) { ra.emplace_back(c, v); });
+        touched.clear();
+        for (auto& [c, vq] : ra) {
+          for (auto& [ci, vcc] : inv_ccemb_[(std::size_t)c]) {
+            if (stamp[(std::size_t)ci] != cur) {
+              stamp[(std::size_t)ci] = cur;
+              acc[(std::size_t)ci] = vq * vcc;   // first touch: assign (== emplace)
+              touched.push_back(ci);
+            } else {
+              acc[(std::size_t)ci] += vq * vcc;  // subsequent: accumulate
+            }
           }
         }
+        std::sort(touched.begin(), touched.end());
+        const int lo = emb_by_cc_sparse_.row_ptr[(std::size_t)q];
+        for (int p = 0; p < (int)touched.size(); ++p) {
+          const int ci = touched[(std::size_t)p];
+          const float val = acc[(std::size_t)ci];
+          if (!(val >= 0.0f) || !std::isfinite(val)) ++h16_bad;
+          emb_by_cc_sparse_.col_idx[(std::size_t)(lo + p)] = ci;
+          emb_by_cc_sparse_.values[(std::size_t)(lo + p)] = val;
+        }
       }
-      // Write sorted by ci
-      int lo = emb_by_cc_sparse_.row_ptr[(std::size_t)q];
-      std::vector<std::pair<int, float>> pairs;
-      pairs.reserve(acc.size());
-      for (auto& kv : acc) pairs.push_back(kv);
-      std::sort(pairs.begin(), pairs.end());
-      for (int p = 0; p < (int)pairs.size(); ++p) {
-        emb_by_cc_sparse_.col_idx[(std::size_t)(lo + p)] = pairs[(std::size_t)p].first;
-        emb_by_cc_sparse_.values[(std::size_t)(lo + p)] = pairs[(std::size_t)p].second;
-      }
+    }
+    if (h16_bad > 0) {
+      throw std::runtime_error(
+          "RFE: F8f H16 violated -- " + std::to_string(h16_bad) +
+          " negative/non-finite embycc values (legacy guarantees >= 0 and finite)");
     }
   } else {
     // Variant A: Dense embycc - direct simEmb(emb[q], ccemb[r]) for all q, r
