@@ -172,6 +172,7 @@ class RFERef {
   const std::vector<int>& sorted_ee() const { return sorted_ee_; }
   const std::vector<std::vector<int>>& sorted_emb() const { return sorted_emb_; }
   const std::vector<std::set<int>>& inc_elems() const { return incElems_; }
+  const std::vector<std::set<int>>& inc_elems_l() const { return incElemsL_; }
   // The divisor, i.e. the max UNNORMALISED ee. Not recoverable from ee() after the
   // fact (everything gets scaled by it), so it is recorded explicitly for the gate.
   float gr_value_probe() const { return gr_value_; }
@@ -179,7 +180,6 @@ class RFERef {
   // because the diagonal is OVERWRITTEN with pow(2,30) after accumulation
   // (RFE.cpp:605) and that pin belongs to F7's input state, not to F6's sums.
   float gram_at(int i, int j) const { return MX(i, j); }
-  const std::vector<std::set<int>>& inc_elems_l() const { return incElemsL_; }
 
   // Structural nnz of the dense `matrix` as the legacy holds it: the number of
   // cells that are not the zero-fill. Reported per phase. This is the count the

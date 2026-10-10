@@ -12,7 +12,11 @@
 //   Etapa 4 (F8d) -- components: icc/rcc for both variants (literal, DSU).
 //   Etapa 5 (F8e) -- ccemb/sorted_ccemb: content FULLY identical for
 //   accum-A and accum-B with full sort; sorted prefix-m for the fast sort.
-// Later etapas append: embycc (6, DONE: F8f B-csr + dense A), reranking cells (7), rk final (8).
+//   Etapa 6 (F8f) -- embycc: values bit-identical for both variants.
+//   Etapa 7 (F8g) -- reranking CELLS: every (k1,k2) cell of the dense MX matches
+//   the reference bit-exactly (double arithmetic, last-write-wins, no diagonal
+//   pin), plus the incElems_/incElemsL_ sets. The tail sort is Etapa 8.
+// Later etapas append: rk final (8).
 //
 // Build (WSL, repo root):
 //   g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src
@@ -465,6 +469,65 @@ void run_case(const Case& c) {
   core.set_f8_embycc_sparse(true);   // Variant B (CSR Gustavson)
   core.f8f_compute_embs_by_ccs();
   check_embycc("B-csr");
+
+  // ---- Etapa 7 (F8g): reranking CELLS ---------------------------------------
+  // The reference computes reRankingByCCs' cell loop in double arithmetic and
+  // writes plain assignments (last-write-wins, no diagonal pin); the value is
+  // narrowed to float only on assignment. We drive the core's f8g and diff EVERY
+  // (k1,k2) cell of the dense MX bit-exactly, plus the incElems_/incElemsL_ sets
+  // that the Etapa-8 tail consumes. getPosition reads the rank lists POST-f7b on
+  // both sides, so the denominators (incl. the l+2 absent case) agree.
+  ref.reranking_by_ccs();      // populates the reference's MX + incElems/L
+  core.f8g_rerank_cells();      // populates core's f8g_matrix_ + inc_elems/L
+
+  {
+    // Every cell of the n x n MX, bit-for-bit. This covers written cells, the
+    // zero-fill of untouched cells, and the l+2-absent denominators at once.
+    long cell_bad = 0, cell_nan = 0;
+    const auto& rmat = ref.matrix();
+    for (int k1 = 0; k1 < c.n; ++k1) {
+      for (int k2 = 0; k2 < c.n; ++k2) {
+        const float rv = rmat[(std::size_t)k1 * (std::size_t)c.n + (std::size_t)k2];
+        const float cv = core.f8g_cell(k1, k2);
+        std::uint32_t lb, cb;
+        std::memcpy(&lb, &rv, 4);
+        std::memcpy(&cb, &cv, 4);
+        if (lb != cb) {
+          if (cell_bad == 0)
+            std::printf("    first F8g cell diff at [%d,%d]: legacy=%.9g core=%.9g\n",
+                        k1, k2, (double)rv, (double)cv);
+          ++cell_bad;
+        }
+        if (!std::isfinite(rv) || !std::isfinite(cv)) ++cell_nan;
+      }
+    }
+    expect(cell_nan == 0, "F8g: every MX cell finite on both sides");
+    expect(cell_bad == 0, "F8g: every (k1,k2) MX cell bit-identical to the legacy");
+    std::printf("    F8g cells=%lld differing=%ld pos_absent(core)=%lld\n",
+                (long long)c.n * (long long)c.n, cell_bad, core.f8g_pos_absent());
+  }
+
+  {
+    // incElems_ and incElemsL_: the exact set inputs the Etapa-8 tail
+    // set-differences. Compared element-wise (both are std::set: ascending).
+    const auto& rinc = ref.inc_elems();
+    const auto& rincL = ref.inc_elems_l();
+    const auto& cinc = core.f8g_inc_elems();
+    const auto& cincL = core.f8g_inc_elems_l();
+    long inc_bad = 0, incL_bad = 0;
+    for (int q = 0; q < c.n; ++q) {
+      if (rinc[(std::size_t)q] != cinc[(std::size_t)q]) {
+        if (inc_bad == 0) std::printf("    first incElems diff at row %d\n", q);
+        ++inc_bad;
+      }
+      if (rincL[(std::size_t)q] != cincL[(std::size_t)q]) {
+        if (incL_bad == 0) std::printf("    first incElemsL diff at row %d\n", q);
+        ++incL_bad;
+      }
+    }
+    expect(inc_bad == 0, "F8g: incElems_ sets identical (bit-for-bit)");
+    expect(incL_bad == 0, "F8g: incElemsL_ sets identical (bit-for-bit)");
+  }
 }
 
 }  // namespace

@@ -1897,6 +1897,31 @@ void validate_input() {
   EmbCCMatrix emb_by_cc_sparse_;
   std::vector<float> emb_by_cc_dense_;  // dense n x n matrix for Variant A
   bool f8_embycc_sparse_ = true;  // default: B (CSR Gustavson)
+  // F8g state (Etapa 7): the reRankingByCCs cell scratch. f8g_matrix_ is the
+  // dense n x n similarity matrix the cells are written into (the legacy's MX,
+  // a zero-filled std::vector<float>; there is NO diagonal pin here, unlike the
+  // CPRR Gram -- untouched cells stay 0.0f and the tail sorts them as ordinary
+  // zeros). Written per (k1,k2) with a plain float assignment, so when several
+  // CCs target the same cell the LAST CC in ascending-label order wins.
+  std::vector<float> f8g_matrix_;
+  // inc_elems_[k1] = set of k2 ever written by a cell (mirrors the legacy's
+  // incElems_, the union over CCs of their sorted_ccemb top-k2 members);
+  // inc_elems_l_[q] = the ids in q's POST-f7b rank list (the legacy's
+  // incElemsL_). F8h consumes set_difference(inc_elems_, inc_elems_l_).
+  std::vector<std::set<int>> f8g_inc_elems_;
+  std::vector<std::set<int>> f8g_inc_elems_l_;
+  long long f8g_pos_absent_ = 0;  // diagnostic: getPosition hits that returned l+2
+
+  // F8g accessors (Etapa 7) for the CC parity gate. f8g_cell reads the dense
+  // scratch so the gate can diff it cell-by-cell against the reference's MX.
+  const std::vector<float>& f8g_matrix() const { return f8g_matrix_; }
+  float f8g_cell(int k1, int k2) const {
+    if (k1 < 0 || k1 >= (int)n_ || k2 < 0 || k2 >= (int)n_) return 0.0f;
+    return f8g_matrix_[(std::size_t)k1 * (std::size_t)n_ + (std::size_t)k2];
+  }
+  const std::vector<std::set<int>>& f8g_inc_elems() const { return f8g_inc_elems_; }
+  const std::vector<std::set<int>>& f8g_inc_elems_l() const { return f8g_inc_elems_l_; }
+  long long f8g_pos_absent() const { return f8g_pos_absent_; }
 
   // F8 accessors for CC parity gate
   long long self_off0() const { return self_off0_; }  // H19: rows with self off index 0 at entry
@@ -1947,6 +1972,13 @@ void validate_input() {
   void f8d_process_ccs();
   void f8e_compute_ccs_emb();
   void f8f_compute_embs_by_ccs();
+  // F8g (Etapa 7): the CELL computation of reRankingByCCs (ref:981-1021), up to
+  // and including the incElems_/incElemsL_ bookkeeping but NOT the tail sort
+  // (kernel_sort_ranked_lists_extra) -- that is F8h. Populates the dense
+  // f8g_matrix_ (zero-fill; last-plain-write wins per cell, no diagonal pin) and
+  // inc_elems_. Requires f8f (reads emb_by_cc_*) and a position index (builds one
+  // if absent, since getPosition reads the rank lists POST-f7b).
+  void f8g_rerank_cells();
 };
 
 // F8 implementations
@@ -1988,9 +2020,13 @@ inline float RFECore::sim_embycc(int k1, int k2) const {
       } else {
         const float v1 = sp.values[(std::size_t)i];
         const float v2 = sp.values[(std::size_t)j];
-        // Skip structural zeros exactly as before (they'd add +0.0f anyway; H16
-        // keeps all values >= 0 so the sum is order-identical either way).
-        if (v1 != 0.0f && v2 != 0.0f) sum += v1 * v2;
+        // Sum over the COLUMN-INTERSECTION (== the two maps' key-intersection),
+        // matching simEmb (ref:481-489) exactly. A stored 0.0f is a STRUCTURAL
+        // zero (an embedding key whose value collapsed to zero, kept as a key per
+        // ref:460-463), so it MUST be visited and contribute v*0.0f -- skipping it
+        // would change the SUPPORT, which is the exact defect the reference comment
+        // warns about (F8g's cell diff caught the old `!= 0.0f` guard here).
+        sum += v1 * v2;
         ++i; ++j;
       }
     }
@@ -2001,9 +2037,11 @@ inline float RFECore::sim_embycc(int k1, int k2) const {
     for (int r = 0; r < (int)n_; ++r) {
       float v1 = emb_by_cc_dense_[(std::size_t)k1 * (std::size_t)n_ + (std::size_t)r];
       float v2 = emb_by_cc_dense_[(std::size_t)k2 * (std::size_t)n_ + (std::size_t)r];
-      if (v1 != 0.0f && v2 != 0.0f) {
-        sum += v1 * v2;
-      }
+      // Column-intersection == the maps' key-intersection (see the sparse branch):
+      // a 0.0f cell is a structural zero and must still contribute v*0.0f, or the
+      // SUPPORT diverges from simEmb (ref:481-489). Every column r holds a stored
+      // key, so all r are "present"; the product is simply accumulated.
+      sum += v1 * v2;
     }
   }
   return sum;
@@ -2461,5 +2499,108 @@ inline void RFECore::f8f_compute_embs_by_ccs() {
     }
   }
 }
+
+// ---- RFE.cpp:415-451 -- reRankingByCCs (CELL computation only; tail is F8h) ----
+// This is the cell loop and its bookkeeping, split from the tail so it can be
+// diffed cell-by-cell against the reference's MX. See ref:981-1021.
+//
+// NUMERICS (load-bearing, mirrors ref:973-977). newSim is computed in DOUBLE
+// arithmetic -- sqrt of the int product (i+1)*(j+1) -> ::sqrt(double) -- and the
+// float simEmb result is promoted into that double expression. The division is
+// by the UNSIGNED getPosition, so the denominator is an unsigned -> double
+// promotion. The result is narrowed to float ONLY on the assignment to
+// f8g_matrix_. Reproducing this in float at any point would drift the bit pattern.
+//
+// WRITE SEMANTICS. Plain assignment (ref:999): when several CCs target the same
+// (k1,k2) cell the LAST CC in the std::map ascending-label order wins. No +=, no
+// accumulator. There is NO diagonal pin (unlike the CPRR Gram): an untouched cell
+// keeps its zero-fill and the tail sorts it as an ordinary zero. getPosition reads
+// the rank lists POST-f7b and returns l+2 for an absent item.
+//
+// CC ORDER & PARALLELISM. The reference iterates ccemb_ (a std::map) in
+// ascending-key order; ccemb_ has an entry exactly for the CC labels f8e produced
+// ccemb_rows_ for (size()>1 members), so ascending-label order here matches. The
+// inner (i,j) nest is serial ascending (== the reference). Cell writes are
+// parallelised per k1: each k1's full (i,j) nest runs in ONE thread, replaying the
+// CCs that touch k1 in ascending-label order, so the cross-CC last-write-wins for
+// every shared cell is exactly the reference's order -- no data race, and the
+// float/unsigned arithmetic is identical regardless of thread count.
+inline void RFECore::f8g_rerank_cells() {
+  // Preconditions (same style as f8e->f8f, Etapa 6b item 2).
+  if (label_to_idx_.size() != (std::size_t)n_ ||
+      sorted_ccemb_.size() != (std::size_t)n_ ||
+      ccemb_rows_.size() != (std::size_t)n_) {
+    throw std::runtime_error(
+        "RFE: f8g_rerank_cells called before f8e/f8f (label_to_idx_/sorted_ccemb_/"
+        "ccemb_rows_ not sized N)");
+  }
+  if ((f8_embycc_sparse_ && emb_by_cc_sparse_.row_ptr.size() != (std::size_t)n_ + 1) ||
+      (!f8_embycc_sparse_ && emb_by_cc_dense_.size() != (std::size_t)n_ * (std::size_t)n_)) {
+    throw std::runtime_error(
+        "RFE: f8g_rerank_cells called before f8f_compute_embs_by_ccs (embycc not built)");
+  }
+  if (inv_rows_.size() != (std::size_t)n_) build_position_index();
+
+  const std::size_t nn = (std::size_t)n_;
+  f8g_matrix_.assign(nn * nn, 0.0f);  // zero-fill; NO diagonal pin
+  f8g_inc_elems_.assign(nn, {});
+  f8g_inc_elems_l_.assign(nn, {});
+  f8g_pos_absent_ = 0;
+
+  // For each CC label r (ascending), the top-member rows k1 = sorted_ccemb_[r][i]
+  // it writes. We pair each k1 with its INDEX i, because the reference writes in
+  // r-major order (r, then i, then j) -- so on a (k1,k2) write-conflict the LAST
+  // write is the one with the LARGEST i (ties broken by larger r). Replaying in
+  // ascending (i, r) reproduces that last-writer exactly; regrouping by r alone
+  // picked the wrong winner (~3.2x diff on 4661 shared cells).
+  std::vector<std::vector<std::pair<int, int>>> cc_for_k1(nn);  // (i, r) per k1
+  for (int r = 0; r < (int)n_; ++r) {
+    if (ccemb_rows_[(std::size_t)r].empty()) continue;  // no ccemb for this label
+    const auto& sc = sorted_ccemb_[(std::size_t)r];
+    const int lim = std::min(k_, (int)sc.size());  // == min(k, d.size()) per ref:991
+    for (int i = 0; i < lim; ++i) {
+      const int k1 = sc[(std::size_t)i];
+      if (k1 < 0 || k1 >= (int)n_) continue;
+      cc_for_k1[(std::size_t)k1].emplace_back(i, r);
+    }
+  }
+  // Ascending (i, r): the last element is the last writer in r-major order.
+  for (auto& vec : cc_for_k1)
+    std::sort(vec.begin(), vec.end());
+
+  long long absent = 0;
+  #pragma omp parallel for schedule(dynamic) reduction(+:absent)
+  for (int k1 = 0; k1 < (int)n_; ++k1) {
+    for (const auto& ir : cc_for_k1[(std::size_t)k1]) {
+      const int i = ir.first;
+      const int r = ir.second;
+      const auto& sc = sorted_ccemb_[(std::size_t)r];
+      const int lim = std::min(k_, (int)sc.size());
+      {
+        for (int j = 0; j < lim; ++j) {
+          const int k2 = sc[(std::size_t)j];
+          if (k2 < 0 || k2 >= (int)n_) continue;
+          const double sim = (double)sim_embycc(k1, k2);
+          const unsigned int pos = (unsigned int)position_of((idx_t)k1, (idx_t)k2);
+          if (pos == (unsigned int)(l_ + 2)) ++absent;
+          const double newSim =
+              (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
+          f8g_matrix_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
+          f8g_inc_elems_[(std::size_t)k1].insert(k2);
+        }
+      }
+    }
+  }
+  f8g_pos_absent_ = absent;
+
+  // incElemsL_: the ids in each q's POST-f7b rank list (ref:1005-1010). Serial.
+  for (int q = 0; q < (int)n_; ++q) {
+    for (int i = 0; i < l_; ++i) {
+      f8g_inc_elems_l_[(std::size_t)q].insert(
+          rk_[(std::size_t)l_ * (std::size_t)q + (std::size_t)i]);
+    }
+  }
+}
+
 
 #endif  // RFE_CORE_HPP
