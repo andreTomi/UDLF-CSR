@@ -1,0 +1,12 @@
+Phase D: Benchmark report (Etapa 10)
+
+- Comprehensive benchmark of F8a-F8h variants on cc_* fixtures (N=500, L=100)
+- Key findings:
+  * F8a parallel (B) 2.3x faster at k=10, but A wins at k=100
+  * F8d DSU (B) 33x faster than literal set_union
+  * F8e fast sort (B) 8% faster, zero fallbacks
+  * F8g/F8h CSR variant (B) 10x less memory, slightly slower compute
+  * E2E integration passes with dense variant (bit-identical)
+- Default variant rules documented
+- Memory scaling projected: ALOI (n=72k) needs CSR variant
+- CSR variant crashes in parity test (return code 3221225781) - tracked
