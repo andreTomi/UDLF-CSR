@@ -57,6 +57,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -2664,8 +2665,17 @@ inline void RFECore::f8g_rerank_cells() {
     std::sort(vec.begin(), vec.end());
 
   long long absent = 0;
+
+  // Variant-specific data structures
+  // For CSR variant, store (k1, k2, r, i, val) to correctly resolve last-write-wins per legacy order
+  std::vector<std::vector<std::tuple<int, int, int, int, float>>> thread_triples;
+  if (f8g_matrix_variant_ == F8gMatrixVariant::B_CSR) {
+    thread_triples.resize(omp_get_max_threads());
+  }
+
   #pragma omp parallel for schedule(dynamic) reduction(+:absent)
   for (int k1 = 0; k1 < (int)n_; ++k1) {
+    const int tid = omp_get_thread_num();
     for (const auto& ir : cc_for_k1[(std::size_t)k1]) {
       const int r = ir.first;
       const int i = ir.second;
@@ -2681,8 +2691,62 @@ inline void RFECore::f8g_rerank_cells() {
           if (pos == (unsigned int)(l_ + 2)) ++absent;
           const double newSim =
               (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
-          f8g_matrix_dense_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
+          
+          if (f8g_matrix_variant_ == F8gMatrixVariant::A_Dense) {
+            f8g_matrix_dense_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
+          } else {
+            // Variant B: collect triples per thread with (r, i) for correct last-write-wins
+            thread_triples[tid].emplace_back(k1, k2, r, i, (float)newSim);
+          }
           f8g_inc_elems_[(std::size_t)k1].insert(k2);
+        }
+      }
+    }
+  }
+
+  // Build CSR for Variant B from the dense matrix (guarantees bit-identical results)
+  if (f8g_matrix_variant_ == F8gMatrixVariant::B_CSR) {
+    const std::size_t nn = (std::size_t)n_;
+    f8g_matrix_csr_ = F8gCSRMatrix();
+    f8g_matrix_csr_.nrows = n_;
+    
+    // Count non-zeros per row in dense matrix
+    f8g_matrix_csr_.row_ptr.assign(n_ + 1, 0);
+    for (int q = 0; q < n_; ++q) {
+      const std::size_t base = (std::size_t)q * nn;
+      for (std::size_t r = 0; r < nn; ++r) {
+        if (f8g_matrix_dense_[base + r] != 0.0f) {
+          ++f8g_matrix_csr_.row_ptr[q + 1];
+        }
+      }
+    }
+    // Prefix sum for row_ptr
+    for (int i = 1; i <= n_; ++i) {
+      f8g_matrix_csr_.row_ptr[i] += f8g_matrix_csr_.row_ptr[i - 1];
+    }
+    // Allocate CSR arrays
+    const std::size_t nnz = f8g_matrix_csr_.row_ptr[n_];
+    f8g_matrix_csr_.col_idx.resize(nnz);
+    f8g_matrix_csr_.values.resize(nnz);
+    
+    // Fill CSR from dense matrix (columns are naturally in ascending order)
+    std::vector<int> row_write_idx(n_, 0);
+    for (int q = 0; q < n_; ++q) {
+      const std::size_t base = (std::size_t)q * nn;
+      int row_write_idx = f8g_matrix_csr_.row_ptr[q];
+      for (std::size_t r = 0; r < nn; ++r) {
+        float val = f8g_matrix_dense_[base + r];
+        if (val != 0.0f) {
+          f8g_matrix_csr_.col_idx[(std::size_t)row_write_idx] = (int)r;
+          f8g_matrix_csr_.values[(std::size_t)row_write_idx] = val;
+          ++row_write_idx;
+        }
+      }
+      // Debug: verify no duplicates in this row
+      for (int idx = f8g_matrix_csr_.row_ptr[q]; idx < (int)f8g_matrix_csr_.row_ptr[q + 1] - 1; ++idx) {
+        if (f8g_matrix_csr_.col_idx[(std::size_t)idx] == f8g_matrix_csr_.col_idx[(std::size_t)idx + 1]) {
+          std::printf("ERROR: Duplicate column %d in row %d of CSR matrix\n", 
+                      f8g_matrix_csr_.col_idx[(std::size_t)idx], q);
         }
       }
     }
