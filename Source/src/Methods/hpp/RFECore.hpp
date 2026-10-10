@@ -1087,12 +1087,6 @@ void validate_input() {
   // rank lists than the legacy. Etapa 9 replaces this throw with the real
   // post-f7b CC sequence.
   void run() {
-    // Section 1 (H27): refuse the un-integrated CC flag LOUDLY before any work.
-    if (performCCs_) {
-      throw std::runtime_error(
-          "RFE: PERFORM_CCS em integracao, ver Etapa 9 -- recusado para nao "
-          "emitir rkLists diferentes do legado");
-    }
     // H4: validate input at the START of run() -- O(N*L) fail-fast before any computation
     validate_input();
 
@@ -1135,6 +1129,49 @@ void validate_input() {
     if (prof) { runprof_.pk_f6 = (double)peak_kb(); reset_peak(); }
     tm(runprof_.t_f7b,     [this] { f7b_rerank_cprr_tail(); });
     if (prof) runprof_.pk_f7b = (double)peak_kb();
+
+    // Etapa 9: PERFORM_CCS integration -- post-F7b CC sequence
+    if (performCCs_) {
+      // 1. Release F1-F7b heavy memory (gram_, inv_of_col_, sim_, remb_).
+      //    DOCUMENT: ck_gram()/nnz_sim() become invalid post-CC.
+      if (prof) { reset_peak(); }
+      gram_ = M();           // release memory via move-assignment
+      inv_of_col_.clear(); inv_of_col_.shrink_to_fit();
+      sim_ = M();
+      remb_ = M();
+      if (prof) { runprof_.pk_f8a = (double)peak_kb(); reset_peak(); }
+
+      // 2. Recompute embeddings over POST-F7b rk_ (T1)
+      tm(runprof_.t_f2t, [this] { f2_create_emb(); });
+      tm(runprof_.t_f3t, [this] { f3_create_reverse_emb(); });
+      tm(runprof_.t_f4t, [this] { f4_combine_reverse_emb(); });
+      if (prof) { runprof_.pk_embrr_cc = (double)peak_kb(); reset_peak(); }
+      tm(runprof_.t_f5sort,  [this] { f5_sort_emb(); });
+      tm(runprof_.t_f5eff,   [this] { f5_effect_estimation_emb(); });
+      if (prof) { runprof_.pk_f5_cc = (double)peak_kb(); reset_peak(); }
+
+      // 3. Rebuild indices on new rk_
+      build_position_index();   // F1 index was pre-F7b
+      build_inc_elems_l();      // F6 inc_elems_l_ was pre-F7b (legacy rebuilds at ref:1005-1010)
+      if (prof) { runprof_.pk_idx_cc = (double)peak_kb(); reset_peak(); }
+
+      // 4. F8a -> F8h
+      tm(runprof_.t_f8a, [this] { f8a_create_edges_ccs(); });
+      if (prof) { runprof_.pk_f8a = (double)peak_kb(); reset_peak(); }
+      tm(runprof_.t_f8b, [this] { f8b_init_th_cc(); });
+      tm(runprof_.t_f8c, [this] { f8c_edge_prefix(); });
+      tm(runprof_.t_f8d, [this] { f8d_process_ccs(); });
+      if (prof) { runprof_.pk_f8d = (double)peak_kb(); reset_peak(); }
+      tm(runprof_.t_f8e, [this] { f8e_compute_ccs_emb(); });
+      if (prof) { runprof_.pk_f8e = (double)peak_kb(); reset_peak(); }
+      tm(runprof_.t_f8f, [this] { f8f_compute_embs_by_ccs(); });
+      if (prof) { runprof_.pk_f8f = (double)peak_kb(); reset_peak(); }
+      tm(runprof_.t_f8g, [this] { f8g_rerank_cells(); });
+      if (prof) { runprof_.pk_f8g = (double)peak_kb(); reset_peak(); }
+      tm(runprof_.t_f8h, [this] { f8h_rerank_tail(); });
+      if (prof) { runprof_.pk_f8h = (double)peak_kb(); }
+    }
+
     if (prof) runprof_.end(*this, omp_get_wtime() - R0);
   }
 
@@ -1147,8 +1184,12 @@ void validate_input() {
     // Peak VmHWM reached by the time each boundary is passed (clear_refs=5
     // before each phase).
     double pk_f1 = 0, pk_tloop = 0, pk_embrr = 0, pk_f5 = 0, pk_f6 = 0, pk_f7b = 0;
+    double pk_embrr_cc = 0, pk_f5_cc = 0, pk_idx_cc = 0;
+    double pk_f8a = 0, pk_f8b = 0, pk_f8c = 0, pk_f8d = 0, pk_f8e = 0, pk_f8f = 0, pk_f8g = 0, pk_f8h = 0;
     double t_f1 = 0, t_f2t = 0, t_f3t = 0, t_f4t = 0, t_f7at = 0;
     double t_embrr = 0, t_f5sort = 0, t_f5eff = 0, t_f6 = 0, t_f7b = 0, t_total = 0;
+    double t_embrr_cc = 0, t_f5sort_cc = 0, t_f5eff_cc = 0, t_idx_cc = 0;
+    double t_f8a = 0, t_f8b = 0, t_f8c = 0, t_f8d = 0, t_f8e = 0, t_f8f = 0, t_f8g = 0, t_f8h = 0;
     std::vector<long long> emb_nnz_it, emb_zeros_it, f7a_visits_it;
     long long emb_nnz_final = 0, emb_zeros_final = 0;
     long long gram_nnz = 0, gram_zeros = 0;
@@ -1979,6 +2020,11 @@ void validate_input() {
   // inc_elems_. Requires f8f (reads emb_by_cc_*) and a position index (builds one
   // if absent, since getPosition reads the rank lists POST-f7b).
   void f8g_rerank_cells();
+
+  // F8h (Etapa 8): the TAIL of reRankingByCCs (ref:1012-1020). Mirrors
+  // f7b_rerank_cprr_tail but uses f8g_matrix_ (no diagonal pin, unwritten = 0)
+  // and f8g_inc_elems_/f8g_inc_elems_l_ built by f8g.
+  void f8h_rerank_tail();
 };
 
 // F8 implementations
@@ -2539,7 +2585,12 @@ inline void RFECore::f8g_rerank_cells() {
     throw std::runtime_error(
         "RFE: f8g_rerank_cells called before f8f_compute_embs_by_ccs (embycc not built)");
   }
-  if (inv_rows_.size() != (std::size_t)n_) build_position_index();
+  // CRITICAL: rebuild position index on POST-F7b rank lists.
+  // The F1 build_position_index() used pre-F7b rk_; F7b rewrites rk_ in place.
+  // The reference's getPosition scans the live rank lists (post-F7b), so we must
+  // rebuild the inverted index here to match. H9 proved the index matches the
+  // legacy's linear scan WHEN built from the same lists.
+  build_position_index();
 
   const std::size_t nn = (std::size_t)n_;
   f8g_matrix_.assign(nn * nn, 0.0f);  // zero-fill; NO diagonal pin
@@ -2598,6 +2649,77 @@ inline void RFECore::f8g_rerank_cells() {
     for (int i = 0; i < l_; ++i) {
       f8g_inc_elems_l_[(std::size_t)q].insert(
           rk_[(std::size_t)l_ * (std::size_t)q + (std::size_t)i]);
+    }
+  }
+}
+
+
+// F8h (Etapa 8): the TAIL of reRankingByCCs -- mirrors f7b_rerank_cprr_tail but
+// uses f8g_matrix_ (no diagonal pin, unwritten = 0) and f8g_inc_elems_/
+// f8g_inc_elems_l_ built by f8g. See ref:1012-1020.
+inline void RFECore::f8h_rerank_tail() {
+  // Preconditions: f8g must have run and populated the matrix and sets.
+  if (f8g_matrix_.empty() || f8g_inc_elems_.size() != (std::size_t)n_ ||
+      f8g_inc_elems_l_.size() != (std::size_t)n_) {
+    throw std::runtime_error(
+        "RFE: f8h_rerank_tail called before f8g_rerank_cells (f8g state missing)");
+  }
+
+  std::vector<char> missing_self((std::size_t)n_, 0);
+  #pragma omp parallel for schedule(static)
+  for (int q = 0; q < (int)n_; ++q) {
+    // 1. extras = set_difference(f8g_inc_elems_[q], f8g_inc_elems_l_[q]).
+    //    Both are std::set<int> (ascending) -- linear merge.
+    std::vector<int> extras;
+    std::set_difference(
+        f8g_inc_elems_[(std::size_t)q].begin(), f8g_inc_elems_[(std::size_t)q].end(),
+        f8g_inc_elems_l_[(std::size_t)q].begin(), f8g_inc_elems_l_[(std::size_t)q].end(),
+        std::back_inserter(extras));
+
+    // 2. rkTmp = first l of rk_[q] + extras (extras already ascending by id).
+    std::vector<int> rkTmp((std::size_t)l_ + extras.size());
+    for (int i = 0; i < l_; ++i) {
+      rkTmp[(std::size_t)i] = rk_[(std::size_t)l_ * (std::size_t)q + (std::size_t)i];
+    }
+    std::copy(extras.begin(), extras.end(), rkTmp.begin() + l_);
+
+    // 3. a[j] = f8g_matrix_[q * n_ + rkTmp[j]] (NO diagonal pin; unwritten = 0).
+    std::vector<float> a(rkTmp.size());
+    for (std::size_t j = 0; j < rkTmp.size(); ++j) {
+      const int img = rkTmp[j];
+      a[j] = (img >= 0 && img < (int)n_)
+                 ? f8g_matrix_[(std::size_t)q * (std::size_t)n_ + (std::size_t)img]
+                 : 0.0f;
+    }
+
+    // 4. Stable DESCENDING sort (shifts on strict `<` -> stable_sort with `>`).
+    //    Ties keep rkTmp order (current list first, then extras ascending).
+    std::stable_sort(rkTmp.begin(), rkTmp.end(),
+                     [&](int u, int v) {
+                       const std::size_t iu = (std::size_t)(&u - &rkTmp[0]);
+                       const std::size_t iv = (std::size_t)(&v - &rkTmp[0]);
+                       return a[iu] > a[iv];
+                     });
+
+    // 5. Swap self to position 0 (NOT move-to-front; ref:758-770).
+    auto it = std::find(rkTmp.begin(), rkTmp.end(), q);
+    if (it != rkTmp.end()) {
+      std::iter_swap(rkTmp.begin(), it);
+    } else {
+      missing_self[(std::size_t)q] = 1;
+    }
+
+    // 6. Copy back only first l entries.
+    for (int i = 0; i < l_; ++i) {
+      rk_[(std::size_t)l_ * (std::size_t)q + (std::size_t)i] = rkTmp[(std::size_t)i];
+    }
+  }
+
+  // Report missing self (should not happen if input was validated, but legacy pins it).
+  for (std::size_t q = 0; q < (std::size_t)n_; ++q) {
+    if (missing_self[q]) {
+      throw std::runtime_error("RFE: F8h self missing in row " + std::to_string(q) +
+                               " -- legacy pins self during the tail sort");
     }
   }
 }

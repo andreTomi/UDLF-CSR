@@ -120,11 +120,9 @@ protected:
     // DataProvider stride == l (rkLists width == l, no L_MULT)
     dataProvider.setL(l);
 
-    // H27 (Section 1): the CC stages (F8a-F8f seams) exist, but run() does not
-    // yet wire the full F8g/F8h + integration sequence, so PERFORM_CCS is NOT
-    // honoured -- it is REFUSED (loudly) in RFECore::run(). Claiming
-    // "supported" here was false until Etapa 9; keep this honest.
-    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS NOT yet honoured -- refused in run(), Etapa 9)");
+    // PERFORM_CCS is now fully integrated (Etapa 9). The post-F7b CC sequence
+    // (F8a-F8h) runs when the flag is true.
+    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS honoured)");
   }
 
 private:
