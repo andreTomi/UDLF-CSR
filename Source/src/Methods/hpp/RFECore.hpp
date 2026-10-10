@@ -52,6 +52,7 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -1851,6 +1852,10 @@ void validate_input() {
   bool f8_edges_parallel_ = true;  // Etapa 3: variant B measured winner
   // F8d: icc label per object (from DSU with legacy label semantics).
   std::vector<int> f8_cc_label_;
+  // Etapa 4/6b: f8d variant selector. true = DSU (measured 116x faster on ALOI,
+  // default); false = literal map<int,set> + set_union, kept as a differential
+  // oracle that mirrors the reference's unionCCs/sameCC exactly.
+  bool f8_components_dsu_ = true;
   // F8e: members/rows indexed BY ORIGINAL LABEL (size n_), empty for singletons.
   // ccemb_rows_[r] = ascending-key vector of (key, val) for CC label r.
   // sorted_ccemb_[r] = descending-value keys for CC label r.
@@ -1920,8 +1925,10 @@ void validate_input() {
   void set_f8_ccemb_fastsort(bool on) { f8_ccemb_fastsort_ = on; }
   bool f8_ccemb_fastsort() const { return f8_ccemb_fastsort_; }
   long long f8e_fastsort_fallbacks() const { return f8e_fallbacks_; }
-  // DSU variant (Etapa 4) -- placeholder for test API
-  void set_f8_components_dsu(bool on) { (void)on; }
+  // F8d variant (Etapa 4/6b): DSU (default, measured winner) vs literal
+  // map<int,set>+set_union (differential oracle mirroring the reference).
+  void set_f8_components_dsu(bool on) { f8_components_dsu_ = on; }
+  bool f8_components_dsu() const { return f8_components_dsu_; }
   float embycc_get(int q, int r) const;
   float sim_embycc(int k1, int k2) const;
 
@@ -2071,6 +2078,37 @@ inline void RFECore::f8d_process_ccs() {
     throw std::runtime_error(
         "RFE: f8d_process_ccs called before f8c_edge_prefix (no prefix count)");
   }
+  const long long m = std::min<long long>(f8_prefix_m_, (long long)edges_ccs_.size());
+
+  // Variant A (literal, Etapa 6b item 4): map<label,set<member>> + set_union,
+  // a faithful mirror of the reference's unionCCs/sameCC (ref:891-908). Kept as
+  // a DIFFERENTIAL ORACLE: the DSU (variant B) must produce identical labels.
+  // The reference's unionCCs survives r1 (= icc[o1]) and merges r2 into it via
+  // set_union, then repoints every member of r2 to r1 and erases rcc[r2].
+  if (!f8_components_dsu_) {
+    std::map<int, std::set<int>> rcc;
+    std::vector<int> icc((std::size_t)n_);
+    for (int q = 0; q < (int)n_; ++q) {
+      icc[(std::size_t)q] = q;
+      rcc[q] = std::set<int>{q};
+    }
+    for (long long i = 0; i < m; ++i) {
+      auto& e = edges_ccs_[(std::size_t)i];
+      const int o1 = e.second.first, o2 = e.second.second;
+      const int r1 = icc[(std::size_t)o1], r2 = icc[(std::size_t)o2];
+      if (r1 == r2) continue;  // sameCC
+      std::set<int> merged;
+      std::set_union(rcc[r2].cbegin(), rcc[r2].cend(),
+                     rcc[r1].cbegin(), rcc[r1].cend(),
+                     std::inserter(merged, merged.cend()));
+      rcc[r1] = std::move(merged);
+      for (int o : rcc[r2]) icc[(std::size_t)o] = r1;
+      rcc.erase(r2);
+    }
+    f8_cc_label_ = std::move(icc);
+    return;
+  }
+
   f8_cc_label_.assign((std::size_t)n_, 0);
   for (std::size_t i = 0; i < (std::size_t)n_; ++i) f8_cc_label_[(std::size_t)i] = (int)i;
 
@@ -2086,7 +2124,6 @@ inline void RFECore::f8d_process_ccs() {
     return r;
   };
 
-  const long long m = std::min<long long>(f8_prefix_m_, (long long)edges_ccs_.size());
   for (long long i = 0; i < m; ++i) {
     auto& e = edges_ccs_[(std::size_t)i];
     int a = e.second.first;
