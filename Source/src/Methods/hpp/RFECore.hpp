@@ -1958,22 +1958,38 @@ inline float RFECore::embycc_get(int q, int r) const {
 }
 
 inline float RFECore::sim_embycc(int k1, int k2) const {
-  // Match legacy's simEmb order: iterate CC labels in ascending ORIGINAL LABEL order.
-  // Legacy's simEmb does merge-join on std::map (sorted by key = original CC label).
+  // Match legacy's simEmb order: merge-join in ascending ORIGINAL CC LABEL order.
+  // The reference merge-joins two std::map (sorted by key = original CC label).
+  // The core's dense ci is assigned in ascending original-label order (f8e sorts
+  // label_list before numbering) and f8f writes each CSR row's columns ASCENDING,
+  // so a two-pointer merge over the two rows visits nonzero terms in the exact
+  // same order -- bit-exact -- in O(nnz1+nnz2) instead of the former O(n) scan.
   float sum = 0.0f;
   if (f8_embycc_sparse_) {
-    for (int r = 0; r < (int)n_; ++r) {
-      int ci = label_to_idx_[(std::size_t)r];
-      if (ci < 0) continue;  // skip singletons
-      float v1 = emb_by_cc_sparse_.get(k1, ci);
-      float v2 = emb_by_cc_sparse_.get(k2, ci);
-      if (v1 != 0.0f && v2 != 0.0f) {
-        sum += v1 * v2;
+    if (k1 < 0 || k1 >= (int)n_ || k2 < 0 || k2 >= (int)n_) return 0.0f;
+    const auto& sp = emb_by_cc_sparse_;
+    int i = sp.row_ptr[(std::size_t)k1], hi1 = sp.row_ptr[(std::size_t)k1 + 1];
+    int j = sp.row_ptr[(std::size_t)k2], hi2 = sp.row_ptr[(std::size_t)k2 + 1];
+    while (i < hi1 && j < hi2) {
+      const int c1 = sp.col_idx[(std::size_t)i];
+      const int c2 = sp.col_idx[(std::size_t)j];
+      if (c1 < c2) {
+        ++i;
+      } else if (c2 < c1) {
+        ++j;
+      } else {
+        const float v1 = sp.values[(std::size_t)i];
+        const float v2 = sp.values[(std::size_t)j];
+        // Skip structural zeros exactly as before (they'd add +0.0f anyway; H16
+        // keeps all values >= 0 so the sum is order-identical either way).
+        if (v1 != 0.0f && v2 != 0.0f) sum += v1 * v2;
+        ++i; ++j;
       }
     }
   } else {
     // Dense variant: use the exact dense embycc matrix computed by legacy's algorithm
     // sum over all CC labels r of embycc[k1][r] * embycc[k2][r]
+    if (k1 < 0 || k1 >= (int)n_ || k2 < 0 || k2 >= (int)n_) return 0.0f;
     for (int r = 0; r < (int)n_; ++r) {
       float v1 = emb_by_cc_dense_[(std::size_t)k1 * (std::size_t)n_ + (std::size_t)r];
       float v2 = emb_by_cc_dense_[(std::size_t)k2 * (std::size_t)n_ + (std::size_t)r];
