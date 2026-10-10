@@ -57,6 +57,7 @@ int main() {
   
   // Core: manually step through to match reference
   RFECore core(rk, n, l, k, t, pa, /*performCCs=*/true, th);
+  core.set_f8g_matrix_variant(RFECore::F8gMatrixVariant::A_Dense);  // Use dense variant
   
   // F1 + t-loop
   core.f1_rank_norm();
@@ -77,9 +78,12 @@ int main() {
   core.f8b_init_th_cc();
   std::printf("CORE th_cc (before f8c) = %.9g\n", core.th_cc());
   
-  // Debug: compute sim for cell (0,32) manually
-  // Access private nnz_cols via a helper - skip for now
-  std::printf("DEBUG: checking sim for cell (0,32)\\n");
+  // Print first 5 ee values and sorted_ee
+  std::printf("CORE ee[0..4]: ");
+  for (int i = 0; i < 5; ++i) std::printf("%.9g ", (double)core.ee_[i]);
+  std::printf("\nCORE sorted_ee[0..4]: ");
+  for (int i = 0; i < 5; ++i) std::printf("%d ", core.sorted_ee_[i]);
+  std::printf("\n");
   
   // Continue core
   core.f8c_edge_prefix();

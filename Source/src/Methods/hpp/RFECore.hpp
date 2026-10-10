@@ -1948,13 +1948,27 @@ void validate_input() {
   EmbCCMatrix emb_by_cc_sparse_;
   std::vector<float> emb_by_cc_dense_;  // dense n x n matrix for Variant A
   bool f8_embycc_sparse_ = true;  // default: B (CSR Gustavson)
-  // F8g state (Etapa 7): the reRankingByCCs cell scratch. f8g_matrix_ is the
-  // dense n x n similarity matrix the cells are written into (the legacy's MX,
-  // a zero-filled std::vector<float>; there is NO diagonal pin here, unlike the
-  // CPRR Gram -- untouched cells stay 0.0f and the tail sorts them as ordinary
-  // zeros). Written per (k1,k2) with a plain float assignment, so when several
-  // CCs target the same cell the LAST CC in ascending-label order wins.
-  std::vector<float> f8g_matrix_;
+  // F8g matrix variant: A=dense n×n, B=CSR (per-thread triples → merge)
+  enum class F8gMatrixVariant { A_Dense, B_CSR };
+  F8gMatrixVariant f8g_matrix_variant_ = F8gMatrixVariant::A_Dense;
+  // F8g state (Etapa 7): the reRankingByCCs cell scratch. Two variants:
+  // A=dense n×n (f8g_matrix_dense_); B=CSR (f8g_matrix_csr_) built from
+  // per-thread triples merged into CSR. Both MUST produce bit-identical F8h tail.
+  std::vector<float> f8g_matrix_dense_;           // Variant A: dense n×n
+  struct F8gCSRMatrix {
+    std::vector<int> row_ptr;    // size n+1
+    std::vector<int> col_idx;    // column indices (ascending per row)
+    std::vector<float> values;   // values in same order
+    int nrows = 0;
+    float get(int q, int r) const {
+      if (q < 0 || q >= nrows) return 0.0f;
+      int lo = row_ptr[(std::size_t)q];
+      int hi = row_ptr[(std::size_t)q + 1];
+      auto it = std::lower_bound(col_idx.begin() + lo, col_idx.begin() + hi, r);
+      if (it == col_idx.begin() + hi || *it != r) return 0.0f;
+      return values[(std::size_t)(it - col_idx.begin())];
+    }
+  } f8g_matrix_csr_;              // Variant B: CSR
   // inc_elems_[k1] = set of k2 ever written by a cell (mirrors the legacy's
   // incElems_, the union over CCs of their sorted_ccemb top-k2 members);
   // inc_elems_l_[q] = the ids in q's POST-f7b rank list (the legacy's
@@ -1963,16 +1977,23 @@ void validate_input() {
   std::vector<std::set<int>> f8g_inc_elems_l_;
   long long f8g_pos_absent_ = 0;  // diagnostic: getPosition hits that returned l+2
 
-  // F8g accessors (Etapa 7) for the CC parity gate. f8g_cell reads the dense
-  // scratch so the gate can diff it cell-by-cell against the reference's MX.
-  const std::vector<float>& f8g_matrix() const { return f8g_matrix_; }
+  // F8g accessors (Etapa 7) for the CC parity gate.
+  // Dense variant: reads f8g_matrix_dense_; CSR variant: reads f8g_matrix_csr_.
+  const std::vector<float>& f8g_matrix_dense() const { return f8g_matrix_dense_; }
+  const F8gCSRMatrix& f8g_matrix_csr() const { return f8g_matrix_csr_; }
   float f8g_cell(int k1, int k2) const {
     if (k1 < 0 || k1 >= (int)n_ || k2 < 0 || k2 >= (int)n_) return 0.0f;
-    return f8g_matrix_[(std::size_t)k1 * (std::size_t)n_ + (std::size_t)k2];
+    if (f8g_matrix_variant_ == F8gMatrixVariant::A_Dense) {
+      return f8g_matrix_dense_[(std::size_t)k1 * (std::size_t)n_ + (std::size_t)k2];
+    } else {
+      return f8g_matrix_csr_.get(k1, k2);
+    }
   }
   const std::vector<std::set<int>>& f8g_inc_elems() const { return f8g_inc_elems_; }
   const std::vector<std::set<int>>& f8g_inc_elems_l() const { return f8g_inc_elems_l_; }
   long long f8g_pos_absent() const { return f8g_pos_absent_; }
+  void set_f8g_matrix_variant(F8gMatrixVariant v) { f8g_matrix_variant_ = v; }
+  F8gMatrixVariant f8g_matrix_variant() const { return f8g_matrix_variant_; }
 
   // F8 accessors for CC parity gate
   long long self_off0() const { return self_off0_; }  // H19: rows with self off index 0 at entry
@@ -2605,9 +2626,17 @@ inline void RFECore::f8g_rerank_cells() {
   build_position_index();
 
   const std::size_t nn = (std::size_t)n_;
-  f8g_matrix_.assign(nn * nn, 0.0f);  // zero-fill; NO diagonal pin
   f8g_inc_elems_.assign(nn, {});
   f8g_inc_elems_l_.assign(nn, {});
+  f8g_pos_absent_ = 0;
+
+  if (f8g_matrix_variant_ == F8gMatrixVariant::A_Dense) {
+    f8g_matrix_dense_.assign(nn * nn, 0.0f);  // zero-fill; NO diagonal pin
+  } else {
+    // Variant B (CSR): collect triples per thread, then merge into CSR
+    f8g_matrix_csr_ = F8gCSRMatrix();
+    f8g_matrix_csr_.nrows = n_;
+  }
   f8g_pos_absent_ = 0;
 
   // Ensure dense embycc matrix is available for EXACT legacy compatibility.
@@ -2655,6 +2684,21 @@ inline void RFECore::f8g_rerank_cells() {
       }
     }
   }
+
+  // Build inverse mapping dense_to_original for use in dot product (needed for CSR variant too)
+  std::vector<int> dense_to_original;
+  dense_to_original.reserve(label_to_idx_.size());
+  for (int orig = 0; orig < (int)label_to_idx_.size(); ++orig) {
+    int dense = label_to_idx_[(std::size_t)orig];
+    if (dense >= 0) {
+      if ((int)dense_to_original.size() <= dense) dense_to_original.resize(dense + 1, -1);
+      dense_to_original[dense] = orig;
+    }
+  }
+
+  // Count valid CC labels (ncc)
+  int ncc = 0;
+  for (int idx : label_to_idx_) if (idx >= 0) ++ncc;
 
   // For each CC label r (ascending), the top-member rows k1 = sorted_ccemb_[r][i]
   // it writes. We pair each k1 with its INDEX i, because the reference writes in
@@ -2713,7 +2757,7 @@ inline void RFECore::f8g_rerank_cells() {
           if (pos == (unsigned int)(l_ + 2)) ++absent;
           const double newSim =
               (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
-          f8g_matrix_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
+          f8g_matrix_dense_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
           f8g_inc_elems_[(std::size_t)k1].insert(k2);
         }
       }
@@ -2736,7 +2780,13 @@ inline void RFECore::f8g_rerank_cells() {
 // f8g_inc_elems_l_ built by f8g. See ref:1012-1020.
 inline void RFECore::f8h_rerank_tail() {
   // Preconditions: f8g must have run and populated the matrix and sets.
-  if (f8g_matrix_.empty() || f8g_inc_elems_.size() != (std::size_t)n_ ||
+  bool f8g_done = false;
+  if (f8g_matrix_variant_ == F8gMatrixVariant::A_Dense) {
+    f8g_done = !f8g_matrix_dense_.empty();
+  } else {
+    f8g_done = f8g_matrix_csr_.nrows > 0;
+  }
+  if (!f8g_done || f8g_inc_elems_.size() != (std::size_t)n_ ||
       f8g_inc_elems_l_.size() != (std::size_t)n_) {
     throw std::runtime_error(
         "RFE: f8h_rerank_tail called before f8g_rerank_cells (f8g state missing)");
@@ -2760,12 +2810,14 @@ inline void RFECore::f8h_rerank_tail() {
     }
     std::copy(extras.begin(), extras.end(), rkTmp.begin() + l_);
 
-    // 3. a[j] = f8g_matrix_[q * n_ + rkTmp[j]] (NO diagonal pin; unwritten = 0).
+    // 3. a[j] = f8g_matrix(q, rkTmp[j]) (NO diagonal pin; unwritten = 0).
     std::vector<float> a(rkTmp.size());
     for (std::size_t j = 0; j < rkTmp.size(); ++j) {
       const int img = rkTmp[j];
       a[j] = (img >= 0 && img < (int)n_)
-                 ? f8g_matrix_[(std::size_t)q * (std::size_t)n_ + (std::size_t)img]
+                 ? (f8g_matrix_variant_ == F8gMatrixVariant::A_Dense
+                        ? f8g_matrix_dense_[(std::size_t)q * (std::size_t)n_ + (std::size_t)img]
+                        : f8g_matrix_csr_.get(q, img))
                  : 0.0f;
     }
 
