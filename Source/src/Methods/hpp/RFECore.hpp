@@ -50,7 +50,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -1057,8 +1059,14 @@ void validate_input() {
       seen[(std::size_t)rk_[base + (std::size_t)i]] = 0;
     }
   }
-  std::printf("RKSELF_OFF0 rows=%zu off0=%lld (accepted; legacy pins self during the F1 sort)\n",
-              (std::size_t)n_, self_off0_);
+  // Controlled log (Etapa 6b item 8): fires only under RFE_RKSELF_OFF0, matching
+  // the codebase's getenv-probe pattern (RFE_F1PROF, PHASE_BUILDER). The counter
+  // self_off0() is always updated; only the PRINT is gated, so run() no longer
+  // pollutes stdout on every call. The selfoff0 gate sets the env var.
+  if (std::getenv("RFE_RKSELF_OFF0")) {
+    std::printf("RKSELF_OFF0 rows=%zu off0=%lld (accepted; legacy pins self during the F1 sort)\n",
+                (std::size_t)n_, self_off0_);
+  }
 }
 
   // THE ENTRY POINT. This is the ONLY pipeline the port is allowed to run, and
