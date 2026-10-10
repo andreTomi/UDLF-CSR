@@ -2172,64 +2172,118 @@ inline void RFECore::f8e_compute_ccs_emb() {
   }
 
   const bool use_hash = f8_ccemb_hash_;
+  const bool fastsort = f8_ccemb_fastsort_;
 
-  // For each original label that is a root with >1 member, compute ccemb
+  // Work list: only roots with >1 member produce a ccemb row (the reference's
+  // computeCCsEmb skips d.size()<=1). Parallelised ACROSS CCs: each CC writes
+  // only ccemb_rows_[lbl]/sorted_ccemb_[lbl] (disjoint by lbl) and accumulates
+  // serially in ascending-member/ascending-key order, so the float sum and the
+  // unstable-sort tie order are bit-identical regardless of thread count (the
+  // sort input order + comparator match the reference's sortCCEmb exactly).
+  std::vector<int> work;
+  work.reserve(label_list.size());
   for (int lbl : label_list) {
-    int ci = label_to_idx_[(std::size_t)lbl];
-    if (ci < 0) continue;
-    const auto& members = f8_cc_members_[(std::size_t)lbl];
-    if (members.size() <= 1) continue;  // skip singletons
-
-    if (!use_hash) {
-      std::vector<float> dense((std::size_t)n_, 0.0f);
-      std::vector<char> visited((std::size_t)n_, 0);
-      for (int obj : members) {
-        emb_.for_each_in_row((idx_t)obj,
-                             [&](idx_t c, float v) {
-                               dense[(std::size_t)c] += v;
-                               visited[(std::size_t)c] = 1;
-                             });
-      }
-      auto& row = ccemb_rows_[(std::size_t)lbl];
-      row.reserve(members.size() * 4);
-      for (std::size_t c = 0; c < (std::size_t)n_; ++c) {
-        if (visited[(std::size_t)c]) row.emplace_back((int)c, dense[c]);
-      }
-    } else {
-      std::unordered_map<int, float> acc;
-      acc.reserve(members.size() * 8);
-      for (int obj : members) {
-        emb_.for_each_in_row((idx_t)obj,
-                             [&](idx_t c, float v) { acc[(int)c] += v; });
-      }
-      auto& row = ccemb_rows_[(std::size_t)lbl];
-      row.reserve(acc.size());
-      for (auto& kv : acc) row.push_back(kv);
-      std::sort(row.begin(), row.end(),
-                [](const auto& a, const auto& b) { return a.first < b.first; });
-    }
-
-    auto& src = ccemb_rows_[(std::size_t)lbl];
-    auto& dst = sorted_ccemb_[(std::size_t)lbl];
-    dst.reserve(src.size());
-    for (auto& kv : src) dst.push_back(kv.first);
-    if (f8_ccemb_fastsort_ && dst.size() > 32) {
-      // Fast top-m: nth_element then sort the prefix of size m
-      // For now, fallback to full sort and count it
-      ++f8e_fallbacks_;
-    }
-    // Match legacy's CmpDesc exactly: sort by value DESC, UNSTABLE (no tie-break).
-    // Legacy: return a.second > b.second; returns false for equal values.
-    std::sort(dst.begin(), dst.end(),
-              [&](int a, int b) {
-                float va = 0.0f, vb = 0.0f;
-                for (auto& kv : src) {
-                  if (kv.first == a) va = kv.second;
-                  if (kv.first == b) vb = kv.second;
-                }
-                return va > vb;  // No tie-break: returns false when va == vb
-              });
+    if (label_to_idx_[(std::size_t)lbl] < 0) continue;
+    if (f8_cc_members_[(std::size_t)lbl].size() > 1) work.push_back(lbl);
   }
+
+  long long fallbacks = 0;
+  #pragma omp parallel reduction(+:fallbacks)
+  {
+    // Per-THREAD buffers scoped to this region (NOT thread_local -- that was the
+    // H21 bug). The STAMP accumulator reuses dense[] across the CCs this thread
+    // visits, removing the O(n) alloc+zero of dense/visited paid PER CC before.
+    std::vector<float> dense((std::size_t)n_, 0.0f);
+    std::vector<int> stamp((std::size_t)n_, 0);
+    std::vector<int> touched;
+    touched.reserve(1024);
+    std::vector<std::pair<int, float>> src, dstp;
+    int cur = 0;
+
+    #pragma omp for schedule(dynamic)
+    for (int wi = 0; wi < (int)work.size(); ++wi) {
+      const int lbl = work[(std::size_t)wi];
+      const auto& members = f8_cc_members_[(std::size_t)lbl];
+      ++cur;
+      touched.clear();
+
+      if (!use_hash) {
+        // Dense stamp accumulation. First touch of a key in THIS CC zeroes it so
+        // the first add is 0.0f + v (exactly the reference's map-insert semantics);
+        // later adds run in ascending-member/ascending-key order (== reference).
+        for (int obj : members) {
+          emb_.for_each_in_row((idx_t)obj, [&](idx_t c, float v) {
+            if (stamp[(std::size_t)c] != cur) {
+              stamp[(std::size_t)c] = cur;
+              dense[(std::size_t)c] = 0.0f;
+              touched.push_back((int)c);
+            }
+            dense[(std::size_t)c] += v;
+          });
+        }
+        std::sort(touched.begin(), touched.end());  // ascending key == std::map order
+        src.clear();
+        src.reserve(touched.size());
+        for (int k : touched) src.emplace_back(k, dense[(std::size_t)k]);
+      } else {
+        std::unordered_map<int, float> acc;
+        acc.reserve(members.size() * 8);
+        for (int obj : members) {
+          emb_.for_each_in_row((idx_t)obj, [&](idx_t c, float v) { acc[(int)c] += v; });
+        }
+        src.clear();
+        src.reserve(acc.size());
+        for (auto& kv : acc) src.emplace_back(kv.first, kv.second);
+        std::sort(src.begin(), src.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+      }
+
+      ccemb_rows_[(std::size_t)lbl] = src;  // ascending key, float bits == reference
+
+      // sorted_ccemb: sort a COPY of src (ascending) by value DESC with the strict
+      // `>` comparator -- byte-for-byte the reference's sortCCEmb(CmpDesc); the
+      // unstable tie order is identical because input order and comparator match.
+      dstp = src;
+      const std::size_t N = dstp.size();
+      const auto cmp = [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
+        return a.second > b.second;
+      };
+      if (fastsort && N > 32) {
+        const std::size_t m = std::min((std::size_t)k_, N);
+        std::partial_sort(dstp.begin(), dstp.begin() + (std::ptrdiff_t)m, dstp.end(), cmp);
+        // Real partial_sort with a tie guard: the prefix [0,m) matches the full
+        // sort (and thus the reference) only when the top-m values are distinct AND
+        // strictly greater than every tail value. On any tie, fall back to the full
+        // sort so the prefix stays bit-identical (ties are ~0.3% of CCs).
+        bool unsafe = false;
+        for (std::size_t i = 0; i + 1 < m; ++i)
+          if (!(dstp[i].second > dstp[i + 1].second)) { unsafe = true; break; }
+        if (!unsafe && m < N) {
+          float mx = dstp[m].second;
+          for (std::size_t j = m + 1; j < N; ++j)
+            if (dstp[j].second > mx) mx = dstp[j].second;
+          if (!(dstp[m - 1].second > mx)) unsafe = true;
+        }
+        if (unsafe) {
+          ++fallbacks;
+          // Restore the PRISTINE ascending-key order before the full sort.
+          // std::sort is unstable, so re-sorting the already-partially-sorted dstp
+          // would land equal-valued keys differently than the reference (which
+          // sorts the pristine ascending-key vector once). H32: repro showed every
+          // divergence had unsafe=1 -- the fallback itself was the bug.
+          dstp = src;
+          std::sort(dstp.begin(), dstp.end(), cmp);
+        }
+      } else {
+        std::sort(dstp.begin(), dstp.end(), cmp);
+      }
+      auto& srow = sorted_ccemb_[(std::size_t)lbl];
+      srow.clear();
+      srow.reserve(dstp.size());
+      for (auto& p : dstp) srow.push_back(p.first);
+    }
+  }
+  f8e_fallbacks_ = fallbacks;
 
   // Build inv_ccemb_ for F8f Gustavson: key -> list of (dense_cc_idx, val)
   inv_ccemb_.assign((std::size_t)n_, {});
