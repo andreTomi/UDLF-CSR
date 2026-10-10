@@ -120,9 +120,10 @@ protected:
     // DataProvider stride == l (rkLists width == l, no L_MULT)
     dataProvider.setL(l);
 
-    // PERFORM_CCS is now fully integrated (Etapa 9). The post-F7b CC sequence
-    // (F8a-F8h) runs when the flag is true.
-    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS honoured)");
+    // PERFORM_CCS is integrated (Etapa 9), but F8g/F8h are WIP and the CC gate
+    // is not green. Default is REFUSED to prevent silent divergence.
+    // Use RFE_ALLOW_CC=1 to enable during development.
+    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS NOT honoured -- WIP, refused in run())");
   }
 
 private:

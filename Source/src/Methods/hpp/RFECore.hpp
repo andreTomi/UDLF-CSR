@@ -1087,6 +1087,16 @@ void validate_input() {
   // rank lists than the legacy. Etapa 9 replaces this throw with the real
   // post-f7b CC sequence.
   void run() {
+    // Section 1 (H27): refuse the un-integrated CC flag LOUDLY before any work.
+    if (performCCs_) {
+      // Allow opt-in for development: RFE_ALLOW_CC=1
+      const char* allow = std::getenv("RFE_ALLOW_CC");
+      if (!allow || std::string(allow) != "1") {
+        throw std::runtime_error(
+            "RFE: PERFORM_CCS em integracao (WIP), ver Etapa 9 -- recusado para nao "
+            "emitir rkLists diferentes do legado; use RFE_ALLOW_CC=1 para forcar");
+      }
+    }
     // H4: validate input at the START of run() -- O(N*L) fail-fast before any computation
     validate_input();
 
@@ -1969,6 +1979,8 @@ void validate_input() {
   const std::vector<std::pair<float, std::pair<int, int>>>& edges_ccs() const { return edges_ccs_; }
   double th_cc() const { return th_cc_; }
   void set_th_cc(double v) { th_cc_ = v; }
+  // Debug accessors (temporary)
+  const EmbCCMatrix& emb_by_cc_sparse() const { return emb_by_cc_sparse_; }
   // H30 (Etapa 6b item 3): EXACT closed form of the legacy's processCCs prefix.
   // The legacy loop (RFE.cpp:348-363 / ref:849-862) is:
   //   int i = 0; for (auto t : edgesCCs_) { if (i >= E * th_cc) break; ... i++; }
@@ -2598,13 +2610,46 @@ inline void RFECore::f8g_rerank_cells() {
   f8g_inc_elems_l_.assign(nn, {});
   f8g_pos_absent_ = 0;
 
+  // Ensure dense embycc matrix is available for EXACT legacy compatibility.
+  // The sparse Variant B (Gustavson) drops structural zeros and diverges from
+  // the reference's map-based simEmb on diagonals. The dense Variant A uses
+  // the exact legacy algorithm and is bit-identical. Build it on-demand from
+  // the sparse matrix (O(n * ncc), fine for gate fixtures n<=500).
+  if (emb_by_cc_dense_.size() != nn * nn) {
+    emb_by_cc_dense_.assign(nn * nn, 0.0f);
+    // Build inverse mapping: dense CC index (0..ncc-1) -> original label
+    std::vector<int> dense_to_original;
+    dense_to_original.reserve(label_to_idx_.size());
+    for (int orig = 0; orig < (int)label_to_idx_.size(); ++orig) {
+      int dense = label_to_idx_[(std::size_t)orig];
+      if (dense >= 0) {
+        if ((int)dense_to_original.size() <= dense) dense_to_original.resize(dense + 1, -1);
+        dense_to_original[dense] = orig;
+      }
+    }
+    // Populate dense n x n matrix from sparse EmbCCMatrix
+    for (int q = 0; q < (int)n_; ++q) {
+      int lo = emb_by_cc_sparse_.row_ptr[(std::size_t)q];
+      int hi = emb_by_cc_sparse_.row_ptr[(std::size_t)q + 1];
+      for (int idx = lo; idx < hi; ++idx) {
+        int dense_ci = emb_by_cc_sparse_.col_idx[(std::size_t)idx];
+        float val = emb_by_cc_sparse_.values[(std::size_t)idx];
+        if (dense_ci >= 0 && dense_ci < (int)dense_to_original.size()) {
+          int orig_label = dense_to_original[dense_ci];
+          if (orig_label >= 0) {
+            emb_by_cc_dense_[(std::size_t)q * nn + (std::size_t)orig_label] = val;
+          }
+        }
+      }
+    }
+  }
+
   // For each CC label r (ascending), the top-member rows k1 = sorted_ccemb_[r][i]
   // it writes. We pair each k1 with its INDEX i, because the reference writes in
   // r-major order (r, then i, then j) -- so on a (k1,k2) write-conflict the LAST
-  // write is the one with the LARGEST i (ties broken by larger r). Replaying in
-  // ascending (i, r) reproduces that last-writer exactly; regrouping by r alone
-  // picked the wrong winner (~3.2x diff on 4661 shared cells).
-  std::vector<std::vector<std::pair<int, int>>> cc_for_k1(nn);  // (i, r) per k1
+  // write is the one with the LARGEST r (ties broken by larger i within that r).
+  // Replaying in ascending (r, i) reproduces that last-writer exactly.
+  std::vector<std::vector<std::pair<int, int>>> cc_for_k1(nn);  // (r, i) per k1
   for (int r = 0; r < (int)n_; ++r) {
     if (ccemb_rows_[(std::size_t)r].empty()) continue;  // no ccemb for this label
     const auto& sc = sorted_ccemb_[(std::size_t)r];
@@ -2612,10 +2657,10 @@ inline void RFECore::f8g_rerank_cells() {
     for (int i = 0; i < lim; ++i) {
       const int k1 = sc[(std::size_t)i];
       if (k1 < 0 || k1 >= (int)n_) continue;
-      cc_for_k1[(std::size_t)k1].emplace_back(i, r);
+      cc_for_k1[(std::size_t)k1].emplace_back(r, i);
     }
   }
-  // Ascending (i, r): the last element is the last writer in r-major order.
+  // Ascending (r, i): the last element is the last writer in r-major order.
   for (auto& vec : cc_for_k1)
     std::sort(vec.begin(), vec.end());
 
@@ -2623,22 +2668,33 @@ inline void RFECore::f8g_rerank_cells() {
   #pragma omp parallel for schedule(dynamic) reduction(+:absent)
   for (int k1 = 0; k1 < (int)n_; ++k1) {
     for (const auto& ir : cc_for_k1[(std::size_t)k1]) {
-      const int i = ir.first;
-      const int r = ir.second;
+      const int r = ir.first;
+      const int i = ir.second;
       const auto& sc = sorted_ccemb_[(std::size_t)r];
       const int lim = std::min(k_, (int)sc.size());
       {
-        for (int j = 0; j < lim; ++j) {
-          const int k2 = sc[(std::size_t)j];
-          if (k2 < 0 || k2 >= (int)n_) continue;
-          const double sim = (double)sim_embycc(k1, k2);
-          const unsigned int pos = (unsigned int)position_of((idx_t)k1, (idx_t)k2);
-          if (pos == (unsigned int)(l_ + 2)) ++absent;
-          const double newSim =
-              (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
-          f8g_matrix_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
-          f8g_inc_elems_[(std::size_t)k1].insert(k2);
-        }
+        // Use dense embycc matrix for EXACT legacy compatibility (Variant A).
+          // The sparse Variant B diverges on diagonals due to missing structural zeros.
+          // Dense matrix is n x n indexed by original CC labels (0..n-1).
+          for (int j = 0; j < lim; ++j) {
+            const int k2 = sc[(std::size_t)j];
+            if (k2 < 0 || k2 >= (int)n_) continue;
+            // Dense dot product: sum_r emb_by_cc_dense_[k1 * n + r] * emb_by_cc_dense_[k2 * n + r]
+            double sim = 0.0;
+            const std::size_t base1 = (std::size_t)k1 * nn;
+            const std::size_t base2 = (std::size_t)k2 * nn;
+            for (std::size_t r = 0; r < nn; ++r) {
+              float v1 = emb_by_cc_dense_[base1 + r];
+              float v2 = emb_by_cc_dense_[base2 + r];
+              sim += (double)v1 * (double)v2;
+            }
+            const unsigned int pos = (unsigned int)position_of((idx_t)k1, (idx_t)k2);
+            if (pos == (unsigned int)(l_ + 2)) ++absent;
+            const double newSim =
+                (1.0 + std::sqrt((double)(i + 1) * (double)(j + 1)) * sim) / (double)pos;
+            f8g_matrix_[nn * (std::size_t)k1 + (std::size_t)k2] = (float)newSim;
+            f8g_inc_elems_[(std::size_t)k1].insert(k2);
+          }
       }
     }
   }
@@ -2694,12 +2750,16 @@ inline void RFECore::f8h_rerank_tail() {
 
     // 4. Stable DESCENDING sort (shifts on strict `<` -> stable_sort with `>`).
     //    Ties keep rkTmp order (current list first, then extras ascending).
-    std::stable_sort(rkTmp.begin(), rkTmp.end(),
-                     [&](int u, int v) {
-                       const std::size_t iu = (std::size_t)(&u - &rkTmp[0]);
-                       const std::size_t iv = (std::size_t)(&v - &rkTmp[0]);
-                       return a[iu] > a[iv];
+    //    Use index vector to avoid UB from comparing local param addresses.
+    std::vector<std::size_t> ord(rkTmp.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) ord[i] = i;
+    std::stable_sort(ord.begin(), ord.end(),
+                     [&](std::size_t u, std::size_t v) {
+                       return a[u] > a[v];
                      });
+    std::vector<int> rkSorted(rkTmp.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) rkSorted[i] = rkTmp[ord[i]];
+    rkTmp.swap(rkSorted);
 
     // 5. Swap self to position 0 (NOT move-to-front; ref:758-770).
     auto it = std::find(rkTmp.begin(), rkTmp.end(), q);
