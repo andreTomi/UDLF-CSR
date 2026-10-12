@@ -1,0 +1,5 @@
+RKCV src=Datasets/corel5k/ACC.txt label=corel5k_L400 bytes=119450000 lines=5000 N=5000 L=400
+RKCV self_in_neighbour_list=0 dup_removed=0 rows_short=0 kept=5000
+RKCV self_at_0_after=5000/5000 (100.000%)
+RKCV wrote=/mnt/c/Users/andre/Documents/phd/side_projects/UDLF/UDLF-CSR/UDLF-CSR/Data/phase_profile/rfe_fast/work/corel5k_L400.txt rows=5000 cols=400 md5=abc57bdd7aed6ee66e7fbfc32cbd3301
+RKCV provenance -> /mnt/c/Users/andre/Documents/phd/side_projects/UDLF/UDLF-CSR/UDLF-CSR/Data/phase_profile/rfe_fast/work/corel5k_L400.txt.provenance

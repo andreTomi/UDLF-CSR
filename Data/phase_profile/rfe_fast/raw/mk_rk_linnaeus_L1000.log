@@ -1,0 +1,5 @@
+RKCV src=Datasets/linnaeus/linnaeus5_resnet50.txt label=linnaeus_L1000 bytes=155210852 lines=8000 N=8000 L=1000
+RKCV self_in_neighbour_list=0 dup_removed=0 rows_short=0 kept=8000
+RKCV self_at_0_after=8000/8000 (100.000%)
+RKCV wrote=/tmp/rk_real/linnaeus_L1000.txt rows=8000 cols=1000 md5=253ba99eeb326ac9435c1e52fcb6ef2e
+RKCV provenance -> /tmp/rk_real/linnaeus_L1000.txt.provenance

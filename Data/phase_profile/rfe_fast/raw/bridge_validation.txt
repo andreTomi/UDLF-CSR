@@ -1,0 +1,53 @@
+# Fase 0 - validacao ponte: modulo legado Evaluation.hpp vs rfe_quality.py
+# uma UNICA execucao: eval_bridge roda DataLoader+Evaluation+Logger reais
+# dataset=corel5k N=5000 L=400 k=10 t=2 pa=0.1 (config da Fase 0)
+
+== LOG (modulo legado, bloco1=input bloco2=legacy) ==
+
+
+EFFECTIVENESS
+
+ P@5	47.964%
+ P@10	37.72%
+ P@20	29.913%
+ P@50	21.6644%
+ Recall@5	2.39818%
+ Recall@10	3.77198%
+ Recall@20	5.98255%
+ Recall@50	10.8322%
+ MAP	10.5495
+
+
+EFFECTIVENESS
+
+ P@5	49.652%
+ P@10	38.922%
+ P@20	30.15%
+ P@50	21.5772%
+ Recall@5	2.4826%
+ Recall@10	3.89218%
+ Recall@20	6.02995%
+ Recall@50	10.7886%
+ MAP	10.9619
+
+== HARNESS (rfe_quality.py metrics, mesmos arquivos) ==
+-- input --
+METRIC,MAP@400,10.549475
+METRIC,P@5,47.964001
+METRIC,P@10,37.720001
+METRIC,P@20,29.912999
+METRIC,P@50,21.664400
+METRIC,Recall@5,2.398185
+METRIC,Recall@10,3.771976
+METRIC,Recall@20,5.982555
+METRIC,Recall@50,10.832201
+-- legacy --
+METRIC,MAP@400,10.961922
+METRIC,P@5,49.652001
+METRIC,P@10,38.922000
+METRIC,P@20,30.149999
+METRIC,P@50,21.577200
+METRIC,Recall@5,2.482598
+METRIC,Recall@10,3.892177
+METRIC,Recall@20,6.029949
+METRIC,Recall@50,10.788573

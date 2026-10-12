@@ -1,0 +1,32 @@
+RFEQ arm=exact N=8000 L=400 k=10 t=2 pa=0.1 cc=0 threads=12
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 360997
+  [BuildV2] Total triplets: 360997
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 283843
+  [BuildV2] Total triplets: 283843
+  [BuildV2] Total triplets: 3200000
+  [BuildV2] Total triplets: 259574
+  [BuildV2] Total triplets: 259574
+  [BuildV2] Total triplets: 2306216
+RFEQ wall_s=0.837 VmHWM_kb=202472 ck_rk=0x09b624c5caae064c
+RFEQ wrote=/tmp/rfeq/linnaeus_L400_k10_exact.u32 cells=3200000
+RFEQ driver_wall_s=
+METRIC,MAP@5,98.032629
+METRIC,MAP@10,96.831596
+METRIC,MAP@20,95.405823
+METRIC,MAP@50,93.121690
+METRIC,MAP@400,77.194500
+METRIC,P@5,98.229998
+METRIC,P@10,97.317499
+METRIC,P@20,96.324372
+METRIC,P@50,94.766247
+METRIC,Recall@5,0.319482
+METRIC,Recall@10,0.620771
+METRIC,Recall@20,1.216635
+METRIC,Recall@50,2.974210
+SELFCHK,MAP@5,perquery=98.032629,agg=98.032629,PASS
+SELFCHK,MAP@10,perquery=96.831596,agg=96.831596,PASS
+SELFCHK,MAP@20,perquery=95.405823,agg=95.405823,PASS
+SELFCHK,MAP@50,perquery=93.121690,agg=93.121690,PASS
+SELFCHK,MAP@400,perquery=77.194500,agg=77.194500,PASS

@@ -1,0 +1,32 @@
+RFEQ arm=exact N=5000 L=1000 k=5 t=2 pa=0.1 cc=0 threads=12
+  [BuildV2] Total triplets: 5000000
+  [BuildV2] Total triplets: 71900
+  [BuildV2] Total triplets: 71900
+  [BuildV2] Total triplets: 5000000
+  [BuildV2] Total triplets: 52659
+  [BuildV2] Total triplets: 52659
+  [BuildV2] Total triplets: 5000000
+  [BuildV2] Total triplets: 51407
+  [BuildV2] Total triplets: 51407
+  [BuildV2] Total triplets: 254286
+RFEQ wall_s=0.685 VmHWM_kb=260192 ck_rk=0xac5be430c5c5b172
+RFEQ wrote=/tmp/rfeq/corel5k_L1000_k5_exact.u32 cells=5000000
+RFEQ driver_wall_s=
+METRIC,MAP@5,45.528847
+METRIC,MAP@10,32.069650
+METRIC,MAP@20,22.920515
+METRIC,MAP@50,14.296652
+METRIC,MAP@1000,11.883491
+METRIC,P@5,48.824000
+METRIC,P@10,37.913999
+METRIC,P@20,31.049001
+METRIC,P@50,23.011599
+METRIC,Recall@5,2.441193
+METRIC,Recall@10,3.791381
+METRIC,Recall@20,6.209761
+METRIC,Recall@50,11.505777
+SELFCHK,MAP@5,perquery=45.528847,agg=45.528847,PASS
+SELFCHK,MAP@10,perquery=32.069650,agg=32.069650,PASS
+SELFCHK,MAP@20,perquery=22.920515,agg=22.920515,PASS
+SELFCHK,MAP@50,perquery=14.296652,agg=14.296652,PASS
+SELFCHK,MAP@1000,perquery=11.883491,agg=11.883491,PASS

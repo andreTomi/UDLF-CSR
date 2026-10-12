@@ -1,0 +1,13 @@
+RFEQ arm=exact N=5000 L=400 k=10 t=2 pa=0.1 cc=0 threads=12
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 254270
+  [BuildV2] Total triplets: 254270
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 197637
+  [BuildV2] Total triplets: 197637
+  [BuildV2] Total triplets: 2000000
+  [BuildV2] Total triplets: 177249
+  [BuildV2] Total triplets: 177249
+  [BuildV2] Total triplets: 1792862
+RFEQ wall_s=0.574 VmHWM_kb=134828 ck_rk=0xb2d84793a18b7e43
+RFEQ wrote=/tmp/rfeq/corel5k_L400_k10_det_rep2.u32 cells=2000000

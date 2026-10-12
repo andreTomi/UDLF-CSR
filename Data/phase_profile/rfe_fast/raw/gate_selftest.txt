@@ -1,0 +1,33 @@
+QUAL,dataset_n,5000
+QUAL,rel_MAP@5,fast=46.170351,legacy=46.170351,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_MAP@10,fast=33.013910,legacy=33.013910,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_MAP@20,fast=22.878870,legacy=22.878870,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_MAP@50,fast=13.703242,legacy=13.703242,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_MAP@400,fast=10.961922,legacy=10.961922,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_P@5,fast=49.652001,legacy=49.652001,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_P@10,fast=38.922000,legacy=38.922000,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_P@20,fast=30.149999,legacy=30.149999,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,rel_P@50,fast=21.577200,legacy=21.577200,delta_rel_pct=0.0000,tol_pct=1.00,PASS
+QUAL,gain_MAP@5,input=44.501680,legacy=46.170351,gain=1.668671,dev=0.000000,bound=0.166867 (10% of gain),PASS
+QUAL,gain_MAP@10,input=31.583515,legacy=33.013910,gain=1.430395,dev=0.000000,bound=0.143040 (10% of gain),PASS
+QUAL,gain_MAP@20,input=22.250979,legacy=22.878870,gain=0.627892,dev=0.000000,bound=0.062789 (10% of gain),PASS
+QUAL,gain_MAP@50,input=13.588862,legacy=13.703242,gain=0.114380,dev=0.000000,bound=0.011438 (10% of gain),PASS
+QUAL,gain_MAP@400,input=10.549475,legacy=10.961922,gain=0.412447,dev=0.000000,bound=0.041245 (10% of gain),PASS
+QUAL,gain_P@5,input=47.964001,legacy=49.652001,gain=1.688001,dev=0.000000,bound=0.168800 (10% of gain),PASS
+QUAL,gain_P@10,input=37.720001,legacy=38.922000,gain=1.201999,dev=0.000000,bound=0.120200 (10% of gain),PASS
+QUAL,gain_P@20,input=29.912999,legacy=30.149999,gain=0.237000,dev=0.000000,bound=0.023700 (10% of gain),PASS
+QUAL,gain_P@50,input=21.664400,legacy=21.577200,gain=-0.087200,dev=0.000000,bound=0.008720 (10% of gain),PASS
+QUAL,bootstrap_ap@400,B=2000,seed=42,mean_diff=0,ci95=[0,0],PASS
+QUAL,bootstrap_diag_ap@5,mean_diff=0,ci95=[0,0],INFO
+QUAL,bootstrap_diag_ap@10,mean_diff=0,ci95=[0,0],INFO
+QUAL,bootstrap_diag_ap@20,mean_diff=0,ci95=[0,0],INFO
+QUAL,bootstrap_diag_ap@50,mean_diff=0,ci95=[0,0],INFO
+QUAL,recall@5,fast=2.482598,legacy=2.482598,input=2.398185,INFO
+QUAL,recall@10,fast=3.892177,legacy=3.892177,input=3.771976,INFO
+QUAL,recall@20,fast=6.029949,legacy=6.029949,input=5.982555,INFO
+QUAL,recall@50,fast=10.788573,legacy=10.788573,input=10.832201,INFO
+QUAL,overlap@5,fast_vs_legacy=1.000000,INFO
+QUAL,overlap@10,fast_vs_legacy=1.000000,INFO
+QUAL,overlap@20,fast_vs_legacy=1.000000,INFO
+QUAL,overlap@50,fast_vs_legacy=1.000000,INFO
+QUALVERDICT,PASS,criteria=19

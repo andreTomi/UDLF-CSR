@@ -28,4 +28,9 @@ nohup.out
 Data/phase_profile/bfstree_step1/*.bin
 # Goldens do A5 (mesma razao: regenerados pelo `ref`; os logs sao o artefato)
 Data/phase_profile/bfstree_a5/*.bin
+# Fase 0 fast-mode: derived rk / u32 sinks are large and regenerable; the
+# summary.csv / parity.csv / determinism.csv / regime_ck.csv + logs are the
+# durable evidence and ARE tracked.
+Data/phase_profile/rfe_fast/work/
+
 

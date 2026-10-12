@@ -1,0 +1,3 @@
+RFEQ arm=legacy N=5000 L=400 k=10 t=2 pa=0.1 cc=0 threads=0
+RFEQ wall_s=13.127 VmHWM_kb=316928 ck_rk=0xb2d84793a18b7e43
+RFEQ wrote=/tmp/rfeq/bridge_leg.u32 cells=2000000

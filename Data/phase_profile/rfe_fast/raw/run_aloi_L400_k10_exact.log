@@ -1,0 +1,32 @@
+RFEQ arm=exact N=72000 L=400 k=10 t=2 pa=0.1 cc=0 threads=12
+  [BuildV2] Total triplets: 28800000
+  [BuildV2] Total triplets: 1957862
+  [BuildV2] Total triplets: 1957862
+  [BuildV2] Total triplets: 28800000
+  [BuildV2] Total triplets: 1698207
+  [BuildV2] Total triplets: 1698207
+  [BuildV2] Total triplets: 28800000
+  [BuildV2] Total triplets: 1595355
+  [BuildV2] Total triplets: 1595355
+  [BuildV2] Total triplets: 5297704
+RFEQ wall_s=4.613 VmHWM_kb=1446316 ck_rk=0x261f6b6bca514f76
+RFEQ wrote=/mnt/c/Users/andre/Documents/phd/side_projects/UDLF/UDLF-CSR/UDLF-CSR/Data/phase_profile/rfe_fast/work/aloi_L400_k10_exact.u32 cells=28800000
+RFEQ driver_wall_s=(see wall_s below)
+METRIC,MAP@5,90.181929
+METRIC,MAP@10,84.526426
+METRIC,MAP@20,77.331322
+METRIC,MAP@50,58.892322
+METRIC,MAP@400,51.643330
+METRIC,P@5,90.805554
+METRIC,P@10,86.079723
+METRIC,P@20,80.026317
+METRIC,P@50,63.033497
+METRIC,Recall@5,6.302193
+METRIC,Recall@10,11.948778
+METRIC,Recall@20,22.219093
+METRIC,Recall@50,43.775925
+SELFCHK,MAP@5,perquery=90.181929,agg=90.181929,PASS
+SELFCHK,MAP@10,perquery=84.526426,agg=84.526426,PASS
+SELFCHK,MAP@20,perquery=77.331322,agg=77.331322,PASS
+SELFCHK,MAP@50,perquery=58.892322,agg=58.892322,PASS
+SELFCHK,MAP@400,perquery=51.643330,agg=51.643330,PASS

@@ -1,0 +1,13 @@
+RFEQ arm=exact N=8000 L=1000 k=20 t=2 pa=0.1 cc=0 threads=12
+  [BuildV2] Total triplets: 8000000
+  [BuildV2] Total triplets: 1025647
+  [BuildV2] Total triplets: 1025647
+  [BuildV2] Total triplets: 8000000
+  [BuildV2] Total triplets: 795952
+  [BuildV2] Total triplets: 795952
+  [BuildV2] Total triplets: 8000000
+  [BuildV2] Total triplets: 704851
+  [BuildV2] Total triplets: 704851
+  [BuildV2] Total triplets: 9411556
+RFEQ wall_s=4.324 VmHWM_kb=519648 ck_rk=0xd1f518bb5e01e28a
+RFEQ wrote=/tmp/rfeq/linnaeus_L1000_k20_det_rep1.u32 cells=8000000

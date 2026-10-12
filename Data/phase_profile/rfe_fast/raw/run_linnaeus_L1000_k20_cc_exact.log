@@ -1,0 +1,34 @@
+RFEQ arm=exact N=8000 L=1000 k=20 t=2 pa=0.1 cc=1 threads=12
+  [BuildV2] Total triplets: 8000000
+  [BuildV2] Total triplets: 1025647
+  [BuildV2] Total triplets: 1025647
+  [BuildV2] Total triplets: 8000000
+  [BuildV2] Total triplets: 795952
+  [BuildV2] Total triplets: 795952
+  [BuildV2] Total triplets: 8000000
+  [BuildV2] Total triplets: 704851
+  [BuildV2] Total triplets: 704851
+  [BuildV2] Total triplets: 9411556
+  [BuildV2] Total triplets: 551251
+  [BuildV2] Total triplets: 551251
+RFEQ wall_s=6.320 VmHWM_kb=951904 ck_rk=0x9bca370acbc332fe
+RFEQ wrote=/tmp/rfeq/linnaeus_L1000_k20_cc_exact.u32 cells=8000000
+RFEQ driver_wall_s=
+METRIC,MAP@5,98.190039
+METRIC,MAP@10,97.322291
+METRIC,MAP@20,96.221191
+METRIC,MAP@50,94.278407
+METRIC,MAP@1000,67.433113
+METRIC,P@5,98.322499
+METRIC,P@10,97.636253
+METRIC,P@20,96.860623
+METRIC,P@50,95.647752
+METRIC,Recall@5,0.319771
+METRIC,Recall@10,0.622762
+METRIC,Recall@20,1.223335
+METRIC,Recall@50,3.001770
+SELFCHK,MAP@5,perquery=98.190039,agg=98.190039,PASS
+SELFCHK,MAP@10,perquery=97.322291,agg=97.322291,PASS
+SELFCHK,MAP@20,perquery=96.221191,agg=96.221191,PASS
+SELFCHK,MAP@50,perquery=94.278407,agg=94.278407,PASS
+SELFCHK,MAP@1000,perquery=67.433113,agg=67.433113,PASS

@@ -1,0 +1,30 @@
+# Fase 0-B -- regime probe of the legacy oracle (rfe_ref_verbatim.hpp)
+# fixture: corel5k N=5000 L=400 k=10 t=2 pa=0.1  (self pinned at index 0)
+R1_master_flags = -std=gnu++14 -O3
+R2_strict_flags = -std=gnu++2b -O2 -ffp-contract=off -fopenmp
+R3_prod_flags   = -std=gnu++23 -O3 -g -fno-omit-frame-pointer -D_GNU_SOURCE  -DNDEBUG -march=native -mtune=native -mavx2 -mfma -msse4.2 -fopenmp -ffast-math -funsafe-math-optimizations -ffinite-math-only -funroll-loops -fprefetch-loop-arrays -floop-nest-optimize -finline-functions -finline-limit=300 -falign-functions=32 -falign-loops=32
+
+REGIME arm=legacy N=5000 L=400 k=10 t=2 pa=0.1 cc=0
+REGIME ck_rk=0xb2d84793a18b7e43 wall_s=9.647
+REGIME wrote=/tmp/regime_probe/1.u32 cells=2000000
+
+REGIME arm=legacy N=5000 L=400 k=10 t=2 pa=0.1 cc=0
+REGIME ck_rk=0xb2d84793a18b7e43 wall_s=9.404
+REGIME wrote=/tmp/regime_probe/2.u32 cells=2000000
+
+REGIME arm=legacy N=5000 L=400 k=10 t=2 pa=0.1 cc=0
+REGIME ck_rk=0x926c15959f1cba0b wall_s=10.078
+REGIME wrote=/tmp/regime_probe/3.u32 cells=2000000
+
+== regime_ck.csv ==
+regime,ck_rk,MAP@400,P@10
+R1_master,0xb2d84793a18b7e43,10.961922,38.922000
+R2_strict,0xb2d84793a18b7e43,10.961922,38.922000
+R3_product,0x926c15959f1cba0b,10.961920,38.922000
+
+== comparison ==
+R1(master) == R2(strict) in bits -> strict gate FAITHFULLY represents
+the original UDLF build; the 'legacy real' risk is ELIMINATED.
+R1(master) != R3(product) -> as documented, the product (fast-math)
+build diverges from the oracle; EXACT mode must refuse it.
+REGIMEVERDICT,R1EQ2,R1NE3
