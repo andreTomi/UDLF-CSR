@@ -18,13 +18,14 @@ Estado: **Fase 0 ~100%** (corel5k, linnaeus, ALOI-parcial medidos). Branch
    cabem neste host — recusados e documentados.
 5. **Gate `compare` auto-testado** (`fast=exact` → PASS, 19 critérios, Δ=0).
 
-## Conclusão que muda o plano (leia antes da Fase 2)
+## Conclusão que mudou o plano — RESOLVIDA (parar no exato)
 
-O exato já é **17–28× mais rápido** que o legado com ~½ da memória. Logo o modo
-rápido **não se justifica por velocidade**. O único ganho real é **memória no
-CC** (o `F8g A_Dense`/`emb_by_cc_dense_` densos NxN não cabem em ALOI). A
-**Fase 1 (perfil) deve vir primeiro** e pode concluir que o único alvo que
-vale é o **CC em CSR** (Fase 3), não O1–O4 de velocidade.
+O exato (`RFECore`) já é 17–28× mais rápido que o legado com ~½ da memória, e é
+bit-exato (16/16). Logo o modo rápido **não se justifica por velocidade**.
+Decisão: **parar no exato** — nenhum `RFEFastCore`, nenhum knob O1–O4. O CC
+(F8a→F8h) já está integrado e gateado; CC-em-escala (ALOI, denso n×n = 20,7 GB)
+fica **fora de escopo** neste host (< 32 GB RAM). Restou só **fechar o carrier**
+(correções pontuais abaixo) e documentar — feito.
 
 ## Arquivos novos (untracked / a comitar)
 
@@ -46,19 +47,21 @@ RFE_PORT_SUMMARY.md                # resumo do port (doc existente)
 
 ## RFECore.hpp: NÃO MODIFICADO (regra da tarefa). RFEFastCore.hpp: não existe.
 
-## Próximos passos
+## Estado final — projeto encerrado ("parar no exato")
 
-1. **Commit de checkpoint** (feito; ver histórico).
-2. **Fase 1 — perfil:** `bench_rfe_census` com `RFE_FULL=1 RFE_F6PROF=1
-   RFE_F1PROF=1` em corel5k/linnaeus/ALOI → ranking das fases por custo.
-   Publicar o ranking ANTES de codar. Hipótese: F6 (Gram) e F8g/F8h (CC) dominam.
-3. **Fase 2 — RFEFastCore.hpp** (cópia com knobs), S0 sanidade (todos OFF ≡
-   exato). Só se a Fase 1 mostrar alvo de velocidade — senão, ir direto à Fase 3.
-4. **Fase 3 — F8g/F8h CSR direto de `cc_for_k1`** (sem NxN; B_CSR quebrada NÃO
-   portada). É o que habilita CC em ALOI. Indexar storage por chunk `c`.
-5. **Fase 4 — escala ALOI** rápido vs exato (RSS/tempo), CC ligado (só no rápido).
-6. **Fase 5 — carrier** `RFE.hpp`: `PARAM_RFE_MODE=EXACT|FAST`; fast-math/canário
-   só em EXACT; atualizar comentários desatualizados (PERFORM_CCS WIP).
+O modo rápido pedido == o `RFECore` (exato): bit-exato, 17–28× mais rápido, CC
+integrado e gateado. Não há Fases 1–5 a executar. Feito nesta rodada (carrier):
+
+- **C2** `RFE.hpp`: comentário/log "PERFORM_CCS NOT honoured -- WIP" (falso desde
+  a Etapa 9) corrigido. Opt-in `RFE_ALLOW_CC=1` **mantido** (decisão: não mexer
+  no CC). Validação: `make test-rfe` OK + RFE.hpp TU compile OK.
+- **C3** `run_all.sh`: `cd` absoluto apontava path **inexistente** (abortava na
+  l.29 neste workspace) → virou relativo `$(dirname "$0")/../.."`; cache ALOI
+  hardcoded → configurável via `ALOI_BIN`. Provado: passa da l.29 de cwd neutro.
+
+Se no futuro CC-em-escala (ALOI) for requisitado, o único trabalho é a **Fase 3
+original**: emitir F8g/F8h em CSR direto de `cc_for_k1` (sem a matriz densa n×n
+de 20,7 GB), em host com ≥32 GB RAM. Nada mais.
 
 ## Armadilhas deste host (confirmadas nesta rodada)
 

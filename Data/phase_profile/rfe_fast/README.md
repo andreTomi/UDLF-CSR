@@ -71,11 +71,22 @@ compila com fast-math, "bit-idêntico ao legado" fica ambíguo.* Medido
 | corel5k L1000 k20+CC | 121.0 s / 929 MB | 4.4 s / 582 MB | 28× |
 | linnaeus L1000 k20+CC | 139.1 s / 1353 MB | 6.3 s / 952 MB | 22× |
 
-**Consequência para o plano:** o ganho do modo rápido **não é velocidade** (o
-exato já ganha do legado). O ganho é **memória** — o CC no exato materializa
-matrizes densas N×N (RFECore `emb_by_cc_dense_`/`f8g_matrix_dense_`, ambos
-`n*n`) que não cabem em ALOI. A Fase 1 (perfil) deve confirmar isso antes de
-codar a Fase 2.
+**Consequência para o plano — DECISÃO FINAL (parar no exato):** o ganho do modo
+rápido **não é velocidade** (o exato já é 17–28× mais rápido que o legado, ~½ da
+memória). O `RFECore` (exato) **já é** o modo rápido — bit-exato ao legado
+(16/16), com o CC (F8a→F8h) integrado e gateado (`run_all.sh` verde). Portanto:
+**nenhum core novo é criado** (sem `RFEFastCore`, sem knobs O1–O4). O CC em
+escala ALOI (denso n×n ≈ 20,7 GB) fica **fora de escopo** neste host (< 32 GB
+RAM) — documentado como limitação, não implementado.
+
+Carrier (`RFE.hpp`) fechado nesta rodada:
+- **C2:** comentário/log desatualizado corrigido — "PERFORM_CCS NOT honoured --
+  WIP" era **falso** desde a Etapa 9; o CC roda e é gateado (opt-in
+  `RFE_ALLOW_CC=1` mantido, conforme decisão de não mexer no CC).
+- **C3:** `run_all.sh` tinha `cd` absoluto para um path **inexistente** neste
+  workspace (abortava na l.29) e path de cache ALOI hardcoded. O `cd` virou
+  relativo (`$(dirname "$0")/../.."`), o cache ficou configurável (`ALOI_BIN`).
+  Provado: passa da l.29 de cwd neutro, sem abort de path.
 
 ## 6. Escala ALOI (N=72000) — medido, não inferido
 

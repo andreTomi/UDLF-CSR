@@ -120,10 +120,18 @@ protected:
     // DataProvider stride == l (rkLists width == l, no L_MULT)
     dataProvider.setL(l);
 
-    // PERFORM_CCS is integrated (Etapa 9), but F8g/F8h are WIP and the CC gate
-    // is not green. Default is REFUSED to prevent silent divergence.
-    // Use RFE_ALLOW_CC=1 to enable during development.
-    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS NOT honoured -- WIP, refused in run())");
+    // PERFORM_CCS is fully integrated (Etapa 9: F8a..F8h run inside RFECore::run()
+    // when the flag is set) and gated green (test_rfe_cc_golden + test_rfe_cc_parity
+    // in run_all.sh). RFECore::run() keeps a development opt-in: it executes the
+    // CC sequence only when RFE_ALLOW_CC=1 is exported (refuses otherwise, to
+    // avoid emitting rank lists that differ from the legacy before the gate was
+    // green). So PARAM_RFE_PERFORM_CCS=TRUE is honoured here, and the caller
+    // must also export RFE_ALLOW_CC=1 for the CC path to run.
+    // CC at ALOI scale (N=72000) needs a dense n x n scratch (F8g A_Dense,
+    // ~20.7 GB) and is out of scope on this host (< 32 GB RAM); see
+    // Data/phase_profile/rfe_fast/README.md.
+    logMessage("[RFE] Initialized (strict build required; PERFORM_CCS integrated "
+               "and gated, runs with RFE_ALLOW_CC=1)");
   }
 
 private:

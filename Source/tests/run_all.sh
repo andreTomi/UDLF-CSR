@@ -23,10 +23,10 @@
 #      parity vs the legacy's recorded pins, corner cases, strict md5 equality
 #      across 1/2/4/8/12 threads, serial-vs-parallel bench (PASSIVE) and
 #      ASan+UBSan. Additive: stages 1-7 and their historical md5s untouched.
-# NOTE: paths are hardcoded to the WSL mount of this repo; invoke as
-# `bash Source/tests/run_all.sh` (shell variables inside the file are fine).
+# NOTE: the script cds to its own repo root (two levels up from this file), so
+# it runs from any mount of the repo; no absolute path is baked in.
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-cd /mnt/c/Users/andre/Documents/phd/side_projects/UDLF-CSR/UDLF-CSR || exit 1
+cd "$(dirname "$0")/../.." || exit 1
 
 echo "=== Building..."
 g++ -std=gnu++2b -O2 -fopenmp -I Source/src Source/tests/test_multiply_and_prune.cpp -o /tmp/test_map || exit 1
@@ -218,8 +218,14 @@ echo "=== RFE thread determinism: OK ==="
 echo "=== RFE serial-vs-parallel bench (OMP_WAIT_POLICY=PASSIVE) ==="
 g++ -std=gnu++2b -O2 -ffp-contract=off -fopenmp -I Source/src -I Source/src/Core/hpp \
     Source/bench/bench_rfe_census.cpp -o /tmp/bench_rfe_census || exit 1
-OMP_NUM_THREADS=1  OMP_WAIT_POLICY=PASSIVE /tmp/bench_rfe_census /home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin 400 20 2 0.1 > /tmp/rfe_t1.out  2>&1 || exit 1
-OMP_NUM_THREADS=12 OMP_WAIT_POLICY=PASSIVE /tmp/bench_rfe_census /home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin 400 20 2 0.1 > /tmp/rfe_t12.out 2>&1 || exit 1
+# ALOI rank-list cache: override with ALOI_BIN=... ; default tries the historical
+# cache, then a committed/cached copy under the repo. Refuse loudly if absent
+# rather than aborting on a bare path that only existed on the author's box.
+ALOI_BIN=${ALOI_BIN:-/home/andre/udlf_cache/udlf_rk_aloi_N72000_L400.bin}
+[ -f "$ALOI_BIN" ] || ALOI_BIN=Datasets/aloi/udlf_rk_aloi_N72000_L400.bin
+[ -f "$ALOI_BIN" ] || { echo "RFE serial-vs-parallel: ALOI cache not found (set ALOI_BIN=...)"; exit 1; }
+OMP_NUM_THREADS=1  OMP_WAIT_POLICY=PASSIVE /tmp/bench_rfe_census "$ALOI_BIN" 400 20 2 0.1 > /tmp/rfe_t1.out  2>&1 || exit 1
+OMP_NUM_THREADS=12 OMP_WAIT_POLICY=PASSIVE /tmp/bench_rfe_census "$ALOI_BIN" 400 20 2 0.1 > /tmp/rfe_t12.out 2>&1 || exit 1
 grep -E 'ck_rk=' /tmp/rfe_t1.out  > /tmp/rfe_t1.ck
 grep -E 'ck_rk=' /tmp/rfe_t12.out > /tmp/rfe_t12.ck
 cmp /tmp/rfe_t1.ck /tmp/rfe_t12.ck || { echo "RFE serial-vs-parallel checksum mismatch"; cat /tmp/rfe_t1.ck /tmp/rfe_t12.ck; exit 1; }
