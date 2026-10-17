@@ -18,15 +18,15 @@ RELEASE_FLAGS = -DNDEBUG
 # Combined flags for maximum performance
 CFLAGS = $(BASE_FLAGS) $(RELEASE_FLAGS) $(VECTOR_FLAGS) $(OPENMP_FLAGS) $(FAST_MATH_FLAGS) $(LOOP_FLAGS) $(INLINE_FLAGS) $(CACHE_FLAGS)
 
-# STRICT_FLAGS: the same product flag set with the three fast-math flags removed
-# and FMA contraction off -- the regime a method with an identity contract
+# STRICT_FLAGS: product optimizations with target-specific/native-architecture
+# and fast-math flags removed, and FMA contraction off -- the regime a method with an identity contract
 # requires. Measured (Data/phase_profile/numerics_prod, "Passo 0"): under
 # CFLAGS ~89% of BFSTree's W cells shift by 1 ULP and the LHRR final rank lists
 # change in ~81% of the rows, so the BFSTree method refuses to run in a binary
 # built with CFLAGS. `make udlf-strict` produces bin/udlf_strict with this set;
 # the default target (bin/udlf) keeps CFLAGS untouched, so every existing
 # published number and md5 stays valid.
-STRICT_FLAGS = $(filter-out $(FAST_MATH_FLAGS),$(CFLAGS)) -ffp-contract=off
+STRICT_FLAGS = $(filter-out $(VECTOR_FLAGS) $(FAST_MATH_FLAGS),$(CFLAGS)) -fno-fast-math -ffp-contract=off
 
 # Define MKL Root for clarity
 MKL_ROOT = /opt/intel/oneapi/mkl/latest
@@ -70,7 +70,7 @@ OBJ_FILES_SWAP := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_SWAP)/%.o, $(SRC_FILES)
 OBJ_FILES_STRICT := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_STRICT)/%.o, $(SRC_FILES))
 
 # Build targets
-.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap udlf-strict test-rdpac test-bfstree test-cprr
+.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap udlf-strict test-rdpac test-bfstree test-cprr test-lhrr test-lhrr-kd-oracle test-lhrr-production
 
 # Default target - optimized builds for both versions
 all: udlf swap
@@ -318,6 +318,26 @@ test-cprr:
 	mkdir -p /tmp/cprr_framework_gate/output && : > /tmp/cprr_framework_gate/classes.txt && : > /tmp/cprr_framework_gate/images.txt
 	OMP_NUM_THREADS=1 /tmp/test_cprr_framework 47 10 5 2 ../UDL_sandbox/fixtures/synthetic/syn_n47.txt ../ports/CPRR/goldens/syn_n47/Cs_2_lists.snp /tmp/cprr_framework_gate framework syn_n47
 
+# LHRR_SPARSE shares the faithful K-b core; phase C supports opt-in OpenMP.
+# The dedicated gate covers K-a/K-c checkpoints, 1/2/4/8-thread parity,
+# framework execution and OpenMP ASan/UBSan. Production defaults to one thread.
+test-lhrr:
+	$(CC) -std=gnu++23 -O2 -fno-fast-math -ffp-contract=off -fsyntax-only -fopenmp -I./src tests/test_lhrr_core.cpp
+	$(CC) -std=gnu++23 -O2 -fno-fast-math -ffp-contract=off -fsyntax-only -I./src -I../ports/LHRR/k_b tests/test_lhrr_kernels.cpp
+	$(CC) -std=gnu++23 -O2 -fno-fast-math -ffp-contract=off -I./src -I../ports/LHRR/k_b tests/test_lhrr_kernels.cpp -o /tmp/test_lhrr_kernels
+	/tmp/test_lhrr_kernels
+	bash tests/run_lhrr_integration.sh
+
+# Optional K-d snapshot driver gate against the frozen serial K-b oracle.
+test-lhrr-kd-oracle:
+	bash tests/run_lhrr_kd_oracle.sh
+
+# Build and execute the actual production Main.cpp against Corel5k, with only
+# the LHRR_SPARSE registration linked (the full product registry needs MKL).
+# Requires `test-lhrr` first to generate the fresh Corel5k K-a CP8 oracle.
+test-lhrr-production:
+	bash tests/run_lhrr_production_corel5k.sh
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -337,4 +357,7 @@ help:
 	@echo "  test-bfstree       - Build+run the BFSTree hypothesis, input-contract and bit-exactness gates"
 	@echo "  test-rfe           - Build+run the RFE parity gate, corner cases, thread determinism and sanitizers"
 	@echo "  test-cprr          - Build+run CPRR_SPARSE integration gates and ASan+UBSan fixtures"
+	@echo "  test-lhrr-kd-oracle - Compare experimental K-d against serial K-b (not production integration)"
+	@echo "  test-lhrr          - Build+run LHRR core, thread parity, framework and sanitizer gates"
+	@echo "  test-lhrr-production - Run production Main.cpp against real Corel5k (LHRR-only link)"
 	@echo "  help               - Show this help message"

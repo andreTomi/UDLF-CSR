@@ -18,7 +18,7 @@ class Validator {
     static std::map<std::string, Type::Param> rules = {
         // General settings
         {"UDL_TASK", {"UDL", {"UDL", "FUSION"}, true}},
-        {"UDL_METHOD", {"NONE", {"NONE", "CPRR", "RLRECOM", "RLSIM", "CONTEXTRR", "RECKNNGRAPH", "RKGRAPH", "CORGRAPH", "LHRR", "BFSTREE", "RDPAC", "RFE"}, true}},
+        {"UDL_METHOD", {"NONE", {"NONE", "CPRR", "CPRR_SPARSE", "RLRECOM", "RLSIM", "CONTEXTRR", "RECKNNGRAPH", "RKGRAPH", "CORGRAPH", "LHRR", "LHRR_SPARSE", "BFSTREE", "RDPAC", "RFE"}, true}},
 
         // Input settings
         {"SIZE_DATASET", {1400, {}, true}},
@@ -82,6 +82,7 @@ class Validator {
         {"PARAM_LHRR_SPARSE_L", {1400, {}, false}},
         {"PARAM_LHRR_SPARSE_K", {18, {}, false}},
         {"PARAM_LHRR_SPARSE_T", {2, {}, false}},
+        {"PARAM_LHRR_SPARSE_THREADS", {1, {}, false}},
 
         // CPRR Parameters
         {"PARAM_CPRR_EIGEN_L", {400, {}, false}},
