@@ -70,7 +70,7 @@ OBJ_FILES_SWAP := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_SWAP)/%.o, $(SRC_FILES)
 OBJ_FILES_STRICT := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR_STRICT)/%.o, $(SRC_FILES))
 
 # Build targets
-.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap udlf-strict test-rdpac test-bfstree
+.PHONY: all debug profile vectorize clean run run-debug run-profile check-vectorization swap udlf-strict test-rdpac test-bfstree test-cprr
 
 # Default target - optimized builds for both versions
 all: udlf swap
@@ -309,6 +309,15 @@ test-rfe:
 	fi
 	@echo "=== RFE test-rfe: OK ==="
 
+# CPRR integration gates: D-0005/D-0006 parity, repeatability, strict/fast-math,
+# ASan+UBSan, real quality metrics, and a MethodFactory/Method::run() smoke.
+test-cprr:
+	$(CC) -std=gnu++23 -fsyntax-only -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_cprr_sparse_tu.cpp
+	bash tests/run_cprr_integration.sh
+	$(CC) -std=gnu++23 -O2 -ffp-contract=off -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp -I../UDL_sandbox/snapshot/include -I../UDL_sandbox/compare/include tests/test_cprr_integration.cpp -o /tmp/test_cprr_framework
+	mkdir -p /tmp/cprr_framework_gate/output && : > /tmp/cprr_framework_gate/classes.txt && : > /tmp/cprr_framework_gate/images.txt
+	OMP_NUM_THREADS=1 /tmp/test_cprr_framework 47 10 5 2 ../UDL_sandbox/fixtures/synthetic/syn_n47.txt ../ports/CPRR/goldens/syn_n47/Cs_2_lists.snp /tmp/cprr_framework_gate framework syn_n47
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -327,4 +336,5 @@ help:
 	@echo "  udlf-strict        - Build bin/udlf_strict (no fast-math; required by BFSTree)"
 	@echo "  test-bfstree       - Build+run the BFSTree hypothesis, input-contract and bit-exactness gates"
 	@echo "  test-rfe           - Build+run the RFE parity gate, corner cases, thread determinism and sanitizers"
+	@echo "  test-cprr          - Build+run CPRR_SPARSE integration gates and ASan+UBSan fixtures"
 	@echo "  help               - Show this help message"

@@ -1,131 +1,84 @@
-/**
- * @file Cprr.hpp
- * @brief Sparse Matrix optimized implementation of CPRR (Row-Split + BlockAllocator)
- */
-
 #ifndef CPRR_SPARSE_HPP
 #define CPRR_SPARSE_HPP
 
+#include "CprrSparseCore.hpp"
 #include "Method.hpp"
 #include "MethodFactory.hpp"
-#include "SparseMatrix.hpp"
-#include "BlockAllocator.hpp"
-#include <iostream>
-#include <vector>
-#include <cmath>
+
 #include <algorithm>
-#include <omp.h>
+#include <limits>
+#include <utility>
+#include <vector>
 
+// Serial integration of the validated sparse K1-K6 CPRR kernels.
 class CprrSparse : public Method {
-public:
-    explicit CprrSparse() : Method() {}
+ public:
+  explicit CprrSparse() : Method() {}
 
-protected:
-    void preprocess() override {
-        l = static_cast<uint32_t>(config.get<int>("PARAM_CPRR_SPARSE_L"));
-        k = static_cast<uint32_t>(config.get<int>("PARAM_CPRR_SPARSE_K"));
-        t = static_cast<uint32_t>(config.get<int>("PARAM_CPRR_SPARSE_T"));
-        
-        if (l > n) throw std::runtime_error("L > N");
-        if (k > l) throw std::runtime_error("K > L");
-        
-        dataProvider.setL(l);
-        logMessage("[Cprr] Initialized (Algebraic Mode + BlockAllocator)");
+ protected:
+  void preprocess() override {
+    const int configuredL = config.get<int>("PARAM_CPRR_SPARSE_L");
+    const int configuredK = config.get<int>("PARAM_CPRR_SPARSE_K");
+    const int configuredT = config.get<int>("PARAM_CPRR_SPARSE_T");
+
+    if (n <= 0) throw std::runtime_error("CPRR_SPARSE: N must be > 0");
+    if (configuredL <= 0 || configuredK <= 0 || configuredT <= 0)
+      throw std::runtime_error("CPRR_SPARSE: L, K, T must be > 0");
+    l = static_cast<uint32_t>(configuredL);
+    k = static_cast<uint32_t>(configuredK);
+    t = static_cast<uint32_t>(configuredT);
+    if (l == 0 || l > static_cast<uint32_t>(n))
+      throw std::runtime_error("CPRR_SPARSE: require 1 <= L <= N");
+    if (k == 0 || k > l)
+      throw std::runtime_error("CPRR_SPARSE: require 1 <= K <= L");
+    if (t == 0) throw std::runtime_error("CPRR_SPARSE: T must be > 0");
+    if (static_cast<size_t>(n) >
+        std::numeric_limits<size_t>::max() / static_cast<size_t>(l))
+      throw std::runtime_error("CPRR_SPARSE: N*L overflows size_t");
+
+    dataProvider.setL(l);
+    logMessage("[CprrSparse] Initialized (serial K1-K6)");
+  }
+
+  void execute() override {
+    const size_t count = static_cast<size_t>(n) * l;
+    if (rkLists->size() != count)
+      throw std::runtime_error("CPRR_SPARSE: input ranked-list size != N*L");
+
+    std::vector<uint32_t> input(count);
+    for (size_t i = 0; i < count; ++i) input[i] = (*rkLists)[i];
+    cprr::validate_input_I4(input.data(), n, l, k, "CPRR_SPARSE");
+
+    cprr::SparseState state = cprr::make_state(std::move(input), n, l, k, t, l);
+    cprr::k1_fillPos(state);
+    cprr::k2_sortZero(state);
+
+    for (size_t iteration = 1; iteration <= state.t; ++iteration) {
+      cprr::k3_cartProd(state);
+      cprr::k4_reverseCartProd(state);
+      cprr::k5_cleanRef(state);
+      const bool clean = state.rev_src.empty() && state.rev_pos.empty() &&
+                         state.rev_rowptr.size() == state.n + 1 &&
+                         std::all_of(state.nRef.begin(), state.nRef.end(),
+                                     [](size_t refs) { return refs == 0; });
+      if (!clean)
+        throw std::runtime_error("CPRR_SPARSE: K5 failed to clear reverse references");
+
+      if (iteration == state.t)
+        cprr::k6_sort(state);
+      else
+        cprr::k2_sortZero(state);
     }
 
-    void execute() override {
-        CSRMatrix<float> W(n, n, 0); // No pre-alloc needed
-        int max_threads = omp_get_max_threads();
+    for (size_t i = 0; i < count; ++i) (*rkLists)[i] = state.lists[i];
+  }
 
-        for (int curIteration = 0; curIteration < t; curIteration++) {
-            std::cout << "\n[Cprr]: Iteration " << (curIteration + 1) << " (SpGEMM)" << std::endl;
+  void postprocess() override {}
 
-            // 1. Construct Weight Matrix W (Using Row-Split Pattern)
-            W.reset();
-            
-            // Setup Allocators and Ranges
-            std::vector<CSRMatrix<float>::PaddedAllocator> allocators(max_threads);
-            
-            std::vector<std::pair<CSRMatrix<float>::size_type, CSRMatrix<float>::size_type>> ranges(max_threads);
-
-            #pragma omp parallel
-            {
-                int tid = omp_get_thread_num();
-                auto& allocator = *allocators[tid].ptr;
-
-                // Static Row Partitioning for Row-Split Strategy
-                size_t chunk = (n + max_threads - 1) / max_threads;
-                size_t r_start = std::min((size_t)n, tid * chunk);
-                size_t r_end   = std::min((size_t)n, (tid + 1) * chunk);
-                ranges[tid] = {r_start, r_end};
-
-                // Loop only assigned rows
-                for (size_t i = r_start; i < r_end; ++i) {
-                    for (int j = 0; j < k; ++j) {
-                        uint32_t neighbor = (*rkLists)[i * l + j];
-                        float weight = (float)(k - j);
-                        
-                        auto* t = allocator.allocate();
-                        t->row = i;
-                        t->col = neighbor;
-                        t->value = weight;
-                        t->is_set = false;
-                    }
-                }
-            }
-            
-            // Wait-Free Merge using Row-Split
-            CSRMatrix<float>::build_from_partial_results(W, allocators, ranges);
-
-            // 2. Algebraic Operations (Internal BlockAllocators are used automatically)
-            CSRMatrix<float> WT = W.transpose();
-            
-            // These operations now use 'multiply_and_prune' which internally uses 
-            // the Row-Split pattern + BlockAllocators.
-            CSRMatrix<float> MA = CSRMatrix<float>::multiply_and_prune(WT, W, l);
-            CSRMatrix<float> MB = CSRMatrix<float>::multiply_and_prune(W, WT, l);
-            
-            CSRMatrix<float> finalMat = CSRMatrix<float>::merge(MA, MB, 
-                [](float a, float b) { return a + b; });
-
-            // 3. Update Ranked Lists
-            updateRankedLists(finalMat);
-        }
-    }
-
-    void postprocess() override {}
-
-private:
-    void updateRankedLists(const CSRMatrix<float>& mat) {
-        #pragma omp parallel for schedule(dynamic)
-        for (int i = 0; i < n; ++i) {
-            std::vector<std::pair<float, int>> scores;
-            scores.reserve(mat.row_nnz(i));
-            
-            mat.for_each_in_row(i, [&](uint32_t col, float val){
-                scores.push_back({val, col});
-            });
-
-            std::sort(scores.begin(), scores.end(), 
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
-
-            int limit = std::min((int)scores.size(), (int)l);
-            for(int j=0; j<limit; ++j) {
-                (*rkLists)[i * l + j] = scores[j].second;
-            }
-            
-            int q_pos = -1;
-            for(int j=0; j<limit; ++j) if((*rkLists)[i*l+j]==i) q_pos=j;
-            if(q_pos > 0) std::swap((*rkLists)[i*l], (*rkLists)[i*l+q_pos]);
-            else if(q_pos == -1) {
-                for(int j=l-1; j>0; --j) (*rkLists)[i*l+j] = (*rkLists)[i*l+j-1];
-                (*rkLists)[i*l] = i;
-            }
-        }
-    }
-
-    uint32_t l, k, t;
-    static MethodRegister<CprrSparse> signInMethod;
+ private:
+  uint32_t k = 0;
+  uint32_t t = 0;
+  static MethodRegister<CprrSparse> signInMethod;
 };
 
-#endif // CPRR_SPARSE_HPP
+#endif  // CPRR_SPARSE_HPP

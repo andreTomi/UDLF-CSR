@@ -1,0 +1,16 @@
+# cprr_sparse_profile_version=1
+# commit=8345bd3,compiler=14.2.0,n=5000,L=400,k=20,t=2,seed=1,distribution=random,input=UDL_sandbox/fixtures/real/corel5k/rk_L400.txt,seed_text=1,engine=candidate,actual_threads=1,expected_threads=1,cpu_affinity_count=12
+# pair_hwm_kib is process high-water RSS for this process containing both runs; live/peak vector capacities are tracked per engine
+record,repeat,engine,iteration,phase,seconds,max_nref,sum_nref_squared,max_abs_accumulator,vector_capacity_bytes,peak_vector_capacity_bytes,pair_hwm_kib
+stage,1,candidate,0,K1_fillPos,0.1709189,0,0,800,24080008,24080008,36224
+stage,1,candidate,0,K2_sortZero_initial,0.1166671,0,0,0,24080008,24080008,36224
+stage,1,candidate,1,K3_cartProd,0.1559158,49,2113852,14152,25600008,25600008,36224
+stage,1,candidate,1,K4_reverseCartProd,0.1567808,49,2113852,19092,25600008,25600008,36224
+stage,1,candidate,1,K5_cleanRef,3.3e-06,0,0,19092,25600008,25600008,36224
+stage,1,candidate,1,K2_sortZero_iteration,0.126816,0,0,0,25600008,25600008,36224
+stage,1,candidate,2,K3_cartProd,0.1548748,47,2089086,16870,25600008,25600008,36224
+stage,1,candidate,2,K4_reverseCartProd,0.1548594,47,2089086,21810,25600008,25600008,36224
+stage,1,candidate,2,K5_cleanRef,3.5e-06,0,0,21810,25600008,25600008,36224
+stage,1,candidate,2,K6_sort_final,0.111273,0,0,21810,25600008,25600008,36224
+summary,1,candidate,0,total_kernel_seconds,1.1481126,0,0,0,0,0,36224
+summary,1,candidate,0,engine_wall_seconds,1.2303722,0,0,0,0,0,36224

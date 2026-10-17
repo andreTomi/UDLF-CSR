@@ -1,0 +1,28 @@
+# cprr_sparse_profile_version=1
+# commit=8345bd3,compiler=14.2.0,n=5000,L=400,k=20,t=2,seed=1,distribution=random,input=UDL_sandbox/fixtures/real/corel5k/rk_L400.txt,seed_text=1,engine=both,actual_threads=1,expected_threads=1,cpu_affinity_count=12
+# hwm_kib is process high-water RSS for the requested run(s); live/peak vector capacities are tracked per engine
+record,repeat,engine,iteration,phase,kernel_seconds,timing_region_seconds,max_nref,sum_nref_squared,max_abs_accumulator,vector_capacity_bytes,peak_vector_capacity_bytes,pair_hwm_kib
+stage,1,candidate,0,K1_fillPos,0.182255302,0.182255302,0,0,800,24080008,24080008,52108
+stage,1,candidate,0,K2_sortZero_initial,0.122140301,0.122140301,0,0,0,24080008,24080008,52108
+stage,1,candidate,1,K3_cartProd,0.143917502,0.143917502,49,2113852,14152,25600008,25600008,52108
+stage,1,candidate,1,K4_reverseCartProd,0.152537401,0.152537401,49,2113852,19092,25600008,25600008,52108
+stage,1,candidate,1,K5_cleanRef,3e-06,3e-06,0,0,19092,25600008,25600008,52108
+stage,1,candidate,1,K2_sortZero_iteration,0.124928801,0.124928801,0,0,0,25600008,25600008,52108
+stage,1,candidate,2,K3_cartProd,0.133388701,0.133388701,47,2089086,16870,25600008,25600008,52108
+stage,1,candidate,2,K4_reverseCartProd,0.144821402,0.144821402,47,2089086,21810,25600008,25600008,52108
+stage,1,candidate,2,K5_cleanRef,3.2e-06,3.2e-06,0,0,21810,25600008,25600008,52108
+stage,1,candidate,2,K6_sort_final,0.102300401,0.102300401,0,0,21810,25600008,25600008,52108
+stage,1,serial_oracle,0,K1_fillPos,0.166499202,0.166499202,0,0,800,24080008,24080008,52108
+stage,1,serial_oracle,0,K2_sortZero_initial,0.118617101,0.118617101,0,0,0,24080008,24080008,52108
+stage,1,serial_oracle,1,K3_cartProd,0.153404902,0.153404902,49,2113852,14152,25600008,25600008,52108
+stage,1,serial_oracle,1,K4_reverseCartProd,0.154950202,0.154950202,49,2113852,19092,25600008,25600008,52108
+stage,1,serial_oracle,1,K5_cleanRef,3.2e-06,3.2e-06,0,0,19092,25600008,25600008,52108
+stage,1,serial_oracle,1,K2_sortZero_iteration,0.123337301,0.123337301,0,0,0,25600008,25600008,52108
+stage,1,serial_oracle,2,K3_cartProd,0.148365402,0.148365402,47,2089086,16870,25600008,25600008,52108
+stage,1,serial_oracle,2,K4_reverseCartProd,0.147782601,0.147782601,47,2089086,21810,25600008,25600008,52108
+stage,1,serial_oracle,2,K5_cleanRef,3e-06,3e-06,0,0,21810,25600008,25600008,52108
+stage,1,serial_oracle,2,K6_sort_final,0.099778501,0.099778501,0,0,21810,25600008,25600008,52108
+summary,1,candidate,0,total_kernel_seconds,1.10629601,0,0,0,0,0,0,52108
+summary,1,candidate,0,engine_wall_seconds,1.18784721,0,0,0,0,0,0,52108
+summary,1,serial_oracle,0,total_kernel_seconds,1.11274141,0,0,0,0,0,0,52108
+summary,1,serial_oracle,0,engine_wall_seconds,1.19494771,0,0,0,0,0,0,52108

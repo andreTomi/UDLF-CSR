@@ -1,0 +1,61 @@
+g++ -std=gnu++23 -fsyntax-only -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp tests/check_cprr_sparse_tu.cpp
+bash tests/run_cprr_integration.sh
+=== strict regime: K1-K6 against D-0005/D-0006 ===
+CPRR_CORE,PASS,fixture=syn_rand_small,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=syn_k_eq_l,n=48,L=8,k=8,t=2,ids=384
+CPRR_CORE,PASS,fixture=syn_hub,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=syn_ties,n=32,L=16,k=10,t=2,ids=512
+CPRR_CORE,PASS,fixture=syn_n47,n=47,L=10,k=5,t=2,ids=470
+CPRR_CORE,PASS,fixture=syn_no_self0,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=real_corel5k_L400,n=5000,L=400,k=20,t=2,ids=2000000
+CPRR_CORE,PASS,fixture=real_brodatz_L400,n=1776,L=400,k=20,t=2,ids=710400
+=== production -ffast-math regime: K1-K6 against the same oracle ===
+CPRR_CORE,PASS,fixture=syn_rand_small,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=syn_k_eq_l,n=48,L=8,k=8,t=2,ids=384
+CPRR_CORE,PASS,fixture=syn_hub,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=syn_ties,n=32,L=16,k=10,t=2,ids=512
+CPRR_CORE,PASS,fixture=syn_n47,n=47,L=10,k=5,t=2,ids=470
+CPRR_CORE,PASS,fixture=syn_no_self0,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=real_corel5k_L400,n=5000,L=400,k=20,t=2,ids=2000000
+CPRR_CORE,PASS,fixture=real_brodatz_L400,n=1776,L=400,k=20,t=2,ids=710400
+=== repeatability: strict output byte-identical ===
+=== ASan+UBSan: all eight fixtures ===
+CPRR_CORE,PASS,fixture=syn_rand_small,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=syn_k_eq_l,n=48,L=8,k=8,t=2,ids=384
+CPRR_CORE,PASS,fixture=syn_hub,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=syn_ties,n=32,L=16,k=10,t=2,ids=512
+CPRR_CORE,PASS,fixture=syn_n47,n=47,L=10,k=5,t=2,ids=470
+CPRR_CORE,PASS,fixture=syn_no_self0,n=64,L=16,k=10,t=2,ids=1024
+CPRR_CORE,PASS,fixture=real_corel5k_L400,n=5000,L=400,k=20,t=2,ids=2000000
+CPRR_CORE,PASS,fixture=real_brodatz_L400,n=1776,L=400,k=20,t=2,ids=710400
+=== real-dataset quality gates: Corel5k + Brodatz ===
+/tmp/cprr_integration/corel5k_quality.log:METRIC,MAP@400,11.853106
+/tmp/cprr_integration/corel5k_quality.log:METRIC,P@10,40.682000
+/tmp/cprr_integration/corel5k_quality.log:METRIC,Recall@10,4.068188
+/tmp/cprr_integration/corel5k_quality.log:SELFCHK,MAP@400,perquery=11.853106,agg=11.853106,PASS
+/tmp/cprr_integration/brodatz_quality.log:METRIC,MAP@400,64.805502
+/tmp/cprr_integration/brodatz_quality.log:METRIC,P@10,69.414413
+/tmp/cprr_integration/brodatz_quality.log:METRIC,Recall@10,43.384010
+/tmp/cprr_integration/brodatz_quality.log:SELFCHK,MAP@400,perquery=64.805502,agg=64.805502,PASS
+CPRR_INTEGRATION_SUMMARY,strict=8,fast_math=8,sanitized=8,repeatable=8,failures=0
+g++ -std=gnu++23 -O2 -ffp-contract=off -fopenmp -I./src -I./src/Config/hpp -I./src/Config/models -I./src/Core/hpp -I./src/Methods/hpp -I./src/Evaluation/hpp -I./src/Utils/hpp -I../UDL_sandbox/snapshot/include -I../UDL_sandbox/compare/include tests/test_cprr_integration.cpp -o /tmp/test_cprr_framework
+mkdir -p /tmp/cprr_framework_gate/output && : > /tmp/cprr_framework_gate/classes.txt && : > /tmp/cprr_framework_gate/images.txt
+OMP_NUM_THREADS=1 /tmp/test_cprr_framework 47 10 5 2 ../UDL_sandbox/fixtures/synthetic/syn_n47.txt ../ports/CPRR/goldens/syn_n47/Cs_2_lists.snp /tmp/cprr_framework_gate framework syn_n47
+	Assigning from text file: /mnt/c/Users/andre/Documents/phd/side_projects/UDLF/UDLF-CSR/UDLF-CSR/Source/../UDL_sandbox/fixtures/synthetic/syn_n47.txt with 47 rows and 10 max columns
+Available Methods in Registry: CPRR_SPARSE
+Execution started at: Fri Oct 16 23:13:45 2026
+
+[CprrSparse] Initialized (serial K1-K6)
+[DataLoader]: Reading image list from file
+[DataLoader]: Reading classes from file
+[DataLoader]: Loaded 0 images in 0 classes.
+[DataLoader]: Initializing Ranked Lists...
+	Assigning from text file: /mnt/c/Users/andre/Documents/phd/side_projects/UDLF/UDLF-CSR/UDLF-CSR/Source/../UDL_sandbox/fixtures/synthetic/syn_n47.txt with 47 rows and 10 max columns
+[DataLoader]: Finished preprocessing ranked lists.
+Total Execution Time: 0.0002341 seconds
+
+[Distance Matrix] Writing to output file: /tmp/cprr_framework_gate/matrix.txt
+	Generating distance matrix and writing ranked lists...
+Execution finished at: Fri Oct 16 23:13:45 2026
+
+CPRR_INTEGRATION,PASS,fixture=syn_n47,n=47,L=10,k=5,t=2,mode=framework,ids=470
